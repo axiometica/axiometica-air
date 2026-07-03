@@ -1,0 +1,31 @@
+FROM python:3.11-slim
+
+# Install Docker CLI + docker-compose v2 so Watcher can scale services
+RUN apt-get update && apt-get install -y \
+    docker.io \
+    curl \
+    iputils-ping \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL "https://github.com/docker/compose/releases/download/v2.24.1/docker-compose-linux-x86_64" \
+       -o /usr/local/bin/docker-compose \
+    && chmod +x /usr/local/bin/docker-compose
+
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir pyyaml==6.0.1 neo4j==5.15.0 httpx==0.24.1
+
+# Copy source code
+COPY src/ ./src/
+COPY watcher_main.py .
+
+# Set Python path
+ENV PYTHONPATH=/app/src
+ENV PYTHONUNBUFFERED=1
+
+# Run Watcher Brain
+CMD ["python", "/app/watcher_main.py"]

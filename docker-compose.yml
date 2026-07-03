@@ -1,0 +1,673 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Axiometica AIR — base compose file
+#
+# Dev (hot-reload):
+#   cp docker-compose.override.yml.example docker-compose.override.yml  # one-time
+#   docker compose up
+#
+# Production:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#     up -d --build --scale frontend=0
+#
+# Source-code bind-mounts are intentionally NOT in this file — they live in
+# docker-compose.override.yml (gitignored, auto-loaded by bare `docker compose up`).
+# This keeps production deployments safe: the image's baked-in source is used
+# unless a developer explicitly opts in via the override file.
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: '3.9'
+
+services:
+  # PostgreSQL database with UUID extension
+  postgres:
+    image: postgres:15-alpine
+    container_name: agentic_os_postgres
+    restart: unless-stopped                                          # Fix 1
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentic_os}           # Fix 2 — was hardcoded
+      POSTGRES_DB: agentic_os
+      POSTGRES_HOST_AUTH_METHOD: md5                                # Allow remote connections from Docker network
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    command:
+      - "postgres"
+    # Resource Limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agentic_os_network
+
+  # Redis for caching and Celery broker
+  redis:
+    image: redis:7-alpine
+    container_name: agentic_os_redis
+    restart: unless-stopped                                          # Fix 1
+    command:                                                         # Fix 3 + 4
+      - redis-server
+      - "--requirepass"
+      - "${REDIS_PASSWORD:-localdev}"
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--appendonly"                                               # Fix 4 — persistence
+      - "yes"
+    environment:
+      # REDISCLI_AUTH lets redis-cli authenticate automatically (used by healthcheck)
+      REDISCLI_AUTH: ${REDIS_PASSWORD:-localdev}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    # Resource Limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agentic_os_network
+
+  # Neo4j CMDB (Configuration Management Database)
+  neo4j:
+    image: neo4j:5-community
+    container_name: agentic_os_neo4j
+    restart: unless-stopped                                          # Fix 1
+    ports:
+      - "127.0.0.1:7687:7687"
+      - "127.0.0.1:7474:7474"
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+      # No plugins — the only thing that ever used APOC was the daily CMDB
+      # backup export, which now uses plain Cypher via the bolt driver
+      # instead (see backup.py:_backup_neo4j). Dropping it removes the
+      # jar-extraction + procedure-scanning step from every startup.
+      # Explicit heap caps so Neo4j doesn't balloon past the container limit.
+      # Neo4j 5 default is "auto" which can exceed 1 GB on startup.
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 256m
+      NEO4J_server_memory_pagecache_size: 128m
+      # Increase failed auth attempts limit to prevent rate-limit lockout during
+      # rapid startup (2 uvicorn workers each make 2 connection attempts = 4 total)
+      NEO4J_dbms_security_auth__max__failed__attempts: "100"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - ./backend/scripts/neo4j_seed.cypher:/var/lib/neo4j/import/seed.cypher
+    # Resource limits — without APOC, Neo4j 5 community settles well under 1 GB
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1g
+    healthcheck:
+      # Without APOC, Neo4j 5 typically finishes startup in well under 30s;
+      # start_period kept generous to absorb slower hosts.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7474/"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - agentic_os_network
+
+  # FastAPI backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agentic_os_backend
+    restart: unless-stopped                                          # Fix 1
+    command: uvicorn agentic_os.main:app --host 0.0.0.0 --port 8000 --workers 2
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./backend/workflows:/app/workflows
+      - ./backend/migrations:/app/migrations
+      - ./backups:/app/backups
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-agentic_os}@postgres:5432/agentic_os  # Fix 2
+      REDIS_URL: redis://:${REDIS_PASSWORD:-localdev}@redis:6379                                     # Fix 3
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-localdev}@redis:6379/0                          # Fix 3
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-localdev}@redis:6379/1                      # Fix 3
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app/src
+      DEBUG: "false"
+      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:8000,https://localhost,http://localhost:7892"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-8}
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:?SECRET_ENCRYPTION_KEY is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@platform.local}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-Admin@1234!}
+      ITOM_ADMIN_INITIAL_PASSWORD: ${ITOM_ADMIN_INITIAL_PASSWORD:-ITOMAdmin@1234!}
+      OPERATOR_INITIAL_PASSWORD: ${OPERATOR_INITIAL_PASSWORD:-Operator@1234!}
+      VIEWER_INITIAL_PASSWORD: ${VIEWER_INITIAL_PASSWORD:-Viewer@1234!}
+      WATCHER_API_KEY: ${WATCHER_API_KEY:?WATCHER_API_KEY is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_BOLT_URL: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+      # Connection pool — Phase 1 tuning for 3-instance backend scaling
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_POOL_OVERFLOW: ${DB_POOL_OVERFLOW:-10}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
+      # Slack ChatOps — optional; leave blank to disable
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+      # Sentry error tracking — optional; leave blank to disable (Fix 9)
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    # Resource Limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2g
+    # Allow uvicorn to finish in-flight requests before the container is killed.
+    # FastAPI / uvicorn handles SIGTERM gracefully; 30 s is enough for any
+    # reasonable request timeout defined in the application.
+    stop_grace_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    networks:
+      - agentic_os_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Celery workflow worker ────────────────────────────────────────────────────
+  # Handles the LLM-heavy queues: incident pipeline, storm analysis, approvals.
+  # Concurrency is intentionally higher than CPU count because these tasks are
+  # almost entirely I/O-bound (waiting on LLM API, DB, Neo4j).  Each slot
+  # blocks for 15-60 s on network I/O, so 4 slots ≈ 4x the throughput of 1
+  # with no additional CPU pressure.
+  #
+  # Tune via .env:
+  #   WORKFLOW_WORKER_CONCURRENCY=8   # scale up before a planned load event
+  #   WORKFLOW_WORKER_CONCURRENCY=2   # scale down on a resource-constrained host
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agentic_os_celery_worker
+    init: true
+    restart: unless-stopped
+    command: >
+      celery -A agentic_os.tasks worker
+      --loglevel=info
+      --queues=workflows,approvals
+      --concurrency=${WORKFLOW_WORKER_CONCURRENCY:-4}
+      --prefetch-multiplier=1
+      --hostname=workflow-worker@%h
+    volumes:
+      - ./backend/workflows:/app/workflows
+      - ./backend/.state:/app/.state:ro   # watcher config (read-only — only watcher writes here)
+      - ./backups:/app/backups
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-agentic_os}@postgres:5432/agentic_os
+      REDIS_URL: redis://:${REDIS_PASSWORD:-localdev}@redis:6379
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-localdev}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-localdev}@redis:6379/1
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app/src
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:?SECRET_ENCRYPTION_KEY is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+      NEO4J_BOLT_URL: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'      # raised: 4 concurrent I/O-bound tasks need headroom
+          memory: 2g       # each prefork process loads the full Python env (~400 MB)
+    stop_grace_period: 60s
+    depends_on:
+      - postgres
+      - redis
+      - backend
+    networks:
+      - agentic_os_network
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery.*worker' > /dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ── Celery default worker ─────────────────────────────────────────────────────
+  # Handles maintenance tasks: cleanup, backup, generate_missing_summaries,
+  # health checks.  Runs on the "default" queue only so it can NEVER steal
+  # a slot from incident processing.  2 concurrent tasks is enough — these
+  # run infrequently and most are short-lived DB operations.
+  celery_default_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agentic_os_celery_default_worker
+    init: true
+    restart: unless-stopped
+    command: >
+      celery -A agentic_os.tasks worker
+      --loglevel=info
+      --queues=default
+      --concurrency=2
+      --prefetch-multiplier=1
+      --hostname=default-worker@%h
+    volumes:
+      - ./backend/workflows:/app/workflows
+      - ./backend/.state:/app/.state:ro
+      - ./backups:/app/backups
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-agentic_os}@postgres:5432/agentic_os
+      REDIS_URL: redis://:${REDIS_PASSWORD:-localdev}@redis:6379
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-localdev}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-localdev}@redis:6379/1
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app/src
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:?SECRET_ENCRYPTION_KEY is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+      NEO4J_BOLT_URL: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512m
+    stop_grace_period: 60s
+    depends_on:
+      - postgres
+      - redis
+      - backend
+    networks:
+      - agentic_os_network
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery.*worker' > /dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Celery Beat — scheduler for periodic tasks (data retention, etc.)
+  # Runs the beat_schedule defined in celery_app.py (cleanup_old_incidents at 02:00 UTC daily).
+  # IMPORTANT: run exactly ONE instance — multiple beat schedulers will fire duplicate tasks.
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agentic_os_celery_beat
+    restart: unless-stopped
+    command: celery -A agentic_os.tasks beat -l info -s /app/.beat/celerybeat-schedule
+    volumes:
+      - celery_beat_data:/app/.beat
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-agentic_os}@postgres:5432/agentic_os
+      REDIS_URL: redis://:${REDIS_PASSWORD:-localdev}@redis:6379
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-localdev}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-localdev}@redis:6379/1
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app/src
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:?SECRET_ENCRYPTION_KEY is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+      # Neo4j CMDB connection — required if beat tasks write to graph
+      NEO4J_BOLT_URL: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256m
+    # Beat only writes a schedule file and sends tasks; 15 s is ample for cleanup.
+    stop_grace_period: 15s
+    depends_on:
+      - postgres
+      - redis
+      - celery_worker
+      - celery_default_worker
+    networks:
+      - agentic_os_network
+
+  # Celery Flower for monitoring
+  flower:
+    image: mher/flower:2.0.1
+    container_name: agentic_os_flower
+    restart: unless-stopped                                          # Fix 1
+    command: >
+      celery --broker=redis://:${REDIS_PASSWORD:-localdev}@redis:6379/0
+      flower --port=5555
+      --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-changeme}
+    ports:
+      # Bound to localhost only — access via SSH tunnel in production:
+      #   ssh -L 5555:localhost:5555 user@your-server
+      - "127.0.0.1:5555:5555"
+    environment:
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-localdev}@redis:6379/0  # Fix 3
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-localdev}@redis:6379/1
+      PYTHONUNBUFFERED: 1
+    # Resource Limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512m
+    depends_on:
+      - redis
+      - celery_worker
+      - celery_default_worker
+    networks:
+      - agentic_os_network
+
+  # React frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: agentic_os_frontend
+    restart: unless-stopped                                          # Fix 1
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8000
+    # Resource Limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512m
+    depends_on:
+      - backend
+    networks:
+      - agentic_os_network
+
+  # Nginx — TLS-terminating reverse proxy                           # Fix 6
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: agentic_os_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Mount your CA-signed cert here for production.
+      # Copy cert + key: see nginx/entrypoint.sh for instructions.
+      # If empty, a self-signed cert is generated on first boot (dev only).
+      - ./nginx/certs:/etc/nginx/certs
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - agentic_os_network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Sentinel - eBPF Kernel Monitor (Senses)
+  sentinel:
+    image: quay.io/iovisor/bpftrace:latest
+    container_name: sentinel_senses
+    restart: unless-stopped                                          # Fix 1
+    privileged: true
+    pid: "host"          # Share host PID namespace so pkill can reach any process
+    volumes:
+      - /sys:/sys
+      - /dev:/dev
+      - /lib/modules:/lib/modules:ro
+    command: bpftrace -f json -e 'tracepoint:raw_syscalls:sys_enter { @[comm] = count(); }'
+    networks:
+      - agentic_os_network
+    healthcheck:
+      test: ["CMD", "echo", "alive"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Watcher - Brain (AI-driven incident orchestration with Docker stats)
+  watcher:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.watcher
+    container_name: watcher_brain
+    restart: unless-stopped                                          # Fix 1
+    volumes:
+      - ./backend/watcher_main.py:/app/watcher_main.py
+      - ./backend/.state:/app/.state
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+    environment:
+      COMPOSE_PROJECT_NAME: agenticplatform_v2
+      # Instance identity
+      WATCHER_NAME: watcher_brain
+
+      # Sentinel monitoring
+      SENTINEL_CONTAINER: sentinel_senses
+
+      # API Configuration — internal (within Docker network)
+      WATCHER_API_URL: http://backend:8000
+      # Kill-API callback URL — must use Docker service name so the backend can reach it
+      WATCHER_KILL_API_URL: http://watcher_brain:8080
+      # Public HTTPS URL the platform is reachable at (shown in registration record)
+      WATCHER_NGINX_URL: https://localhost
+
+      # Polling & Cooldown
+      WATCHER_POLL_INTERVAL: "10"                    # Seconds between polls
+      WATCHER_COOLDOWN_SECONDS: "60"                 # Cooldown after incident
+
+      # Syscall Anomaly Detection
+      WATCHER_ANOMALY_THRESHOLD: "1000"              # Syscalls/5sec threshold
+
+      # Container Metrics Anomaly Detection
+      WATCHER_CPU_THRESHOLD: "80.0"                  # CPU percentage threshold
+      WATCHER_MEMORY_THRESHOLD: "90.0"               # Memory percentage threshold
+
+      # Advanced Monitoring Thresholds
+      WATCHER_DISK_THRESHOLD: "90.0"                 # Disk usage percentage threshold
+      WATCHER_CONNECTION_THRESHOLD: "1000"           # Network connection count threshold
+
+      # Sensitivity / noise reduction
+      WATCHER_MIN_CONSECUTIVE_POLLS: "3"             # Polls an anomaly must persist before opening an incident
+
+      # Discovery agent
+      WATCHER_DISCOVERY_ENABLED: "true"              # Enable container discovery to CMDB
+      WATCHER_DISCOVERY_INTERVAL_POLLS: "15"        # Run discovery every N polls (~5 min at 20s interval)
+
+      # API Key for authenticating with the backend
+      WATCHER_API_KEY: ${WATCHER_API_KEY:?WATCHER_API_KEY is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+
+      # Neo4j CMDB connection — required for discovery data routing to CMDB
+      NEO4J_BOLT_URL: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+
+      # Python Configuration
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app/src
+    # Resource Limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512m
+    depends_on:
+      - backend
+      - sentinel
+    networks:
+      - agentic_os_network
+
+  # ── Second watcher instance (test / staging environment) ─────────────────────
+  # Identical image to the primary watcher but with a distinct instance name and
+  # separate state files.  Registers as "watcher_test" and starts in PENDING state
+  # until an operator approves it in Admin → Monitoring Setup.
+  watcher_test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.watcher
+    container_name: watcher_brain_test
+    restart: unless-stopped
+    profiles:
+      - test-watcher                     # opt-in: start with --profile test-watcher
+    volumes:
+      - ./backend/watcher_main.py:/app/watcher_main.py
+      - ./backend/.state:/app/.state
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+    environment:
+      COMPOSE_PROJECT_NAME: agenticplatform_v2
+      # Instance identity — MUST differ from the primary watcher
+      WATCHER_NAME: watcher_test
+
+      # Sentinel monitoring — shares the same eBPF sentinel
+      SENTINEL_CONTAINER: sentinel_senses
+
+      # API Configuration
+      WATCHER_API_URL: http://backend:8000
+      # Kill-API callback URL — use Docker service name so backend can route remediation here
+      WATCHER_KILL_API_URL: http://watcher_test:8080
+      WATCHER_NGINX_URL: https://localhost
+
+      # Polling & Cooldown
+      WATCHER_POLL_INTERVAL: "10"
+      WATCHER_COOLDOWN_SECONDS: "60"
+
+      # Anomaly thresholds
+      WATCHER_ANOMALY_THRESHOLD: "1000"
+      WATCHER_CPU_THRESHOLD: "80.0"
+      WATCHER_MEMORY_THRESHOLD: "90.0"
+      WATCHER_DISK_THRESHOLD: "90.0"
+      WATCHER_CONNECTION_THRESHOLD: "1000"
+      WATCHER_MIN_CONSECUTIVE_POLLS: "3"
+
+      # Discovery agent
+      WATCHER_DISCOVERY_ENABLED: "false"
+      WATCHER_DISCOVERY_INTERVAL_POLLS: "15"
+
+      # API Key — same key pool as primary watcher
+      WATCHER_API_KEY: ${WATCHER_API_KEY:?WATCHER_API_KEY is not set. Run install.sh first.}
+
+      # Neo4j CMDB connection — required for discovery data routing to CMDB
+      NEO4J_BOLT_URL: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is not set. Run install.sh (Linux/macOS) or install.bat (Windows) first.}
+
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app/src
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512m
+    depends_on:
+      - backend
+      - sentinel
+    networks:
+      - agentic_os_network
+
+  # ── Postgres backup sidecar ───────────────────────────────────────────────────
+  # Dumps the database daily and rotates: 7 daily, 4 weekly, 6 monthly backups.
+  # Backups land in a named volume (postgres_backups) — mount that volume on the
+  # host or copy to object storage for off-site DR.
+  #
+  # Override schedule with e.g. BACKUP_SCHEDULE="@every 6h" in your .env.
+  postgres_backup:
+    image: prodrigestivill/postgres-backup-local:15
+    container_name: agentic_os_postgres_backup
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: agentic_os
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentic_os}
+      SCHEDULE: ${BACKUP_SCHEDULE:-@daily}
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "4"
+      BACKUP_KEEP_MONTHS: "6"
+      HEALTHCHECK_PORT: "8080"
+    volumes:
+      - postgres_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - agentic_os_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128m
+
+  # ── Runbook test target ───────────────────────────────────────────────────────
+  # Self-contained server that runbooks can be safely fired against.
+  # Opt-in: docker compose --profile test up agentic_nginx_prod_test
+  #
+  # What's inside (all managed by supervisord at PID 1):
+  #   nginx        :80/:443  — health endpoint + reverse-proxy to testapp
+  #   PostgreSQL   :5432     — test DB for DB runbooks (kill_connections, psql…)
+  #   testapp      :8080     — simple HTTP app behind nginx
+  #   sshd         :22       — enables host_service_* runbook actions via SSH
+  #   systemctl shim         — translates systemctl calls into supervisorctl
+  #
+  # Retrieve the SSH test key:
+  #   docker cp agentic_nginx_prod_test:/etc/ssh/test_id_ed25519 ./test_key
+  #   ssh -i test_key -p 2222 ops@localhost
+  agentic_nginx_prod_test:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile.test
+    container_name: agentic_nginx_prod_test
+    profiles: ["test"]
+    restart: unless-stopped
+    ports:
+      - "2222:22"    # SSH  (ssh -i test_key -p 2222 ops@localhost)
+      - "8081:80"    # HTTP health: http://localhost:8081/health
+      - "8443:443"   # HTTPS (self-signed): https://localhost:8443/health
+      - "5433:5432"  # PostgreSQL: psql -h localhost -p 5433 -U testuser testdb
+    networks:
+      - agentic_os_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512m
+
+volumes:
+  postgres_data:
+  redis_data:
+  neo4j_data:
+  neo4j_logs:
+  postgres_backups:
+  celery_beat_data:
+  # ./backups is a bind-mount (not a named volume) so files are accessible from
+  # the host for off-site upload.  Create it AND set ownership before first
+  # docker compose up — the container runs as appuser (UID 1001):
+  #   mkdir -p backups/{postgres,neo4j,config}
+  #   sudo chown -R 1001:1001 backups/
+
+networks:
+  agentic_os_network:
+    driver: bridge

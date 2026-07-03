@@ -1,0 +1,86 @@
+﻿AgenticPlatform
+Copyright (c) 2026 Powowa Inc. All rights reserved.
+Ontario, Canada
+
+This product includes software developed by Powowa Inc.
+The core components of AgenticPlatform are licensed under the
+Apache License, Version 2.0.
+
+You may obtain a copy of the Apache License at:
+http://www.apache.org/licenses/LICENSE-2.0
+
+--------------------------------------------------------------------------------
+
+ENTERPRISE FEATURES NOTICE
+
+The following components are NOT covered by the Apache License and
+are instead governed by the AgenticPlatform Enterprise License
+(see LICENSE-ENTERPRISE):
+
+  - Connector Hub and certified connectors
+    (backend/src/agentic_os/connectors/)
+
+  - Storm Detection and StormAgent
+    (backend/src/agentic_os/storm_detection/)
+
+  - Slack ChatOps integration
+    (backend/src/agentic_os/slack/)
+
+  - Platform Intelligence and TuningAgent
+    (backend/src/agentic_os/platform_intelligence/)
+
+Use of these components requires either qualification under the free-use
+provisions of the Enterprise License (Section 2) or a separate Commercial
+License. See LICENSE-ENTERPRISE for full terms.
+
+For licensing inquiries: licensing@axiometica.com
+
+--------------------------------------------------------------------------------
+
+THIRD-PARTY SOFTWARE NOTICES
+
+This software incorporates components from the following open source
+projects. Each is used in accordance with its respective license.
+
+  FastAPI
+  License: MIT
+  https://github.com/tiangolo/fastapi
+
+  SQLAlchemy
+  License: MIT
+  https://github.com/sqlalchemy/sqlalchemy
+
+  ReportLab
+  License: BSD
+  https://www.reportlab.com/
+
+  Neo4j Python Driver
+  License: Apache License 2.0
+  https://github.com/neo4j/neo4j-python-driver
+
+  redis-py
+  License: MIT
+  https://github.com/redis/redis-py
+
+  Celery
+  License: BSD
+  https://github.com/celery/celery
+
+  React
+  License: MIT
+  https://github.com/facebook/react
+
+  Pydantic
+  License: MIT
+  https://github.com/pydantic/pydantic
+
+  Alembic
+  License: MIT
+  https://github.com/sqlalchemy/alembic
+
+Full third-party license texts are available in the
+THIRD-PARTY-LICENSES/ directory:
+
+  THIRD-PARTY-LICENSES/python-licenses.txt  — Python package license texts
+  THIRD-PARTY-LICENSES/python-summary.md    — Python package license summary
+  THIRD-PARTY-LICENSES/npm-licenses.txt     — Frontend (npm) license texts

@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: axiometica-air
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - configmap.yaml
+  - deployment.yaml
+  # secret-example.yaml is intentionally excluded — create the secret manually
+
+# Override image tag for a specific release:
+# images:
+#   - name: ghcr.io/axiometica/axiometica-airi-v2-watcher
+#     newTag: "1.2.0"
+
+# Override config values per environment:
+# patches:
+#   - target:
+#       kind: ConfigMap
+#       name: watcher-config
+#     patch: |-
+#       - op: replace
+#         path: /data/WATCHER_K8S_NAMESPACE
+#         value: production

@@ -1,0 +1,60 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+# journalctl shim — agentic_nginx_prod_test
+#
+# Runbooks that call `journalctl -u nginx -n 100` or similar get the tail of
+# the relevant supervisor-managed log file instead.
+#
+# Usage mirrors real journalctl:
+#   journalctl -u nginx -n 50
+#   journalctl -u postgresql --since "1 hour ago"
+#   journalctl -u testapp -f          (follow mode)
+# ─────────────────────────────────────────────────────────────────────────────
+
+UNIT=""
+LINES=100
+FOLLOW=false
+SINCE=""
+
+# ── Parse arguments ───────────────────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -u|--unit)    UNIT="$2";  shift 2 ;;
+        -n|--lines)   LINES="$2"; shift 2 ;;
+        -f|--follow)  FOLLOW=true; shift ;;
+        --since)      SINCE="$2"; shift 2 ;;
+        --no-pager|-r|--reverse|-x|--catalog|-e|--pager-end) shift ;;
+        *) shift ;;
+    esac
+done
+
+# ── Map unit to log file ──────────────────────────────────────────────────────
+log_for_unit() {
+    local unit="${1%.service}"
+    case "$unit" in
+        nginx)                        echo "/var/log/nginx/error.log" ;;
+        postgresql|postgresql-15|postgres) echo "/var/log/supervisor/postgresql-stderr.log" ;;
+        sshd|ssh|openssh-server)      echo "/var/log/supervisor/sshd-err.log" ;;
+        testapp|app)                  echo "/var/log/app/testapp.log" ;;
+        supervisord)                  echo "/var/log/supervisor/supervisord.log" ;;
+        *)                            echo "/var/log/supervisor/$unit.log" ;;
+    esac
+}
+
+if [ -z "$UNIT" ]; then
+    LOG="/var/log/supervisor/supervisord.log"
+else
+    LOG=$(log_for_unit "$UNIT")
+fi
+
+# ── Output ────────────────────────────────────────────────────────────────────
+if [ ! -f "$LOG" ]; then
+    echo "-- No log file found at $LOG --"
+    exit 0
+fi
+
+if $FOLLOW; then
+    tail -f "$LOG"
+else
+    tail -n "$LINES" "$LOG"
+fi

@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: watcher
+  namespace: axiometica-air
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+    app.kubernetes.io/component: monitoring
+spec:
+  replicas: 1          # Only one watcher per K8s cluster per namespace scope
+  selector:
+    matchLabels:
+      app: agentic-watcher
+  strategy:
+    type: Recreate     # Avoid two watchers running simultaneously
+  template:
+    metadata:
+      labels:
+        app: agentic-watcher
+        app.kubernetes.io/name: agentic-watcher
+    spec:
+      serviceAccountName: watcher
+      automountServiceAccountToken: true
+
+      # Identity file persisted across Pod restarts so watcher_id is stable
+      volumes:
+        - name: watcher-state
+          persistentVolumeClaim:
+            claimName: watcher-state
+
+      containers:
+        - name: watcher
+          image: ghcr.io/axiometica/axiometica-airi-v2-watcher:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: kill-api
+              containerPort: 8080
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: watcher-config
+            - secretRef:
+                name: watcher-secrets
+
+          volumeMounts:
+            - name: watcher-state
+              mountPath: /app/.state
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+
+      # Don't schedule on control-plane nodes
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+---
+# Service so the platform can route Kill-API calls back to the watcher
+apiVersion: v1
+kind: Service
+metadata:
+  name: watcher
+  namespace: axiometica-air
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+spec:
+  selector:
+    app: agentic-watcher
+  ports:
+    - name: kill-api
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+
+---
+# PVC for watcher identity and state files
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: watcher-state
+  namespace: axiometica-air
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+  # storageClassName: standard   # Uncomment and set your storage class

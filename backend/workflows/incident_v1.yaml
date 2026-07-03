@@ -1,0 +1,109 @@
+version: "1.0"
+workflow_type: incident
+description: "Incident management workflow"
+
+start_step: sentinel
+
+steps:
+  sentinel:
+    name: "Incident Triage"
+    type: agent
+    agent: sentinel
+    next_steps:
+      default: librarian
+    timeout_seconds: 300
+    retry_count: 1
+
+  librarian:
+    name: "Information Enrichment"
+    type: agent
+    agent: librarian
+    next_steps:
+      default: risk_assessor
+    timeout_seconds: 300
+    retry_count: 1
+
+  risk_assessor:
+    name: "Risk Assessment"
+    type: agent
+    agent: risk_assessor
+    next_steps:
+      default: mechanic
+    timeout_seconds: 600
+    retry_count: 1
+
+  mechanic:
+    name: "Proposal Generation"
+    type: agent
+    agent: mechanic
+    next_steps:
+      default: runbook_generator
+    timeout_seconds: 600
+    retry_count: 1
+
+  runbook_generator:
+    name: "Runbook Generation"
+    type: agent
+    agent: runbook_generator
+    next_steps:
+      default: policy_broker
+    timeout_seconds: 600
+    retry_count: 1
+
+  policy_broker:
+    name: "Policy Check"
+    type: agent
+    agent: policy_broker
+    next_steps:
+      approved: tool_registry       # policy says auto-approve — proceed immediately
+      pending_approval: ~           # manual approval required — halt; Celery resumes after approval
+      pending: ~                    # conservative default (no policy match) — halt; same resume path
+      default: tool_registry        # safety net: should not be reached in normal flow
+    timeout_seconds: 300
+    retry_count: 1
+
+  tool_registry:
+    name: "Tool Verification"
+    type: agent
+    agent: tool_registry
+    next_steps:
+      approved: verifier
+      rejected: mark_failed
+      diagnostics_only: ~   # diagnostics ran; halt workflow — human decides next step
+      default: verifier     # safety fallback if decision_result is missing/empty
+    timeout_seconds: 300
+    retry_count: 1
+
+  verifier:
+    name: "Execution Verification"
+    type: agent
+    agent: verifier
+    next_steps:
+      success: mark_resolved
+      failure: mark_failed
+      monitoring: mark_monitoring
+    timeout_seconds: 1800
+    retry_count: 2
+
+  mark_resolved:
+    name: "Mark as Resolved"
+    type: agent
+    agent: mark_resolved
+    timeout_seconds: 60
+
+  mark_failed:
+    name: "Mark as Failed"
+    type: agent
+    agent: mark_failed
+    timeout_seconds: 60
+
+  mark_monitoring:
+    name: "Mark as Monitoring"
+    type: agent
+    agent: mark_monitoring
+    timeout_seconds: 60
+
+end_steps:
+  - mark_resolved
+  - mark_failed
+  - mark_monitoring

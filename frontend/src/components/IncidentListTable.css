@@ -1,0 +1,451 @@
+/* ─────────────────────────────────────────────────
+   IncidentListTable — strict design system
+   Palette:
+     bg          #0f1419
+     surface     #1a1f2e
+     raised      #252c3c
+     border      #3d4557
+     txtP        #e8eef5
+     txtS        #a0aec0
+     txtM        #6b7a93
+     accent-blue #3b82f6
+   Semantic (text + border only — no fills):
+     slate  #94a3b8   Phase 1 — open / in_progress / executing / investigating
+     amber  #f59e0b   Phase 2 — waiting_approval (decision gate)
+     cyan   #06b6d4   Phase 2 — approved (decided, about to execute)
+     orange #f97316   Phase 3 — awaiting_manual / failed / rejected / rolled_back (human handoff)
+     violet #8b5cf6   storm_hold
+     green  #10b981   resolved / closed
+───────────────────────────────────────────────── */
+
+/* ── Root ───────────────────────────────────────── */
+.ilt-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 0.875rem;
+  position: relative;          /* anchor for hover modal */
+}
+
+/* ── Filters ─────────────────────────────────────── */
+.ilt-filters {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: #1a1f2e;
+  border-bottom: 1px solid #3d4557;
+  flex-wrap: wrap;
+}
+
+.ilt-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ilt-filter-group label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #6b7a93;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ilt-filter-group select {
+  padding: 0.4rem 0.65rem;
+  background: #252c3c;
+  border: 1px solid #3d4557;
+  color: #e8eef5;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  min-width: 140px;
+  outline: none;
+}
+.ilt-filter-group select:hover  { border-color: #3b82f6; }
+.ilt-filter-group select:focus  { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,.15); }
+
+/* ── Table wrapper — horizontal scroll ──────────── */
+.ilt-table-wrapper {
+  flex: 1;
+  overflow: auto;              /* both axes; header stays sticky via thead */
+  position: relative;
+}
+
+/* ── Table ───────────────────────────────────────── */
+.ilt-table {
+  width: 100%;
+  min-width: 820px;            /* prevent collapse before scroll kicks in */
+  border-collapse: collapse;
+  font-size: 0.835rem;
+  table-layout: fixed;
+}
+
+/* ── Header ─────────────────────────────────────── */
+.ilt-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #1a1f2e;
+  box-shadow: 0 1px 0 #3d4557;
+}
+
+.ilt-table th {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: #6b7a93;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  border-bottom: 1px solid #3d4557;
+  transition: color 150ms;
+}
+.ilt-table th:hover         { color: #a0aec0; }
+.ilt-table th:last-child    { cursor: default; pointer-events: none; }
+
+.sort-arrow        { margin-left: 3px; font-size: 0.6rem; }
+.sort-arrow.active { color: #3b82f6; }
+.sort-arrow.idle   { color: #3d4557; }
+
+/* ── Column widths ───────────────────────────────── */
+.col-inc     { width: 80px;  }   /* INC0001 = 7 chars, fits cleanly */
+.col-ts      { width: 120px; }   /* 04:36 · 05/17 + cell padding     */
+.col-status  { width: 130px; }   /* badge + sub-labels stacked       */
+.col-sev     { width: 80px;  }
+.col-title   { width: auto;  min-width: 200px; }
+.col-ci      { width: 160px; }
+.col-crit    { width: 130px; }
+.col-risk    { width: 56px;  text-align: right; }
+.col-actions { width: 110px; text-align: right; }
+
+/* ── Rows ────────────────────────────────────────── */
+.ilt-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #3d4557;
+  color: #e8eef5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.ilt-row:hover td { background: #1e2538; }
+
+.ilt-row.expanded td { background: rgba(59,130,246,.06); }
+
+/* ── INC# ────────────────────────────────────────── */
+.ilt-inc-num {
+  font-weight: 700;
+  color: #e8eef5;
+  font-size: 0.8rem;
+  letter-spacing: 0.2px;
+}
+
+/* ── Timestamp ───────────────────────────────────── */
+.ilt-ts {
+  font-size: 0.82rem;
+  color: #a0aec0;
+}
+
+/* ── Title ───────────────────────────────────────── */
+.ilt-title-text {
+  font-weight: 500;
+  color: #e8eef5;
+}
+
+/* ── CI/Service ──────────────────────────────────── */
+.col-ci td,
+td.col-ci {
+  color: #a0aec0;
+  font-size: 0.8rem;
+}
+
+/* ── Business criticality ────────────────────────── */
+.col-crit td,
+td.col-crit {
+  color: #a0aec0;
+  font-size: 0.78rem;
+}
+
+/* ── Risk score ──────────────────────────────────── */
+.col-risk {
+  font-variant-numeric: tabular-nums;
+  color: #a0aec0;
+  font-size: 0.82rem;
+}
+
+/* ── Sub-labels (all-clear / aborted) ───────────── */
+.ilt-sub-label {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.ilt-sub-label.purple { color: #c084fc; }
+.ilt-sub-label.amber  { color: #fbbf24; }
+
+/* ── Badges — outlined, no fill ─────────────────── */
+.ilt-badge {
+  display: inline-block;
+  padding: 0.18rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.67rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: transparent;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+/* Status variants — matches StatusBadge getColor() lifecycle */
+.status-slate  { color: #94a3b8; }   /* Phase 1: open / in_progress / executing / investigating */
+.status-amber  { color: #f59e0b; }   /* Phase 2: waiting_approval          */
+.status-cyan   { color: #06b6d4; }   /* Phase 2: approved — decided        */
+.status-orange { color: #f97316; }   /* Phase 3: awaiting_manual / failed / rejected / rolled_back */
+.status-purple { color: #8b5cf6; }   /* Special: storm_hold                */
+.status-green  { color: #10b981; }   /* Terminal: resolved / closed        */
+
+/* Severity variants — matches StatusBadge getColor() */
+.severity-critical { color: #dc2626; }
+.severity-high     { color: #f97316; }
+.severity-medium   { color: #f59e0b; }
+.severity-low      { color: #10b981; }
+
+/* ── Action buttons ──────────────────────────────── */
+.ilt-actions {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.ilt-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 150ms;
+  white-space: nowrap;
+  background: transparent;
+}
+.ilt-actions button:hover { opacity: 0.8; }
+
+.ilt-btn-approve {
+  color: #6ee7b7;
+  border: 1px solid #6ee7b7;
+}
+.ilt-btn-details {
+  color: #93c5fd;
+  border: 1px solid #93c5fd;
+}
+.ilt-btn-retry {
+  color: #fbbf24;
+  border: 1px solid #fbbf24;
+}
+
+/* ── Expanded row — card sits flush edge-to-edge ─── */
+.ilt-expanded-row          { background: transparent !important; }
+.ilt-expanded-row:hover td { background: transparent !important; }
+.ilt-expanded-cell {
+  padding: 0 !important;
+  border-bottom: 1px solid #3d4557 !important;
+  overflow: visible !important;
+}
+/* card fills the full row width with no extra margin */
+.ilt-expanded-cell > * { display: block; }
+
+/* ── Empty / loading ─────────────────────────────── */
+.ilt-empty {
+  text-align: center;
+  padding: 2.5rem !important;
+  color: #6b7a93 !important;
+  font-size: 0.85rem;
+}
+
+/* ── Pagination ──────────────────────────────────── */
+.ilt-pagination {
+  position: sticky;
+  bottom: 0;
+  padding: 0.75rem 1.5rem;
+  background: #1a1f2e;
+  border-top: 1px solid #3d4557;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ilt-pg-info {
+  color: #6b7a93;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.ilt-pg-controls {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.ilt-pg-size {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #6b7a93;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.ilt-pg-size select {
+  padding: 0.3rem 0.5rem;
+  background: #252c3c;
+  border: 1px solid #3d4557;
+  color: #e8eef5;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.ilt-pg-btns {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.ilt-pg-btns button {
+  padding: 0.3rem 0.65rem;
+  background: transparent;
+  border: 1px solid #3d4557;
+  color: #a0aec0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: border-color 150ms, color 150ms;
+  white-space: nowrap;
+}
+.ilt-pg-btns button:hover:not(:disabled) {
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+.ilt-pg-btns button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.ilt-pg-indicator {
+  color: #6b7a93;
+  font-size: 0.78rem;
+  min-width: 96px;
+  text-align: center;
+}
+
+/* ── Summary hover modal ─────────────────────────── */
+.ilt-summary-modal {
+  position: fixed;
+  /* left / top set by JS onMouseMove via ref — no right anchor */
+  left: 0;
+  top: 0;
+  z-index: 200;
+  width: 324px;
+  background: #252c3c;
+  border: 1px solid #3d4557;
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+  pointer-events: none;
+  box-shadow:
+    0 2px 8px rgba(0,0,0,.3),
+    0 8px 24px rgba(0,0,0,.45);
+  will-change: left, top;
+  animation: ilt-modal-in 110ms ease;
+}
+
+@keyframes ilt-modal-in {
+  from { opacity: 0; transform: scale(.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.ilt-sm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.ilt-sm-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e8eef5;
+  line-height: 1.4;
+}
+
+.ilt-sm-duration {
+  flex-shrink: 0;
+  font-size: 0.67rem;
+  font-weight: 600;
+  color: #a0aec0;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+}
+
+.ilt-sm-body {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #a0aec0;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.ilt-sm-body::-webkit-scrollbar { width: 4px; }
+.ilt-sm-body::-webkit-scrollbar-thumb { background: #3d4557; border-radius: 2px; }
+
+/* ── Light mode overrides ────────────────────────── */
+.ilt-root.light {
+  --bg:      #ffffff;
+  --surface: #f3f4f6;
+  --border:  #e5e7eb;
+  --txtP:    #1f2937;
+  --txtS:    #6b7280;
+}
+.ilt-root.light .ilt-filters,
+.ilt-root.light .ilt-table thead,
+.ilt-root.light .ilt-pagination {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+}
+.ilt-root.light .ilt-table td {
+  border-color: #e5e7eb;
+  color: #1f2937;
+}
+.ilt-root.light .ilt-row:hover td { background: #f3f4f6; }
+.ilt-root.light .ilt-summary-modal {
+  background: #ffffff;
+  border-color: #e5e7eb;
+}
+
+/* ── Responsive ──────────────────────────────────── */
+@media (max-width: 1024px) {
+  .ilt-pagination { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+  .ilt-pg-controls { flex-wrap: wrap; }
+}
+
+@media (max-width: 768px) {
+  .ilt-filters { padding: 0.75rem; gap: 0.75rem; }
+  .ilt-table   { font-size: 0.75rem; }
+  .ilt-table td, .ilt-table th { padding: 0.5rem; }
+  .ilt-summary-modal { display: none; }   /* too narrow for side modal on mobile */
+}

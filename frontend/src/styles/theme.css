@@ -1,0 +1,576 @@
+/* Professional Enterprise Theme - Advanced Effects and Utilities */
+
+/* CSS Variables for dynamic theming - FINALIZED COLOR SYSTEM */
+:root {
+  /* ========== BASE COLORS ========== */
+  --color-bg-base: #0f1419;        /* Darkest - page background */
+  --color-bg-surface: #1a1f2e;     /* Modal/overlay backgrounds */
+  --color-bg-card: #2d3748;        /* Card backgrounds (CONFIRMED) */
+  --color-bg-elevated: #2d3748;    /* For compatibility - same as bg-card */
+  --color-bg-hover: #3d4557;       /* Hover backgrounds */
+  --color-border: #3d4557;         /* Borders, dividers */
+
+  /* Text colors */
+  --color-text-primary: #e8eef5;   /* Main text, headings */
+  --color-text-secondary: #a0aec0; /* Labels, descriptions */
+  --color-text-tertiary: #7a8ba3;  /* Helper text, metadata */
+
+  /* ========== SEMANTIC: SUCCESS/GREEN ========== */
+  /* ROLLBACK: --color-success: #15803d; --color-success-text: #86efac; --color-success-hover: #10b981; --color-status-success-bg: #064e3b; */
+  --color-success: #064e3b;        /* YOUR SELECTION: Subtle success background */
+  --color-success-text: #86efac;   /* Success text accent */
+  --color-success-hover: #10b981;  /* Success hover state */
+  --color-status-success-bg: #064e3b;  /* Success background tint */
+  --color-status-success-text: #86efac;
+
+  /* ========== SEMANTIC: CRITICAL/RED ========== */
+  /* ROLLBACK: --color-critical: #dc2626; --color-critical-text: #fca5a5; --color-critical-hover: #991b1b; */
+  --color-critical: #7f1d1d;       /* YOUR SELECTION: Subtle critical background */
+  --color-critical-text: #fca5a5;  /* Critical text accent */
+  --color-critical-hover: #991b1b; /* Critical hover state */
+  --color-status-critical: #991b1b;
+  --color-status-critical-bg: #7f1d1d;
+  --color-status-critical-text: #fca5a5;
+
+  /* ========== SEMANTIC: WARNING/AMBER ========== */
+  /* ROLLBACK: --color-warning: #f59e0b; --color-warning-text: #fcd34d; --color-warning-hover: #b45309; */
+  --color-warning: #78350f;        /* YOUR SELECTION: Subtle warning background */
+  --color-warning-text: #fcd34d;   /* Warning text accent */
+  --color-warning-hover: #b45309;  /* Warning hover state */
+  --color-status-warning: #b45309;
+  --color-status-warning-bg: #78350f;
+  --color-status-warning-text: #fcd34d;
+
+  /* ========== SEMANTIC: WARNING/ORANGE (High) ========== */
+  --color-danger: #f97316;         /* High severity/danger */
+  --color-danger-text: #fed7aa;    /* Danger text accent */
+  --color-danger-hover: #d97706;   /* Danger hover state */
+  --color-status-amber: #d97706;
+  --color-status-amber-bg: #92400e;
+  --color-status-amber-text: #fcd34d;
+
+  /* ========== SEMANTIC: INFO/BLUE ========== */
+  /* ROLLBACK: --color-info: #2563eb; --color-info-text: #93c5fd; --color-info-hover: #1e40af; */
+  --color-info: #1e3a8a;           /* YOUR SELECTION: Subtle info background */
+  --color-info-text: #93c5fd;      /* Info text accent */
+  --color-info-hover: #1e40af;     /* Info hover state */
+  --color-info-blend: #1e3a8a;     /* Info background tint */
+
+  /* ========== SEMANTIC: PENDING/GRAY ========== */
+  /* ROLLBACK: --color-pending: #6b7280; --color-pending-text: #d1d5db; --color-pending-bg: #1f2937; */
+  --color-pending: #1f2937;        /* YOUR SELECTION: Subtle pending background */
+  --color-pending-text: #d1d5db;   /* YOUR SELECTION: Pending text accent */
+  --color-pending-hover: #374151;  /* Pending hover state */
+  --color-pending-bg: #1f2937;     /* YOUR SELECTION: Pending background tint */
+
+  /* ========== SEMANTIC: SPECIAL/PURPLE ========== */
+  /* ROLLBACK: --color-approval: #a855f7; --color-approval-blend: #4c0519; */
+  --color-approval: #4c0519;       /* YOUR SELECTION: Subtle special background */
+  --color-approval-text: #e9d5ff;  /* Approval text accent */
+  --color-approval-hover: #6b21a8; /* Approval hover state */
+  --color-approval-blend: #4c0519; /* YOUR SELECTION: Approval background tint */
+
+  /* ========== TIER COLORS ========== */
+  --color-tier-runbook: #15803d;   /* Green */
+  --color-tier-playbook: #2563eb;  /* Blue */
+  --color-tier-history: #a855f7;   /* Purple */
+  --color-tier-llm: #d97706;       /* Orange */
+  --color-tier-fallback: #f59e0b;  /* Amber */
+
+  /* ========== RISK LEVEL COLORS ========== */
+  --color-risk-critical: #dc2626;  /* Red */
+  --color-risk-high: #f97316;      /* Orange */
+  --color-risk-medium: #f59e0b;    /* Amber */
+  --color-risk-low: #15803d;       /* Green */
+  --color-risk-info: #2563eb;      /* Blue */
+
+  /* Blend colors for backgrounds */
+  --color-critical-blend: #7f1d1d;
+  --color-warning-blend: #78350f;
+
+  /* Gradients - using finalized colors */
+  --gradient-emerald-blue: linear-gradient(135deg, #15803d 0%, #2563eb 100%);
+  --gradient-purple-pink: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  --gradient-amber-orange: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  --gradient-blue-purple: linear-gradient(135deg, #2563eb 0%, #a855f7 100%);
+
+  /* Shadow layers for depth */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
+  --shadow-inner-soft: inset 0 1px 2px rgba(255, 255, 255, 0.1);
+
+  /* Glow effects - updated colors */
+  --glow-blue: 0 0 12px rgba(37, 99, 235, 0.3);     /* #2563eb */
+  --glow-green: 0 0 12px rgba(21, 128, 61, 0.3);    /* #15803d */
+  --glow-red: 0 0 12px rgba(220, 38, 38, 0.3);      /* #dc2626 */
+  --glow-purple: 0 0 12px rgba(168, 85, 247, 0.3);  /* #a855f7 */
+  --glow-amber: 0 0 12px rgba(245, 158, 11, 0.3);   /* #f59e0b */
+
+  /* Transition easings */
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --ease-elastic: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  /* Z-index layers */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-modal-backdrop: 200;
+  --z-modal: 300;
+  --z-tooltip: 400;
+  --z-notification: 500;
+}
+
+/* Sophisticated layered shadow effect */
+.shadow-layered {
+  box-shadow:
+    var(--shadow-sm),
+    var(--shadow-md),
+    var(--shadow-lg);
+}
+
+.shadow-layered-dark {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.25),
+    0 12px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Glassmorphism effects with multiple blur layers */
+.glass-effect {
+  background: rgba(26, 31, 46, 0.6);
+  @apply backdrop-blur-md;
+  border: 1px solid rgba(61, 69, 87, 0.5);
+}
+
+.glass-effect-intense {
+  background: rgba(15, 20, 25, 0.7);
+  @apply backdrop-blur-lg;
+  border: 1px solid rgba(61, 69, 87, 0.3);
+}
+
+.glass-effect-light {
+  background: rgba(41, 55, 72, 0.4);
+  @apply backdrop-blur-sm;
+  border: 1px solid rgba(61, 69, 87, 0.4);
+}
+
+/* Gradient text effect */
+.text-gradient {
+  background: var(--gradient-emerald-blue);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-purple {
+  background: var(--gradient-purple-pink);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Gradient border effect */
+.border-gradient {
+  position: relative;
+  background: var(--color-bg-elevated);
+}
+
+.border-gradient::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  background: var(--gradient-emerald-blue);
+  border-radius: inherit;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Glow on hover for interactive elements */
+.hover-glow {
+  transition: all 200ms var(--ease-smooth);
+}
+
+.hover-glow:hover {
+  box-shadow: var(--shadow-layered-dark), var(--glow-blue);
+}
+
+.hover-glow-green:hover {
+  box-shadow: var(--shadow-layered-dark), var(--glow-green);
+}
+
+.hover-glow-red:hover {
+  box-shadow: var(--shadow-layered-dark), var(--glow-red);
+}
+
+.hover-glow-purple:hover {
+  box-shadow: var(--shadow-layered-dark), var(--glow-purple);
+}
+
+/* Lifted card effect */
+.card-lift {
+  transition: all 200ms var(--ease-smooth);
+}
+
+.card-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-layered-dark), var(--glow-blue);
+}
+
+/* Soft inner glow for text emphasis */
+.text-glow {
+  text-shadow:
+    0 0 8px rgba(59, 130, 246, 0.4),
+    0 0 16px rgba(59, 130, 246, 0.2);
+}
+
+.text-glow-green {
+  text-shadow:
+    0 0 8px rgba(16, 185, 129, 0.4),
+    0 0 16px rgba(16, 185, 129, 0.2);
+}
+
+.text-glow-red {
+  text-shadow:
+    0 0 8px rgba(220, 38, 38, 0.4),
+    0 0 16px rgba(220, 38, 38, 0.2);
+}
+
+/* Gradient background animation */
+.gradient-animated {
+  background-size: 200% 200%;
+  animation: gradientShift 6s ease infinite;
+}
+
+/* Smooth color transition utility */
+.color-transition {
+  transition: color 200ms var(--ease-smooth),
+              background-color 200ms var(--ease-smooth),
+              border-color 200ms var(--ease-smooth);
+}
+
+/* Transform transition for hover effects */
+.transform-transition {
+  transition: transform 200ms var(--ease-smooth),
+              box-shadow 200ms var(--ease-smooth);
+}
+
+/* All transitions smooth */
+.transitions-smooth {
+  transition: all 200ms var(--ease-smooth);
+}
+
+.transitions-smooth-slow {
+  transition: all 300ms var(--ease-smooth);
+}
+
+/* Ripple effect container */
+.ripple-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transform: scale(0);
+  animation: ripple 0.6s ease-out;
+  pointer-events: none;
+}
+
+/* Status indicator - animated */
+.status-indicator {
+  position: relative;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.status-indicator::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  opacity: 0.3;
+  animation: metricPulse 2s ease-in-out infinite;
+}
+
+.status-indicator.critical {
+  background: var(--color-critical);
+}
+
+.status-indicator.critical::after {
+  background: var(--color-critical);
+  box-shadow: var(--glow-red);
+}
+
+.status-indicator.success {
+  background: var(--color-success);  /* #15803d */
+}
+
+.status-indicator.success::after {
+  background: var(--color-success);
+  box-shadow: var(--glow-green);
+}
+
+.status-indicator.warning {
+  background: var(--color-warning);
+}
+
+.status-indicator.warning::after {
+  background: var(--color-warning);
+  box-shadow: var(--glow-amber);
+}
+
+.status-indicator.info {
+  background: var(--color-info);
+}
+
+.status-indicator.info::after {
+  background: var(--color-info);
+  box-shadow: var(--glow-blue);
+}
+
+/* Metric card premium styling */
+.metric-card {
+  background: var(--color-bg-card);  /* #2d3748 - CONFIRMED */
+  border: 1px solid rgba(61, 69, 87, 0.5);
+  border-radius: 12px;
+  padding: 1.25rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-emerald-blue);
+  opacity: 0;
+  transition: opacity 300ms var(--ease-smooth);
+}
+
+.metric-card:hover::before {
+  opacity: 1;
+}
+
+/* Form section card */
+.form-section {
+  background: var(--color-bg-surface);  /* #1a1f2e */
+  border: 1px solid rgba(61, 69, 87, 0.4);
+  border-radius: 12px;
+  padding: 1.75rem;
+  margin-bottom: 1.5rem;
+  transition: all 200ms var(--ease-smooth);
+}
+
+.form-section:hover {
+  border-color: rgba(61, 69, 87, 0.6);
+  box-shadow: var(--shadow-md);
+}
+
+/* Toggle switch - professional styling */
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: var(--color-bg-hover);
+  border: 1px solid rgba(61, 69, 87, 0.6);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 200ms var(--ease-smooth);
+}
+
+.toggle-switch.active {
+  background: var(--color-info);
+  border-color: var(--color-info);
+}
+
+.toggle-switch::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 10px;
+  top: 2px;
+  left: 2px;
+  transition: all 200ms var(--ease-smooth);
+}
+
+.toggle-switch.active::before {
+  transform: translateX(20px);
+}
+
+/* Progress bar with gradient fill */
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #3d4557;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  @apply bg-gradient-to-r from-success-500 to-info-500;
+  border-radius: 4px;
+  transition: width 300ms var(--ease-smooth);
+  position: relative;
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  animation: gradientFlow 2s ease-in-out infinite;
+}
+
+/* Accent line for status bars */
+.status-bar {
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(90deg,
+    #dc2626 0%,
+    #f59e0b 33%,
+    #3b82f6 66%,
+    #10b981 100%);
+  border-radius: 2px;
+  margin-bottom: 1rem;
+}
+
+/* Divider with gradient fade */
+.divider-gradient {
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(61, 69, 87, 0.5),
+    transparent);
+}
+
+/* Fade bottom gradient for scrollable content */
+.fade-to-bottom {
+  position: relative;
+  overflow: hidden;
+}
+
+.fade-to-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(to bottom, transparent, var(--color-bg-base));
+  pointer-events: none;
+}
+
+/* Hover highlight for list items */
+.list-item-hover {
+  transition: all 200ms var(--ease-smooth);
+  border-left: 3px solid transparent;
+}
+
+.list-item-hover:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-left-color: var(--color-info);
+  padding-left: calc(1rem + 3px);
+}
+
+/* Skeleton loading effect */
+.skeleton-pulse {
+  background: linear-gradient(90deg,
+    #1d2437 0%,
+    #3d4557 50%,
+    #1d2437 100%);
+  background-size: 200% 100%;
+  animation: waveShimmer 2s infinite;
+  border-radius: 8px;
+}
+
+/* Empty state styling */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+}
+
+.empty-state-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.empty-state-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-description {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  max-width: 300px;
+}
+
+/* Success animation for completed actions */
+.success-animation {
+  animation: successCheck 500ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+/* Error shake animation */
+.error-animation {
+  animation: errorShake 400ms;
+}
+
+/* Loading spinner */
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(59, 130, 246, 0.2);
+  border-top-color: var(--color-info);
+  border-radius: 50%;
+  animation: rotateFull 0.8s linear infinite;
+}
+
+/* Accessibility support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  .metric-card,
+  .form-section,
+  .card {
+    border-width: 2px;
+    border-color: var(--color-text-secondary);
+  }
+
+  .glass-effect {
+    border-width: 2px;
+  }
+}

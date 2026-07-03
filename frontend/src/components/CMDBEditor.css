@@ -1,0 +1,629 @@
+/* CMDBEditor.css — Two-panel Neo4j CMDB editor */
+
+.cmdb-editor {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --bg:      #0d1117;
+  --surface: #1a1f2e;
+  --raised:  #252c3c;
+  --border:  #3d4557;
+  --txtP:    #e8eef5;
+  --txtM:    #a0aec0;
+  --txtS:    #7a8ba3;
+  --accent:  #3b82f6;
+  --green:   #10b981;
+  --red:     #ef4444;
+  --amber:   #f59e0b;
+}
+
+/* ── Left list panel ──────────────────────────────────────────────────────── */
+
+.cmdb-list-panel {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  min-height: 0;
+}
+
+.cmdb-list-toolbar {
+  padding: 0.625rem 0.75rem 0.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cmdb-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 8px;
+  color: var(--txtS);
+}
+
+.cmdb-search {
+  flex: 1;
+  height: 30px;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--txtP);
+  font-size: 0.8rem;
+}
+.cmdb-search::placeholder { color: var(--txtS); }
+
+.cmdb-search-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--txtS);
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+.cmdb-search-clear:hover { color: var(--txtP); }
+
+.cmdb-filters {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cmdb-filter-sel {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  font-size: 0.74rem;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--txtM);
+  outline: none;
+  cursor: pointer;
+}
+
+.cmdb-icon-btn {
+  height: 26px;
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--txtS);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.cmdb-icon-btn:hover { color: var(--txtP); border-color: var(--txtS); }
+
+.cmdb-create-btn {
+  height: 26px;
+  padding: 0 10px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cmdb-create-btn:hover { opacity: 0.9; }
+
+.cmdb-list-meta {
+  padding: 4px 12px;
+  font-size: 0.7rem;
+  color: var(--txtS);
+  border-bottom: 1px solid var(--border);
+  background: var(--raised);
+}
+
+.cmdb-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.cmdb-list-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border)20;
+  cursor: pointer;
+  text-align: left;
+  color: var(--txtP);
+  transition: background 120ms;
+}
+.cmdb-list-row:hover  { background: var(--raised); }
+.cmdb-list-row.active { background: #1e2d45; border-left: 3px solid var(--accent); padding-left: 9px; }
+
+.cmdb-list-row-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.cmdb-list-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--txtP);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmdb-list-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 15px;
+}
+
+.cmdb-type-tag {
+  font-size: 0.66rem;
+  color: var(--accent);
+  background: #1e3a5f;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.cmdb-env-tag {
+  font-size: 0.66rem;
+  color: var(--txtS);
+  background: var(--raised);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.cmdb-tier-tag {
+  font-size: 0.66rem;
+  color: #f59e0b;
+  background: #3d2e0a;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.cmdb-spof-tag {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #f59e0b;
+  background: #3d2e0a;
+  border: 1px solid #f59e0b50;
+  border-radius: 4px;
+  padding: 1px 4px;
+  letter-spacing: 0.04em;
+}
+
+.cmdb-list-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--txtS);
+  font-size: 0.8rem;
+}
+
+/* ── Right detail panel ─────────────────────────────────────────────────────── */
+
+.cmdb-detail-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.cmdb-detail-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--txtS);
+  font-size: 0.85rem;
+  background: var(--surface);
+}
+
+/* ── Spinner ────────────────────────────────────────────────────────────────── */
+
+.cmdb-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: cmdb-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes cmdb-spin {
+  to { transform: rotate(360deg); }
+}
+
+.cmdb-spinner-sm {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: cmdb-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.cmdb-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.cmdb-detail-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--txtP);
+  margin: 0 0 0.375rem;
+}
+
+.cmdb-detail-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cmdb-badge-type {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: #1e3a5f;
+  border: 1px solid #2563eb50;
+  border-radius: 5px;
+  padding: 2px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cmdb-badge-env {
+  font-size: 0.7rem;
+  color: #a0aec0;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 8px;
+}
+
+.cmdb-badge-status {
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 2px 8px;
+}
+.cmdb-badge-status.active        { color: #10b981; background: #052e1e; border: 1px solid #10b98150; }
+.cmdb-badge-status.decommissioned{ color: #ef4444; background: #2a0d0d; border: 1px solid #ef444450; }
+.cmdb-badge-status.maintenance   { color: #f59e0b; background: #3d2e0a; border: 1px solid #f59e0b50; }
+
+.cmdb-badge-spof {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #f59e0b;
+  background: #3d2e0a;
+  border: 1px dashed #f59e0b80;
+  border-radius: 5px;
+  padding: 2px 8px;
+}
+
+.cmdb-badge-incident {
+  font-size: 0.7rem;
+  color: #ef4444;
+  background: #2a0d0d;
+  border: 1px solid #ef444450;
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-weight: 600;
+}
+
+.cmdb-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cmdb-btn-edit {
+  height: 30px;
+  padding: 0 14px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cmdb-btn-edit:hover { opacity: 0.9; }
+
+.cmdb-btn-save {
+  height: 30px;
+  padding: 0 14px;
+  background: var(--green);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cmdb-btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+.cmdb-btn-save:not(:disabled):hover { opacity: 0.9; }
+
+.cmdb-btn-cancel {
+  height: 30px;
+  padding: 0 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--txtM);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cmdb-btn-cancel:hover { border-color: var(--txtS); color: var(--txtP); }
+
+.cmdb-btn-decommission {
+  height: 30px;
+  padding: 0 12px;
+  background: none;
+  border: 1px solid #ef444450;
+  border-radius: 6px;
+  color: #ef4444;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cmdb-btn-decommission:hover { background: #2a0d0d; }
+.cmdb-btn-decommission:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cmdb-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+
+.cmdb-section {
+  margin-bottom: 1.25rem;
+}
+
+.cmdb-section-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--txtS);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin: 0 0 0.625rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cmdb-live-badge {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--txtS);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── Fields grid ──────────────────────────────────────────────────────────── */
+
+.cmdb-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.cmdb-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border)30;
+}
+.cmdb-field-row.readonly { opacity: 0.8; }
+
+.cmdb-field-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--txtS);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cmdb-field-val {
+  font-size: 0.8rem;
+  color: var(--txtP);
+}
+
+.cmdb-field-null {
+  font-size: 0.8rem;
+  color: var(--txtS);
+}
+
+.cmdb-bool {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.cmdb-bool.yes { color: var(--green); }
+.cmdb-bool.no  { color: var(--txtS); }
+
+.cmdb-field-input {
+  height: 26px;
+  padding: 0 7px;
+  font-size: 0.78rem;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--txtP);
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.cmdb-field-input:focus { border-color: var(--accent); }
+
+/* ── Relationships ────────────────────────────────────────────────────────── */
+
+.cmdb-rel-group {
+  margin-bottom: 0.75rem;
+}
+
+.cmdb-rel-group-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--txtS);
+  margin-bottom: 6px;
+}
+
+.cmdb-rel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cmdb-rel-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--txtM);
+  font-size: 0.76rem;
+  cursor: pointer;
+  transition: all 120ms;
+}
+.cmdb-rel-chip:hover { border-color: var(--accent); color: var(--txtP); }
+
+.cmdb-rel-tier {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #f59e0b;
+  background: #3d2e0a;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+/* ── Error / alert ────────────────────────────────────────────────────────── */
+
+.cmdb-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 7px;
+  color: #ef4444;
+  font-size: 0.8rem;
+  margin: 0.75rem;
+}
+
+/* ── Create CI modal ──────────────────────────────────────────────────────── */
+
+.cmdb-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.cmdb-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 420px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+}
+
+.cmdb-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.cmdb-modal-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--txtP);
+}
+
+.cmdb-modal-body {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cmdb-modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cmdb-modal-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--txtM);
+}
+
+.cmdb-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border);
+}

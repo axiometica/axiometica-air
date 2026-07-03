@@ -1,0 +1,417 @@
+/* EventsFeed.css */
+.events-feed {
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  --bg:      #0d1117;
+  --surface: #1a1f2e;
+  --raised:  #252c3c;
+  --border:  #3d4557;
+  --txtP:    #e8eef5;
+  --txtS:    #7a8ba3;
+  --txtM:    #a0aec0;
+  --accent:  #3b82f6;
+}
+
+/* ── Page Header ── */
+.ef-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.ef-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--txtP);
+  margin: 0 0 0.3rem;
+}
+.ef-subtitle {
+  font-size: 0.85rem;
+  color: var(--txtM);
+  margin: 0;
+  max-width: 560px;
+}
+
+/* ── Refresh Button ── */
+.ef-refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--txtM);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 150ms;
+}
+.ef-refresh-btn:hover { color: var(--txtP); }
+.ef-refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ef-refresh-btn.spinning svg { animation: ef-spin 0.8s linear infinite; }
+@keyframes ef-spin { to { transform: rotate(360deg); } }
+
+/* ── Stats Strip ── */
+.ef-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.ef-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.ef-stat-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--txtM);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ef-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+.accent-white  { color: #e8eef5; }
+.accent-green  { color: #10b981; }
+.accent-muted  { color: var(--txtM); }
+
+/* ── Filter Bar ── */
+.ef-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.ef-status-pills {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.ef-pill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--txtM);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms;
+}
+.ef-pill:hover { color: var(--txtP); border-color: var(--txtM); }
+.ef-pill.active {
+  background: var(--raised);
+  border-color: var(--accent);
+  color: var(--txtP);
+}
+
+/* ── Search ── */
+.ef-search-wrap {
+  position: relative;
+  margin-left: auto;
+}
+.ef-search-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--txtS);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+.ef-search {
+  padding: 5px 10px 5px 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--txtP);
+  font-size: 0.82rem;
+  width: 220px;
+  outline: none;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.ef-search::placeholder { color: var(--txtS); }
+.ef-search:focus { border-color: var(--accent); }
+
+/* ── Error Banner ── */
+.ef-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.55rem 0.85rem;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  margin-bottom: 1rem;
+}
+.ef-banner-error {
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  color: #fca5a5;
+}
+
+/* ── Skeletons ── */
+.ef-skeletons { display: flex; flex-direction: column; gap: 0.5rem; }
+.ef-skeleton {
+  height: 84px;
+  border-radius: 10px;
+  background: var(--surface);
+  animation: ef-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ef-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+/* ── Empty State ── */
+.ef-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4rem 1rem;
+  color: var(--txtM);
+  text-align: center;
+}
+.ef-empty-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--txtP);
+  margin: 0.75rem 0 0.35rem;
+}
+.ef-empty-sub {
+  font-size: 0.82rem;
+  color: var(--txtM);
+  margin: 0;
+}
+
+/* ── Event List ── */
+.ef-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.ef-event-card {
+  padding: 0.9rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color 150ms;
+}
+.ef-event-card:hover { border-color: #4a5568; }
+
+/* ── Event Top Row ── */
+.ef-event-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.ef-event-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.ef-event-type {
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.82rem;
+  color: var(--txtP);
+}
+.ef-score {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.ef-score-value {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--txtP);
+}
+.ef-score-label {
+  font-size: 0.72rem;
+  color: var(--txtS);
+}
+
+/* ── Event Title Row (payload_title) ── */
+.ef-event-title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--txtP);
+  line-height: 1.4;
+}
+
+/* ── Event Reason Row (payload_description / qualification_reason) ── */
+.ef-event-reason {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--txtS);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Event Meta Row ── */
+.ef-event-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.78rem;
+  color: var(--txtS);
+  flex-wrap: wrap;
+}
+
+/* ── Event Actions Row ── */
+.ef-event-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--border);
+}
+.ef-action-btn {
+  padding: 3px 10px;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  text-decoration: none;
+  transition: border-color 150ms, color 150ms;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.ef-dismiss {
+  color: var(--txtM);
+  border: 1px solid var(--border);
+}
+.ef-dismiss:hover { border-color: var(--txtM); color: var(--txtP); }
+.ef-view-link {
+  color: #94a3b8;
+  border: 1px solid #94a3b8;
+}
+.ef-view-link:hover { border-color: #e8eef5; color: #e8eef5; }
+
+/* ── Badges — outlined: colored text + colored border, no fill ── */
+.ef-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
+/* Criticality */
+.crit-info     { color: #94a3b8; }
+.crit-warning  { color: #f59e0b; }
+.crit-critical { color: #dc2626; }
+
+/* Status */
+.status-new       { color: var(--txtM); }
+.status-qualified { color: #94a3b8; }   /* slate — event was processed into an incident, informational */
+.status-dismissed { color: var(--txtS); }
+
+/* Confidence */
+.conf-high { color: #10b981; }
+.conf-low  { color: #f59e0b; }
+
+/* All-clear / Recovery signal */
+.ef-event-card--allclear {
+  border-color: #065f46;          /* subtle green border */
+  background: linear-gradient(135deg, var(--surface) 0%, #022c22 100%);
+}
+.ef-event-card--allclear:hover { border-color: #10b981; }
+
+.ef-badge--allclear {
+  color: #6ee7b7;
+  background: #022c22;
+  border: 1px solid #065f46;
+}
+
+/* ── Score tooltip ── */
+.ef-score--tip {
+  position: relative;
+  cursor: help;
+}
+.ef-score-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: max-content;
+  max-width: 340px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--surface, #1a1f2e);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 7px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+  white-space: nowrap;
+}
+.ef-score--tip:hover .ef-score-tooltip {
+  display: flex;
+}
+.ef-qual-math {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.75rem;
+  color: var(--txtM);
+}
+.ef-qual-op    { color: var(--txtS); }
+.ef-qual-arrow { color: var(--txtS); }
+.ef-qual-base  { color: #94a3b8; font-weight: 600; }
+.ef-qual-final { color: #10b981; font-weight: 700; }
+.ef-qual-ci-warn {
+  color: #fcd34d;
+  font-family: inherit;
+}
+.ef-qual-threshold {
+  color: var(--txtS);
+  font-size: 0.68rem;
+  padding-top: 4px;
+  margin-top: 2px;
+  border-top: 1px solid var(--border);
+}
+.ef-qual-reason {
+  color: var(--txtM);
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.72rem;
+  white-space: normal;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .ef-stats { grid-template-columns: 1fr; }
+  .ef-header { flex-direction: column; }
+  .ef-search-wrap { margin-left: 0; width: 100%; }
+  .ef-search { width: 100%; }
+}

@@ -1,0 +1,92 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+# systemctl shim — agentic_nginx_prod_test
+#
+# Translates `systemctl <action> <service>` into `supervisorctl` commands so
+# runbook actions that rely on systemd syntax work inside this container.
+#
+# Supported actions: start, stop, restart, status, is-active, is-enabled,
+#                    enable, disable, daemon-reload, reload
+#
+# Service name aliases:
+#   nginx  / nginx.service          → nginx       (supervisord program)
+#   postgresql / postgresql.service /
+#   postgresql-15 / postgres        → postgresql
+#   sshd  / ssh / sshd.service      → sshd
+#   testapp / app                   → testapp
+# ─────────────────────────────────────────────────────────────────────────────
+
+ACTION="$1"
+RAW_SERVICE="$2"
+
+# ── Map service name to supervisord program name ──────────────────────────────
+map_service() {
+    local svc="${1%.service}"   # strip .service suffix
+    case "$svc" in
+        nginx)                          echo "nginx" ;;
+        postgresql|postgresql-15|postgres|pg) echo "postgresql" ;;
+        sshd|ssh|openssh-server)        echo "sshd" ;;
+        testapp|app|myapp)              echo "testapp" ;;
+        *)                              echo "$svc" ;;
+    esac
+}
+
+PROG=$(map_service "$RAW_SERVICE")
+
+# ── Log dir for journalctl shim to tail ───────────────────────────────────────
+log_file() {
+    case "$1" in
+        nginx)       echo "/var/log/supervisor/nginx-stderr.log" ;;
+        postgresql)  echo "/var/log/supervisor/postgresql-stderr.log" ;;
+        sshd)        echo "/var/log/supervisor/sshd-err.log" ;;
+        testapp)     echo "/var/log/app/testapp-err.log" ;;
+        *)           echo "/var/log/supervisor/$1.log" ;;
+    esac
+}
+
+# ── Dispatch ──────────────────────────────────────────────────────────────────
+case "$ACTION" in
+    start)
+        supervisorctl start "$PROG"
+        ;;
+    stop)
+        supervisorctl stop "$PROG"
+        ;;
+    restart|reload)
+        supervisorctl restart "$PROG"
+        ;;
+    status)
+        if [ -z "$PROG" ]; then
+            supervisorctl status
+        else
+            supervisorctl status "$PROG"
+        fi
+        ;;
+    is-active)
+        supervisorctl status "$PROG" 2>/dev/null | grep -q "RUNNING"
+        if [ $? -eq 0 ]; then
+            echo "active"
+            exit 0
+        else
+            echo "inactive"
+            exit 1
+        fi
+        ;;
+    is-enabled)
+        # All supervised programs are considered "enabled"
+        echo "enabled"
+        exit 0
+        ;;
+    enable|disable)
+        echo "systemctl: $ACTION is a no-op in this container (managed by supervisord)" >&2
+        exit 0
+        ;;
+    daemon-reload)
+        supervisorctl reread && supervisorctl update
+        ;;
+    *)
+        echo "systemctl shim: unsupported action '$ACTION'" >&2
+        echo "Supported: start stop restart reload status is-active is-enabled enable disable daemon-reload" >&2
+        exit 1
+        ;;
+esac

@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Semantic Color Palette - Full System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #0f1419;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto;
+            color: #e8eef5;
+            padding: 40px;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 32px;
+            margin-bottom: 40px;
+            color: #e8eef5;
+        }
+        h2 {
+            font-size: 24px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            color: #a0aec0;
+            border-bottom: 1px solid #3d4557;
+            padding-bottom: 10px;
+        }
+        h3 {
+            font-size: 18px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            color: #e8eef5;
+        }
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .color-card {
+            border-radius: 12px;
+            border: 1px solid #3d4557;
+            padding: 20px;
+            background: #1a1f2e;
+        }
+        .color-swatch {
+            width: 100%;
+            height: 80px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+        .color-name {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #e8eef5;
+        }
+        .color-code {
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            color: #a0aec0;
+            margin-bottom: 4px;
+        }
+        .color-usage {
+            font-size: 11px;
+            color: #7a8ba3;
+            font-style: italic;
+        }
+
+        /* Card Preview Section */
+        .card-examples {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 60px;
+        }
+        .card-example {
+            border-radius: 12px;
+            border: 1px solid #3d4557;
+            padding: 24px;
+            background: #2d3748;
+        }
+        .card-title {
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            opacity: 0.7;
+        }
+        .card-heading {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        .card-stat {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .card-desc {
+            font-size: 12px;
+            margin-top: 12px;
+            opacity: 0.6;
+        }
+
+        /* Status examples */
+        .status-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .status-badge {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Reference Table */
+        .reference-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 40px;
+            background: #1a1f2e;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .reference-table th,
+        .reference-table td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid #3d4557;
+            font-size: 12px;
+        }
+        .reference-table th {
+            background: #2d3748;
+            font-weight: 600;
+            color: #a0aec0;
+        }
+        .reference-table tr:last-child td {
+            border-bottom: none;
+        }
+        .color-code-cell {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+        }
+        .swatch-inline {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            margin-right: 8px;
+            vertical-align: middle;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        /* Global CSS Variables Preview */
+        .css-variables {
+            background: #1a1f2e;
+            border: 1px solid #3d4557;
+            border-radius: 8px;
+            padding: 24px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            margin-bottom: 40px;
+        }
+        .css-variables-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #e8eef5;
+        }
+        .css-var-line {
+            color: #a0aec0;
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+        .css-var-key {
+            color: #93c5fd;
+        }
+        .css-var-value {
+            color: #86efac;
+        }
+
+        .recommendation {
+            background: #1a1f2e;
+            border: 2px solid #86efac;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 40px;
+        }
+        .recommendation h4 {
+            color: #86efac;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        .recommendation p {
+            color: #a0aec0;
+            font-size: 12px;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Semantic Color Palette - Complete System</h1>
+
+        <!-- BASE COLORS -->
+        <h2>1. Base Colors (Dark Theme Foundation)</h2>
+        <div class="color-grid">
+            <div class="color-card">
+                <div class="color-swatch" style="background: #0f1419;">0f1419</div>
+                <div class="color-name">Background (Darkest)</div>
+                <div class="color-code">#0f1419</div>
+                <div class="color-usage">Page background, outermost layer</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #1a1f2e;">1a1f2e</div>
+                <div class="color-name">Surface (Modal/Overlay)</div>
+                <div class="color-code">#1a1f2e</div>
+                <div class="color-usage">Modal backgrounds, overlays, admin dialogs</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #2d3748;">2d3748</div>
+                <div class="color-name">Card Background</div>
+                <div class="color-code">#2d3748</div>
+                <div class="color-usage">Card backgrounds, panels (CONFIRMED)</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #3d4557;">3d4557</div>
+                <div class="color-name">Border/Divider</div>
+                <div class="color-code">#3d4557</div>
+                <div class="color-usage">Borders, dividers, subtle separators</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #e8eef5; color: #0f1419;">e8eef5</div>
+                <div class="color-name">Text Primary</div>
+                <div class="color-code">#e8eef5</div>
+                <div class="color-usage">Main text, headings, primary content</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #a0aec0; color: #0f1419;">a0aec0</div>
+                <div class="color-name">Text Secondary</div>
+                <div class="color-code">#a0aec0</div>
+                <div class="color-usage">Labels, descriptions, secondary text</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #7a8ba3; color: #0f1419;">7a8ba3</div>
+                <div class="color-name">Text Tertiary</div>
+                <div class="color-code">#7a8ba3</div>
+                <div class="color-usage">Helper text, metadata, timestamps</div>
+            </div>
+        </div>
+
+        <!-- SEMANTIC COLORS -->
+        <h2>2. Semantic Status Colors</h2>
+
+        <h3>🟢 Success/Green (Completed, Low Risk, Resolved)</h3>
+        <div class="color-grid">
+            <div class="color-card">
+                <div class="color-swatch" style="background: #15803d;">15803d</div>
+                <div class="color-name">Primary Border</div>
+                <div class="color-code">#15803d</div>
+                <div class="color-usage">Status borders, icons, badges (CONFIRMED)</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #86efac; color: #0f1419;">86efac</div>
+                <div class="color-name">Text Accent</div>
+                <div class="color-code">#86efac</div>
+                <div class="color-usage">Text, numbers, progress indicators</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #10b981;">10b981</div>
+                <div class="color-name">Hover/Accent</div>
+                <div class="color-code">#10b981</div>
+                <div class="color-usage">Hover states, emerald alternative</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #064e3b;">064e3b</div>
+                <div class="color-name">Background Tint</div>
+                <div class="color-code">#064e3b</div>
+                <div class="color-usage">Subtle backgrounds, very light usage</div>
+            </div>
+        </div>
+
+        <h3>🔴 Critical/High (Failed, Critical, Error)</h3>
+        <div class="color-grid">
+            <div class="color-card">
+                <div class="color-swatch" style="background: #dc2626;">dc2626</div>
+                <div class="color-name">Primary Border</div>
+                <div class="color-code">#dc2626</div>
+                <div class="color-usage">Error borders, critical status badges</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #fca5a5; color: #0f1419;">fca5a5</div>
+                <div class="color-name">Text Accent</div>
+                <div class="color-code">#fca5a5</div>
+                <div class="color-usage">Error text, critical numbers</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #991b1b;">991b1b</div>
+                <div class="color-name">Hover/Accent</div>
+                <div class="color-code">#991b1b</div>
+                <div class="color-usage">Hover states, darker red</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #7f1d1d;">7f1d1d</div>
+                <div class="color-name">Background Tint</div>
+                <div class="color-code">#7f1d1d</div>
+                <div class="color-usage">Subtle backgrounds for errors</div>
+            </div>
+        </div>
+
+        <h3>🟡 Warning/Medium (Warning, Medium Risk)</h3>
+        <div class="color-grid">
+            <div class="color-card">
+                <div class="color-swatch" style="background: #f59e0b;">f59e0b</div>
+                <div class="color-name">Primary Amber</div>
+                <div class="color-code">#f59e0b</div>
+                <div class="color-usage">Warning borders, medium severity</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #fcd34d; color: #0f1419;">fcd34d</div>
+                <div class="color-name">Text Accent</div>
+                <div class="color-code">#fcd34d</div>
+                <div class="color-usage">Warning text, alert numbers</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #f97316;">f97316</div>
+                <div class="color-name">Primary Orange (Alt)</div>
+                <div class="color-code">#f97316</div>
+                <div class="color-usage">High severity distinction, alerts</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #b45309;">b45309</div>
+                <div class="color-name">Hover/Accent</div>
+                <div class="color-code">#b45309</div>
+                <div class="color-usage">Hover states, darker amber</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #78350f;">78350f</div>
+                <div class="color-name">Background Tint</div>
+                <div class="color-code">#78350f</div>
+                <div class="color-usage">Subtle backgrounds for warnings</div>
+            </div>
+        </div>
+
+        <h3>🔵 Info/Primary (In Progress, Active)</h3>
+        <div class="color-grid">
+            <div class="color-card">
+                <div class="color-swatch" style="background: #2563eb;">2563eb</div>
+                <div class="color-name">Primary Border</div>
+                <div class="color-code">#2563eb</div>
+                <div class="color-usage">Info borders, active status, playbook tier</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #93c5fd; color: #0f1419;">93c5fd</div>
+                <div class="color-name">Text Accent</div>
+                <div class="color-code">#93c5fd</div>
+                <div class="color-usage">Info text, progress numbers</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #1e40af;">1e40af</div>
+                <div class="color-name">Hover/Accent</div>
+                <div class="color-code">#1e40af</div>
+                <div class="color-usage">Hover states, darker blue</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #1e3a8a;">1e3a8a</div>
+                <div class="color-name">Background Tint</div>
+                <div class="color-code">#1e3a8a</div>
+                <div class="color-usage">Subtle backgrounds for info</div>
+            </div>
+        </div>
+
+        <h3>⚪ Pending/Gray (Pending, Neutral)</h3>
+        <div class="color-grid">
+            <div class="color-card">
+                <div class="color-swatch" style="background: #6b7280;">6b7280</div>
+                <div class="color-name">Primary Border</div>
+                <div class="color-code">#6b7280</div>
+                <div class="color-usage">Pending status, neutral borders</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #d1d5db; color: #0f1419;">d1d5db</div>
+                <div class="color-name">Text Accent</div>
+                <div class="color-code">#d1d5db</div>
+                <div class="color-usage">Pending text, neutral labels</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #374151;">374151</div>
+                <div class="color-name">Hover/Accent</div>
+                <div class="color-code">#374151</div>
+                <div class="color-usage">Hover states, darker gray</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #1f2937;">1f2937</div>
+                <div class="color-name">Background Tint</div>
+                <div class="color-code">#1f2937</div>
+                <div class="color-usage">Subtle backgrounds for neutral</div>
+            </div>
+        </div>
+
+        <h3>🟣 Special/Purple (AI-Driven, Escalations)</h3>
+        <div class="color-grid">
+            <div class="color-card">
+                <div class="color-swatch" style="background: #a855f7;">a855f7</div>
+                <div class="color-name">Primary Border</div>
+                <div class="color-code">#a855f7</div>
+                <div class="color-usage">AI decisions, escalations, history tier</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #e9d5ff; color: #0f1419;">e9d5ff</div>
+                <div class="color-name">Text Accent</div>
+                <div class="color-code">#e9d5ff</div>
+                <div class="color-usage">Purple text, special status</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #6b21a8;">6b21a8</div>
+                <div class="color-name">Hover/Accent</div>
+                <div class="color-code">#6b21a8</div>
+                <div class="color-usage">Hover states, darker purple</div>
+            </div>
+            <div class="color-card">
+                <div class="color-swatch" style="background: #4c0519;">4c0519</div>
+                <div class="color-name">Background Tint</div>
+                <div class="color-code">#4c0519</div>
+                <div class="color-usage">Subtle backgrounds for special</div>
+            </div>
+        </div>
+
+        <!-- CARD EXAMPLES -->
+        <h2>3. Color Usage Examples</h2>
+
+        <div class="card-examples">
+            <!-- Success Example -->
+            <div class="card-example" style="border-color: #15803d;">
+                <div class="card-title" style="color: #a0aec0;">Status</div>
+                <div class="card-heading" style="color: #e8eef5;">Completed</div>
+                <div class="card-stat" style="color: #86efac;">✓ 45</div>
+                <div class="card-desc" style="color: #7a8ba3;">Incidents resolved</div>
+            </div>
+
+            <!-- Error Example -->
+            <div class="card-example" style="border-color: #dc2626;">
+                <div class="card-title" style="color: #a0aec0;">Status</div>
+                <div class="card-heading" style="color: #e8eef5;">Failed</div>
+                <div class="card-stat" style="color: #fca5a5;">✕ 3</div>
+                <div class="card-desc" style="color: #7a8ba3;">Actions failed</div>
+            </div>
+
+            <!-- Warning Example -->
+            <div class="card-example" style="border-color: #f59e0b;">
+                <div class="card-title" style="color: #a0aec0;">Status</div>
+                <div class="card-heading" style="color: #e8eef5;">Warning</div>
+                <div class="card-stat" style="color: #fcd34d;">⚠ 12</div>
+                <div class="card-desc" style="color: #7a8ba3;">Medium severity</div>
+            </div>
+
+            <!-- Info Example -->
+            <div class="card-example" style="border-color: #2563eb;">
+                <div class="card-title" style="color: #a0aec0;">Status</div>
+                <div class="card-heading" style="color: #e8eef5;">In Progress</div>
+                <div class="card-stat" style="color: #93c5fd;">◷ 5</div>
+                <div class="card-desc" style="color: #7a8ba3;">Executing actions</div>
+            </div>
+
+            <!-- Pending Example -->
+            <div class="card-example" style="border-color: #6b7280;">
+                <div class="card-title" style="color: #a0aec0;">Status</div>
+                <div class="card-heading" style="color: #e8eef5;">Pending</div>
+                <div class="card-stat" style="color: #d1d5db;">⏳ 2</div>
+                <div class="card-desc" style="color: #7a8ba3;">Awaiting approval</div>
+            </div>
+
+            <!-- Special Example -->
+            <div class="card-example" style="border-color: #a855f7;">
+                <div class="card-title" style="color: #a0aec0;">Status</div>
+                <div class="card-heading" style="color: #e8eef5;">AI Decision</div>
+                <div class="card-stat" style="color: #e9d5ff;">🤖 LLM</div>
+                <div class="card-desc" style="color: #7a8ba3;">AI-driven response</div>
+            </div>
+        </div>
+
+        <!-- STATUS BADGES -->
+        <h2>4. Status Badge Examples</h2>
+        <h3>Completed/Success</h3>
+        <div class="status-row">
+            <div class="status-badge" style="border-color: #15803d; color: #86efac;">✓ Completed</div>
+            <div class="status-badge" style="border-color: #15803d; color: #86efac;">✓ Approved</div>
+            <div class="status-badge" style="border-color: #15803d; color: #86efac;">✓ Resolved</div>
+        </div>
+
+        <h3>Critical/Error</h3>
+        <div class="status-row">
+            <div class="status-badge" style="border-color: #dc2626; color: #fca5a5;">✕ Failed</div>
+            <div class="status-badge" style="border-color: #dc2626; color: #fca5a5;">✕ Critical</div>
+            <div class="status-badge" style="border-color: #dc2626; color: #fca5a5;">✕ Rejected</div>
+        </div>
+
+        <h3>Warning</h3>
+        <div class="status-row">
+            <div class="status-badge" style="border-color: #f59e0b; color: #fcd34d;">⚠ Warning</div>
+            <div class="status-badge" style="border-color: #f59e0b; color: #fcd34d;">⚠ Medium Risk</div>
+            <div class="status-badge" style="border-color: #f97316; color: #fed7aa;">⚠ High</div>
+        </div>
+
+        <h3>Info/Active</h3>
+        <div class="status-row">
+            <div class="status-badge" style="border-color: #2563eb; color: #93c5fd;">◷ In Progress</div>
+            <div class="status-badge" style="border-color: #2563eb; color: #93c5fd;">◷ Active</div>
+            <div class="status-badge" style="border-color: #2563eb; color: #93c5fd;">◷ Executing</div>
+        </div>
+
+        <h3>Pending/Neutral</h3>
+        <div class="status-row">
+            <div class="status-badge" style="border-color: #6b7280; color: #d1d5db;">⏳ Pending</div>
+            <div class="status-badge" style="border-color: #6b7280; color: #d1d5db;">⏳ Awaiting</div>
+            <div class="status-badge" style="border-color: #6b7280; color: #d1d5db;">⏳ New</div>
+        </div>
+
+        <h3>Special</h3>
+        <div class="status-row">
+            <div class="status-badge" style="border-color: #a855f7; color: #e9d5ff;">🤖 AI Decision</div>
+            <div class="status-badge" style="border-color: #a855f7; color: #e9d5ff;">🤖 Escalated</div>
+            <div class="status-badge" style="border-color: #a855f7; color: #e9d5ff;">🤖 Historical</div>
+        </div>
+
+        <!-- REFERENCE TABLE -->
+        <h2>5. Complete Color Reference Table</h2>
+        <table class="reference-table">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Primary Border</th>
+                    <th>Text Accent</th>
+                    <th>Hover/Accent</th>
+                    <th>Background Tint</th>
+                    <th>Usage</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong style="color: #86efac;">Success/Green</strong></td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #15803d;"></span>#15803d</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #86efac;"></span>#86efac</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #10b981;"></span>#10b981</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #064e3b;"></span>#064e3b</td>
+                    <td>Completed, approved, resolved, low risk</td>
+                </tr>
+                <tr>
+                    <td><strong style="color: #fca5a5;">Critical/Red</strong></td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #dc2626;"></span>#dc2626</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #fca5a5;"></span>#fca5a5</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #991b1b;"></span>#991b1b</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #7f1d1d;"></span>#7f1d1d</td>
+                    <td>Failed, critical, error, rejected</td>
+                </tr>
+                <tr>
+                    <td><strong style="color: #fcd34d;">Warning/Amber</strong></td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #f59e0b;"></span>#f59e0b</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #fcd34d;"></span>#fcd34d</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #b45309;"></span>#b45309</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #78350f;"></span>#78350f</td>
+                    <td>Warning, medium risk, alert</td>
+                </tr>
+                <tr>
+                    <td><strong style="color: #f97316;">Warning/Orange</strong></td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #f97316;"></span>#f97316</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #fed7aa;"></span>#fed7aa</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #d97706;"></span>#d97706</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #92400e;"></span>#92400e</td>
+                    <td>High severity, critical alert</td>
+                </tr>
+                <tr>
+                    <td><strong style="color: #93c5fd;">Info/Blue</strong></td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #2563eb;"></span>#2563eb</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #93c5fd;"></span>#93c5fd</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #1e40af;"></span>#1e40af</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #1e3a8a;"></span>#1e3a8a</td>
+                    <td>In progress, active, info, playbook tier</td>
+                </tr>
+                <tr>
+                    <td><strong style="color: #d1d5db;">Pending/Gray</strong></td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #6b7280;"></span>#6b7280</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #d1d5db;"></span>#d1d5db</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #374151;"></span>#374151</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #1f2937;"></span>#1f2937</td>
+                    <td>Pending, awaiting, neutral, new</td>
+                </tr>
+                <tr>
+                    <td><strong style="color: #e9d5ff;">Special/Purple</strong></td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #a855f7;"></span>#a855f7</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #e9d5ff;"></span>#e9d5ff</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #6b21a8;"></span>#6b21a8</td>
+                    <td class="color-code-cell"><span class="swatch-inline" style="background: #4c0519;"></span>#4c0519</td>
+                    <td>AI decisions, escalations, history tier</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- CSS VARIABLES TEMPLATE -->
+        <!-- COLOR SELECTION TOOL - COMPLETE THEME -->
+        <h2>6. Your Color Preferences (Click to Select All Colors)</h2>
+        <div style="background: #1a1f2e; border: 1px solid #3d4557; border-radius: 8px; padding: 24px; margin-bottom: 40px;">
+            <h3 style="margin-bottom: 20px;">Click any color to select it. Your selections appear below:</h3>
+
+            <!-- BASE COLORS -->
+            <h4 style="color: #86efac; margin-top: 20px; margin-bottom: 15px; font-size: 14px;">🎨 BASE COLORS</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 30px;">
+                <div class="color-selector" data-group="BASE" data-name="Card Bg" data-value="#2d3748" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #2d3748; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Card Background</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#2d3748</div>
+                </div>
+                <div class="color-selector" data-group="BASE" data-name="Text Primary" data-value="#e8eef5" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #e8eef5; color: #0f1419; transition: all 200ms;">
+                    <div style="font-size: 11px; margin-bottom: 4px;">Text Primary</div>
+                    <div style="font-size: 11px; font-weight: 600;">#e8eef5</div>
+                </div>
+                <div class="color-selector" data-group="BASE" data-name="Text Secondary" data-value="#a0aec0" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #a0aec0; color: #0f1419; transition: all 200ms;">
+                    <div style="font-size: 11px; margin-bottom: 4px;">Text Secondary</div>
+                    <div style="font-size: 11px; font-weight: 600;">#a0aec0</div>
+                </div>
+                <div class="color-selector" data-group="BASE" data-name="Border/Divider" data-value="#3d4557" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #3d4557; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Border</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#3d4557</div>
+                </div>
+            </div>
+
+            <!-- SUCCESS/GREEN -->
+            <h4 style="color: #86efac; margin-top: 20px; margin-bottom: 15px; font-size: 14px;">✅ SUCCESS / GREEN</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 30px;">
+                <div class="color-selector" data-group="SUCCESS" data-name="Border" data-value="#15803d" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #15803d; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Primary Border</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#15803d</div>
+                </div>
+                <div class="color-selector" data-group="SUCCESS" data-name="Text" data-value="#86efac" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #86efac; color: #0f1419; transition: all 200ms;">
+                    <div style="font-size: 11px; margin-bottom: 4px;">Text Accent</div>
+                    <div style="font-size: 11px; font-weight: 600;">#86efac</div>
+                </div>
+                <div class="color-selector" data-group="SUCCESS" data-name="Hover" data-value="#10b981" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #10b981; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Hover State</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#10b981</div>
+                </div>
+                <div class="color-selector" data-group="SUCCESS" data-name="Background" data-value="#064e3b" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #064e3b; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Background Tint</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#064e3b</div>
+                </div>
+            </div>
+
+            <!-- CRITICAL/RED -->
+            <h4 style="color: #fca5a5; margin-top: 20px; margin-bottom: 15px; font-size: 14px;">❌ CRITICAL / RED</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 30px;">
+                <div class="color-selector" data-group="CRITICAL" data-name="Border" data-value="#dc2626" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #dc2626; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Primary Border</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#dc2626</div>
+                </div>
+                <div class="color-selector" data-group="CRITICAL" data-name="Text" data-value="#fca5a5" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #fca5a5; color: #0f1419; transition: all 200ms;">
+                    <div style="font-size: 11px; margin-bottom: 4px;">Text Accent</div>
+                    <div style="font-size: 11px; font-weight: 600;">#fca5a5</div>
+                </div>
+                <div class="color-selector" data-group="CRITICAL" data-name="Hover" data-value="#991b1b" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #991b1b; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Hover State</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#991b1b</div>
+                </div>
+                <div class="color-selector" data-group="CRITICAL" data-name="Background" data-value="#7f1d1d" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #7f1d1d; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Background Tint</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#7f1d1d</div>
+                </div>
+            </div>
+
+            <!-- WARNING/AMBER -->
+            <h4 style="color: #fcd34d; margin-top: 20px; margin-bottom: 15px; font-size: 14px;">⚠️ WARNING / AMBER</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 30px;">
+                <div class="color-selector" data-group="WARNING" data-name="Border" data-value="#f59e0b" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #f59e0b; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #0f1419; margin-bottom: 4px;">Primary Border</div>
+                    <div style="font-size: 11px; color: #0f1419; font-weight: 600;">#f59e0b</div>
+                </div>
+                <div class="color-selector" data-group="WARNING" data-name="Text" data-value="#fcd34d" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #fcd34d; color: #0f1419; transition: all 200ms;">
+                    <div style="font-size: 11px; margin-bottom: 4px;">Text Accent</div>
+                    <div style="font-size: 11px; font-weight: 600;">#fcd34d</div>
+                </div>
+                <div class="color-selector" data-group="WARNING" data-name="Hover" data-value="#b45309" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #b45309; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Hover State</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#b45309</div>
+                </div>
+                <div class="color-selector" data-group="WARNING" data-name="Background" data-value="#78350f" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #78350f; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Background Tint</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#78350f</div>
+                </div>
+            </div>
+
+            <!-- INFO/BLUE -->
+            <h4 style="color: #93c5fd; margin-top: 20px; margin-bottom: 15px; font-size: 14px;">ℹ️ INFO / BLUE</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 30px;">
+                <div class="color-selector" data-group="INFO" data-name="Border" data-value="#2563eb" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #2563eb; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Primary Border</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#2563eb</div>
+                </div>
+                <div class="color-selector" data-group="INFO" data-name="Text" data-value="#93c5fd" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #93c5fd; color: #0f1419; transition: all 200ms;">
+                    <div style="font-size: 11px; margin-bottom: 4px;">Text Accent</div>
+                    <div style="font-size: 11px; font-weight: 600;">#93c5fd</div>
+                </div>
+                <div class="color-selector" data-group="INFO" data-name="Hover" data-value="#1e40af" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #1e40af; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Hover State</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#1e40af</div>
+                </div>
+                <div class="color-selector" data-group="INFO" data-name="Background" data-value="#1e3a8a" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #1e3a8a; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Background Tint</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#1e3a8a</div>
+                </div>
+            </div>
+
+            <!-- PENDING/GRAY -->
+            <h4 style="color: #d1d5db; margin-top: 20px; margin-bottom: 15px; font-size: 14px;">⏳ PENDING / GRAY</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 30px;">
+                <div class="color-selector" data-group="PENDING" data-name="Border" data-value="#6b7280" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #6b7280; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Primary Border</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#6b7280</div>
+                </div>
+                <div class="color-selector" data-group="PENDING" data-name="Text" data-value="#d1d5db" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #d1d5db; color: #0f1419; transition: all 200ms;">
+                    <div style="font-size: 11px; margin-bottom: 4px;">Text Accent</div>
+                    <div style="font-size: 11px; font-weight: 600;">#d1d5db</div>
+                </div>
+                <div class="color-selector" data-group="PENDING" data-name="Hover" data-value="#374151" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #374151; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Hover State</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#374151</div>
+                </div>
+                <div class="color-selector" data-group="PENDING" data-name="Background" data-value="#1f2937" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #1f2937; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Background Tint</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#1f2937</div>
+                </div>
+            </div>
+
+            <!-- SPECIAL/PURPLE -->
+            <h4 style="color: #e9d5ff; margin-top: 20px; margin-bottom: 15px; font-size: 14px;">🤖 SPECIAL / PURPLE</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 30px;">
+                <div class="color-selector" data-group="SPECIAL" data-name="Border" data-value="#a855f7" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #a855f7; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Primary Border</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#a855f7</div>
+                </div>
+                <div class="color-selector" data-group="SPECIAL" data-name="Text" data-value="#e9d5ff" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #e9d5ff; color: #0f1419; transition: all 200ms;">
+                    <div style="font-size: 11px; margin-bottom: 4px;">Text Accent</div>
+                    <div style="font-size: 11px; font-weight: 600;">#e9d5ff</div>
+                </div>
+                <div class="color-selector" data-group="SPECIAL" data-name="Hover" data-value="#6b21a8" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #6b21a8; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Hover State</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#6b21a8</div>
+                </div>
+                <div class="color-selector" data-group="SPECIAL" data-name="Background" data-value="#4c0519" style="cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 12px; text-align: center; background: #4c0519; transition: all 200ms;">
+                    <div style="font-size: 11px; color: #a0aec0; margin-bottom: 4px;">Background Tint</div>
+                    <div style="font-size: 11px; color: #e8eef5; font-weight: 600;">#4c0519</div>
+                </div>
+            </div>
+
+            <!-- OUTPUT SECTION -->
+            <div style="border-top: 1px solid #3d4557; padding-top: 20px; margin-top: 30px;">
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button onclick="clearSelections()" style="padding: 8px 16px; background: #3d4557; border: 1px solid #3d4557; border-radius: 6px; color: #a0aec0; cursor: pointer; font-size: 12px; transition: all 200ms;">Clear All</button>
+                    <button onclick="copySelections()" style="padding: 8px 16px; background: #2563eb; border: 1px solid #2563eb; border-radius: 6px; color: white; cursor: pointer; font-size: 12px; transition: all 200ms;">Copy Selection</button>
+                </div>
+
+                <h4 style="color: #a0aec0; margin-bottom: 10px; font-size: 12px;">Your Selection (selected colors will appear here):</h4>
+                <textarea id="selectionOutput" readonly style="width: 100%; height: 250px; background: #0f1419; border: 1px solid #3d4557; border-radius: 6px; padding: 12px; color: #a0aec0; font-family: 'Courier New', monospace; font-size: 11px; resize: vertical; line-height: 1.6;">
+[No colors selected yet - click any color box above to add it here]
+                </textarea>
+            </div>
+        </div>
+
+        <h2>7. CSS Variables Template (For Global Settings)</h2>
+        <div class="css-variables">
+            <div class="css-variables-title">Add to tailwind.config.js or create theme.css</div>
+            <div class="css-var-line"><span class="css-var-key">/* Base Colors */</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-bg-base:</span> <span class="css-var-value">#0f1419;</span> <span class="css-var-key">/* Page background */</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-bg-surface:</span> <span class="css-var-value">#1a1f2e;</span> <span class="css-var-key">/* Modal/Overlay */</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-bg-card:</span> <span class="css-var-value">#2d3748;</span> <span class="css-var-key">/* Cards (CONFIRMED) */</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-border:</span> <span class="css-var-value">#3d4557;</span> <span class="css-var-key">/* Borders */</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-text-primary:</span> <span class="css-var-value">#e8eef5;</span> <span class="css-var-key">/* Main text */</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-text-secondary:</span> <span class="css-var-value">#a0aec0;</span> <span class="css-var-key">/* Labels */</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-text-tertiary:</span> <span class="css-var-value">#7a8ba3;</span> <span class="css-var-key">/* Helper text */</span></div>
+            <div class="css-var-line"></div>
+            <div class="css-var-line"><span class="css-var-key">/* Semantic: Success */</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-success-border:</span> <span class="css-var-value">#15803d;</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-success-text:</span> <span class="css-var-value">#86efac;</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-success-hover:</span> <span class="css-var-value">#10b981;</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-success-bg:</span> <span class="css-var-value">#064e3b;</span></div>
+            <div class="css-var-line"></div>
+            <div class="css-var-line"><span class="css-var-key">/* Semantic: Critical */</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-critical-border:</span> <span class="css-var-value">#dc2626;</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-critical-text:</span> <span class="css-var-value">#fca5a5;</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-critical-hover:</span> <span class="css-var-value">#991b1b;</span></div>
+            <div class="css-var-line"><span class="css-var-key">--color-critical-bg:</span> <span class="css-var-value">#7f1d1d;</span></div>
+            <div class="css-var-line"></div>
+            <div class="css-var-line"><span class="css-var-key">/* ... and so on for other colors ... */</span></div>
+        </div>
+
+        <!-- RECOMMENDATION -->
+        <div class="recommendation">
+            <h4>✅ APPROVED COLORS - Ready for Implementation</h4>
+            <p><strong>Base Colors:</strong></p>
+            <p>• Card Background: <strong>#2d3748</strong> (slate-700, darker)</p>
+            <p>• Text Primary: <strong>#e8eef5</strong> (off-white)</p>
+            <p>• Text Secondary: <strong>#a0aec0</strong> (grey-400)</p>
+            <p style="margin-top: 12px;"><strong>Semantic Colors (All confirmed):</strong></p>
+            <p>• Success/Green: <strong>#15803d</strong> (primary border) + #86efac (text)</p>
+            <p>• Critical/Red: <strong>#dc2626</strong> (primary border) + #fca5a5 (text)</p>
+            <p>• Warning/Amber: <strong>#f59e0b</strong> (primary border) + #fcd34d (text)</p>
+            <p>• Info/Blue: <strong>#2563eb</strong> (primary border) + #93c5fd (text)</p>
+            <p>• Pending/Gray: <strong>#6b7280</strong> (primary border) + #d1d5db (text)</p>
+            <p>• Special/Purple: <strong>#a855f7</strong> (primary border) + #e9d5ff (text)</p>
+            <p style="margin-top: 12px;"><strong>Next Step:</strong> Create CSS variables file and update Tailwind config for easy global color management</p>
+        </div>
+
+    </div>
+
+    <script>
+        let selectedColors = {};
+
+        // Initialize color selectors
+        document.querySelectorAll('.color-selector').forEach(selector => {
+            selector.addEventListener('click', function() {
+                const group = this.dataset.group;
+                const name = this.dataset.name;
+                const value = this.dataset.value;
+
+                // Toggle selection
+                const key = `${group}:${name}`;
+                if (selectedColors[key]) {
+                    delete selectedColors[key];
+                    this.style.borderColor = 'transparent';
+                } else {
+                    selectedColors[key] = value;
+                    this.style.borderColor = '#e8eef5';
+                    this.style.boxShadow = '0 0 8px rgba(232, 238, 245, 0.4)';
+                }
+
+                updateOutput();
+            });
+        });
+
+        function updateOutput() {
+            const output = document.getElementById('selectionOutput');
+
+            if (Object.keys(selectedColors).length === 0) {
+                output.value = '[No colors selected yet - click any color box above to add it here]';
+                return;
+            }
+
+            let text = '✅ YOUR THEME COLOR SELECTIONS\n\n';
+            text += '='.repeat(60) + '\n\n';
+
+            // Group by category
+            const groups = {};
+            const groupOrder = ['BASE', 'SUCCESS', 'CRITICAL', 'WARNING', 'INFO', 'PENDING', 'SPECIAL'];
+
+            Object.entries(selectedColors).forEach(([key, value]) => {
+                const [grp, name] = key.split(':');
+                if (!groups[grp]) groups[grp] = [];
+                groups[grp].push({ name, value });
+            });
+
+            // Output in order
+            groupOrder.forEach(group => {
+                if (groups[group]) {
+                    const labels = {
+                        'BASE': '🎨 BASE COLORS',
+                        'SUCCESS': '✅ SUCCESS / GREEN',
+                        'CRITICAL': '❌ CRITICAL / RED',
+                        'WARNING': '⚠️ WARNING / AMBER',
+                        'INFO': 'ℹ️ INFO / BLUE',
+                        'PENDING': '⏳ PENDING / GRAY',
+                        'SPECIAL': '🤖 SPECIAL / PURPLE'
+                    };
+
+                    text += labels[group] + '\n';
+                    groups[group].forEach(item => {
+                        text += `  • ${item.name}: ${item.value}\n`;
+                    });
+                    text += '\n';
+                }
+            });
+
+            text += '='.repeat(60) + '\n';
+            text += '\n📋 Copy & paste above ↑ in your message to Claude\n';
+            text += 'or send the entire output for review.';
+
+            output.value = text;
+        }
+
+        function clearSelections() {
+            selectedColors = {};
+            document.querySelectorAll('.color-selector').forEach(selector => {
+                selector.style.borderColor = 'transparent';
+                selector.style.boxShadow = 'none';
+            });
+            updateOutput();
+        }
+
+        function copySelections() {
+            const output = document.getElementById('selectionOutput');
+            output.select();
+            document.execCommand('copy');
+
+            // Visual feedback
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = 'Copied! ✓';
+            btn.style.background = '#15803d';
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = '#2563eb';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

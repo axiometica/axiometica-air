@@ -1,0 +1,161 @@
+﻿AXIOMETICA AIR SOURCE LICENSE
+Version 1.0 — 2026
+
+Copyright (c) 2026 Powowa Inc. All rights reserved.
+Ontario, Canada
+
+================================================================================
+
+1. DEFINITIONS
+
+   "Software" means the Axiometica AIR source code and documentation made
+   available in this repository.
+
+   "You" means the individual or legal entity exercising the rights granted
+   by this License.
+
+   "Internal Use" means use of the Software to support Your own internal
+   business operations, including commercial and for-profit operations.
+
+   "Managed Service" means offering the functionality of the Software, or a
+   product substantially derived from it, to third parties as a hosted,
+   cloud, or managed service where the third party does not control the
+   underlying infrastructure.
+
+================================================================================
+
+2. GRANT OF RIGHTS
+
+   Subject to the terms of this License, Powowa Inc. grants You a
+   non-exclusive, worldwide, royalty-free license to:
+
+     (a) Use, copy, modify, and run the Software for Internal Use;
+
+     (b) Deploy the Software within Your organization's infrastructure;
+
+     (c) Create derivative works for Internal Use; and
+
+     (d) Evaluate the Software in any environment, including production
+         infrastructure, without time limitation.
+
+================================================================================
+
+3. CONDITIONS
+
+   The rights granted in Section 2 are subject to the following conditions:
+
+     (a) ATTRIBUTION. You must retain all copyright, trademark, and
+         attribution notices present in the Software in any copy or
+         derivative work You create or distribute.
+
+     (b) LICENSE NOTICE. Any distribution of the Software or a substantial
+         portion of it must include a copy of this License.
+
+     (c) NO MISREPRESENTATION. You may not represent the Software as Your
+         own original work or remove or obscure any indication that the
+         Software originates from Powowa Inc.
+
+================================================================================
+
+4. RESTRICTIONS
+
+   The following uses require a separate written Commercial License from
+   Powowa Inc. (see Section 5):
+
+     (a) MANAGED SERVICE. Offering the Software, or any product or service
+         whose primary value derives from the Software, as a hosted, managed,
+         or cloud service to third parties.
+
+     (b) OEM DISTRIBUTION. Embedding or bundling the Software into a
+         commercial product or service sold, licensed, or distributed to
+         third parties.
+
+   No other use is restricted. In particular, any organization of any size
+   may use the Software for Internal Use at no charge.
+
+================================================================================
+
+5. COMMERCIAL LICENSE
+
+   To use the Software in a manner covered by Section 4, contact Axiometica
+   Inc. to obtain a written Commercial License:
+
+     Email:  licensing@axiometica.com
+     Web:    https://axiometica.com/enterprise
+
+================================================================================
+
+6. INTELLECTUAL PROPERTY
+
+   Powowa Inc. retains all right, title, and interest in and to the
+   Software, including all intellectual property rights. This License does
+   not transfer any ownership interest.
+
+   "Axiometica," "Axiometica AIR," and associated logos are trademarks of
+   Powowa Inc. and may not be used without prior written consent except
+   to accurately describe the origin of the Software.
+
+================================================================================
+
+7. DISCLAIMER OF WARRANTIES
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+   AXIOMETICA INC. DOES NOT WARRANT THAT THE SOFTWARE WILL BE ERROR-FREE
+   OR UNINTERRUPTED.
+
+================================================================================
+
+8. LIMITATION OF LIABILITY
+
+   TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, AXIOMETICA INC. SHALL
+   NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   CONSEQUENTIAL DAMAGES (INCLUDING LOSS OF PROFITS, DATA, OR BUSINESS
+   INTERRUPTION) ARISING OUT OF OR IN CONNECTION WITH THIS LICENSE OR THE
+   USE OF THE SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+   AXIOMETICA INC.'S TOTAL CUMULATIVE LIABILITY ARISING OUT OF OR RELATED TO
+   THIS LICENSE SHALL NOT EXCEED ONE HUNDRED CANADIAN DOLLARS (CAD $100).
+
+================================================================================
+
+9. TERMINATION
+
+   Your rights under this License terminate automatically if You breach any
+   term of this License. Upon termination, You must cease all use of the
+   Software and destroy all copies in Your possession. Sections 6, 7, 8,
+   9, and 10 survive termination.
+
+================================================================================
+
+10. GENERAL
+
+    (a) GOVERNING LAW. This License is governed by the laws of the Province
+        of Ontario and the federal laws of Canada applicable therein. Each
+        party irrevocably submits to the exclusive jurisdiction of the courts
+        of Ontario for any dispute arising hereunder.
+
+    (b) ENTIRE AGREEMENT. This License constitutes the entire agreement
+        between You and Powowa Inc. regarding the Software and supersedes
+        all prior agreements relating to its subject matter.
+
+    (c) SEVERABILITY. If any provision is found unenforceable, it shall be
+        modified to the minimum extent necessary to make it enforceable, and
+        the remaining provisions shall continue in full force.
+
+    (d) NO WAIVER. Failure to enforce any right under this License shall not
+        constitute a waiver of that right.
+
+    (e) UPDATES. Powowa Inc. may publish revised versions of this License.
+        Your continued use of new versions of the Software after notice of a
+        revision constitutes acceptance of the revised terms. Versions already
+        in use under a prior version of this License are not affected.
+
+================================================================================
+
+For licensing inquiries:
+  Powowa Inc.
+  Ontario, Canada
+  licensing@axiometica.com
+  https://axiometica.com/enterprise

@@ -1,0 +1,65 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: watcher
+  namespace: axiometica-air
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+    app.kubernetes.io/component: monitoring
+
+---
+# ClusterRole — grants read access to all namespaces for monitoring
+# and exec/delete in the target namespace for remediation.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agentic-watcher
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+rules:
+  # Pod discovery and status
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "services", "endpoints", "namespaces"]
+    verbs: ["get", "list", "watch"]
+
+  # Pod exec (for Kill-API /exec and /kill)
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+
+  # Pod logs (for log anomaly detection)
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+  # Deployment/StatefulSet restart (kubectl rollout restart)
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+
+  # metrics-server (CPU/memory via metrics API)
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+
+  # Pod delete (for restart_target pod deletion)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agentic-watcher
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: agentic-watcher
+subjects:
+  - kind: ServiceAccount
+    name: watcher
+    namespace: axiometica-air

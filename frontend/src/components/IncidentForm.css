@@ -1,0 +1,209 @@
+/* ─────────────────────────────────────────────────
+   IncidentForm — strict design system
+───────────────────────────────────────────────── */
+
+.if-page {
+  min-height: 100%;
+  padding: 2.5rem 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.if-card {
+  width: 100%;
+  max-width: 600px;
+  background: #1a1f2e;
+  border: 1px solid #3d4557;
+  border-radius: 12px;
+  padding: 2rem;
+}
+
+/* ── Header ─────────────────────────────────────── */
+.if-header {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #2d3748;
+}
+
+.if-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fca5a5;
+  flex-shrink: 0;
+}
+
+.if-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #e8eef5;
+  letter-spacing: -0.2px;
+}
+
+.if-subtitle {
+  margin: 0.1rem 0 0;
+  font-size: 0.78rem;
+  color: #6b7a93;
+}
+
+/* ── Error banner ────────────────────────────────── */
+.if-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.5);
+  border: 1px solid #b91c1c;
+  color: #fca5a5;
+  font-size: 0.82rem;
+}
+
+/* ── Form ────────────────────────────────────────── */
+.if-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.if-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.if-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #6b7a93;
+}
+
+.if-required {
+  color: #fca5a5;
+  margin-left: 2px;
+}
+
+.if-hint {
+  font-size: 0.73rem;
+  color: #4a5568;
+  margin-top: 0.15rem;
+}
+
+/* ── Pill selector (severity) ────────────────────── */
+.if-pills {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.if-pill {
+  flex: 1;
+  min-width: 72px;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid #3d4557;
+  color: #6b7a93;
+  transition: border-color 150ms, color 150ms, background 150ms;
+  white-space: nowrap;
+}
+
+.if-pill:hover {
+  border-color: currentColor;
+  background: rgba(255,255,255,.03);
+}
+
+/* active state set via inline style on the element */
+.if-pill.active {
+  background: rgba(255,255,255,.05);
+}
+
+/* ── Text inputs / selects / textareas ───────────── */
+.if-input,
+.if-select,
+.if-textarea {
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+  background: #252c3c;
+  border: 1px solid #3d4557;
+  border-radius: 8px;
+  color: #e8eef5;
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+  box-sizing: border-box;
+}
+
+.if-input::placeholder,
+.if-textarea::placeholder {
+  color: #4a5568;
+}
+
+.if-input:hover,
+.if-select:hover,
+.if-textarea:hover {
+  border-color: #4a5568;
+}
+
+.if-input:focus,
+.if-select:focus,
+.if-textarea:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.if-select option {
+  background: #252c3c;
+  color: #e8eef5;
+}
+
+.if-textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+
+/* ── Submit button ───────────────────────────────── */
+.if-submit {
+  margin-top: 0.5rem;
+  padding: 0.65rem 1.5rem;
+  width: 100%;
+  background: #2563eb;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms, opacity 150ms, transform 100ms;
+}
+
+.if-submit:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.if-submit:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.if-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

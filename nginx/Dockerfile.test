@@ -1,0 +1,126 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# agentic_nginx_prod_test
+#
+# Self-contained runbook test target.  Simulates a production server with:
+#
+#   supervisord  (PID 1)  — killing nginx or postgres won't kill the container;
+#                           the supervisor restarts the crashed child automatically.
+#   nginx        :80/443  — serves /health, /metrics; proxies / to testapp.
+#   PostgreSQL   :5432    — test DB for DB-runbook actions (kill_connections, psql…).
+#   testapp      :8080    — simple HTTP app; nginx sits in front of it.
+#   sshd         :22      — allows host_service_* runbook actions via SSH.
+#
+# systemctl + journalctl shims translate service management calls into
+# supervisorctl commands so runbooks that rely on systemd syntax work as-is.
+#
+# All common diagnostic tools (ps, top, free, ss, lsof, nc, nslookup, strace,
+# tc, iptables, openssl, psql, redis-cli …) are pre-installed.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM debian:bookworm-slim
+
+# ── System packages ───────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Process manager (PID 1 — replaces systemd in the container)
+    supervisor \
+    # Web server
+    nginx \
+    # Database (15 is the bookworm default)
+    postgresql postgresql-client \
+    # Application runtime
+    python3 \
+    # ── Tools required by runbook actions ─────────────────────────────────────
+    # HTTP / health checks
+    curl wget \
+    # ICMP
+    iputils-ping \
+    # Network diagnostics: netstat, ss, tc, ip, iptables
+    net-tools iproute2 iptables \
+    # Port scanning
+    netcat-openbsd \
+    # DNS
+    dnsutils \
+    # TLS inspection
+    openssl \
+    # Open files / sockets
+    lsof \
+    # Process tools: ps, top, free, vmstat, uptime, kill
+    procps \
+    # pkill, killall, fuser
+    psmisc \
+    # Syscall tracing
+    strace \
+    # Network capture
+    tcpdump \
+    # Log management
+    logrotate cron \
+    # Redis client (queue depth runbooks)
+    redis-tools \
+    # SSH server + client (host_service_* runbooks)
+    openssh-server openssh-client \
+    # sudo (needed for ops user → NOPASSWD:ALL in sudoers)
+    sudo \
+    # Utilities
+    less vim-tiny \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Directory layout ──────────────────────────────────────────────────────────
+RUN mkdir -p \
+    /etc/nginx/certs \
+    /var/log/app \
+    /var/log/nginx \
+    /var/log/supervisor \
+    /var/run/sshd \
+    /opt/testapp \
+    /opt/bin \
+    /var/lib/postgresql/data
+
+# ── nginx site config ─────────────────────────────────────────────────────────
+# Replace the debian default site with our test config.
+COPY test/nginx.conf /etc/nginx/sites-available/default
+
+# ── supervisord ───────────────────────────────────────────────────────────────
+COPY test/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# ── Test application ──────────────────────────────────────────────────────────
+COPY test/testapp.py /opt/testapp/app.py
+
+# ── systemctl / journalctl shims ──────────────────────────────────────────────
+# Runbooks call `systemctl restart nginx` etc. — these shims translate those
+# calls into supervisorctl commands so they work inside the container.
+COPY test/systemctl  /opt/bin/systemctl
+COPY test/journalctl /opt/bin/journalctl
+RUN chmod +x /opt/bin/systemctl /opt/bin/journalctl
+
+# Prepend /opt/bin so shims shadow the (absent) real systemctl.
+ENV PATH=/opt/bin:$PATH
+
+# ── Log seeder ────────────────────────────────────────────────────────────────
+# Pre-populate log files with realistic content so runbooks that grep for
+# errors or check disk usage have something to work with from the first run.
+COPY test/seed-logs.sh /opt/seed-logs.sh
+RUN chmod +x /opt/seed-logs.sh && /opt/seed-logs.sh
+
+# ── ops user setup ────────────────────────────────────────────────────────────
+# The SSH keypair is generated at first container start (entrypoint.sh) so it
+# is NOT baked into any image layer.  The public key is written into
+# /home/ops/.ssh/authorized_keys at that time.
+# Retrieve the private key with:
+#   docker cp agentic_nginx_prod_test:/etc/ssh/test_id_ed25519 ./test_key
+RUN useradd -m -s /bin/bash ops && \
+    mkdir -p /home/ops/.ssh && \
+    chmod 700 /home/ops/.ssh && \
+    chown -R ops:ops /home/ops/.ssh && \
+    echo "ops ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ops && \
+    chmod 0440 /etc/sudoers.d/ops
+
+# ── Entrypoint ────────────────────────────────────────────────────────────────
+COPY test/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# 22   — SSH
+# 80   — HTTP (nginx → testapp)
+# 443  — HTTPS (nginx → testapp)
+# 5432 — PostgreSQL
+EXPOSE 22 80 443 5432
+
+ENTRYPOINT ["/entrypoint.sh"]

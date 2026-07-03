@@ -1,0 +1,69 @@
+version: "1.0"
+workflow_type: problem
+description: "Problem management workflow for RCA"
+
+start_step: rca_agent
+
+steps:
+  rca_agent:
+    name: "Root Cause Analysis"
+    type: agent
+    agent: librarian
+    next_steps:
+      default: fix_agent
+    timeout_seconds: 1800
+    retry_count: 1
+
+  fix_agent:
+    name: "Develop Fix"
+    type: agent
+    agent: mechanic
+    next_steps:
+      default: deployment_scheduler
+    timeout_seconds: 3600
+    retry_count: 1
+
+  deployment_scheduler:
+    name: "Schedule Deployment"
+    type: agent
+    agent: deployment_scheduler
+    next_steps:
+      default: deployer
+    timeout_seconds: 600
+    retry_count: 1
+
+  deployer:
+    name: "Deploy Fix"
+    type: agent
+    agent: deployer
+    next_steps:
+      success: verifier
+      failure: mark_failed
+    timeout_seconds: 1800
+    retry_count: 2
+
+  verifier:
+    name: "Verify Fix"
+    type: agent
+    agent: verifier
+    next_steps:
+      success: mark_resolved
+      failure: mark_failed
+    timeout_seconds: 600
+    retry_count: 2
+
+  mark_resolved:
+    name: "Mark as Resolved"
+    type: agent
+    agent: mark_resolved
+    timeout_seconds: 60
+
+  mark_failed:
+    name: "Mark as Failed"
+    type: agent
+    agent: mark_failed
+    timeout_seconds: 60
+
+end_steps:
+  - mark_resolved
+  - mark_failed

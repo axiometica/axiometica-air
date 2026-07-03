@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Development override template
+#
+# Copy this file to docker-compose.override.yml (gitignored) to enable
+# source-code hot-reload in your local environment:
+#
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#
+# Docker Compose auto-loads docker-compose.override.yml when you run:
+#
+#   docker compose up
+#
+# The bind-mounts below overlay /app/src with your working copy so that Python
+# and React changes are visible without rebuilding the image.
+#
+# Production NEVER uses these mounts — docker-compose.prod.yml is specified
+# explicitly and Docker Compose does not auto-load the override file in that mode:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build --scale frontend=0
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: '3.9'
+
+services:
+
+  backend:
+    # Uvicorn --reload restarts automatically on Python file changes
+    command: uvicorn agentic_os.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend/src:/app/src
+
+  celery_worker:
+    volumes:
+      - ./backend/src:/app/src
+
+  celery_beat:
+    volumes:
+      - ./backend/src:/app/src
+
+  watcher:
+    volumes:
+      - ./backend/src:/app/src
+
+  frontend:
+    # Vite HMR hot-reloads React changes in the browser
+    volumes:
+      - ./frontend/src:/app/src

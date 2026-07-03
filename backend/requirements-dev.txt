@@ -1,0 +1,20 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Development dependencies — NOT installed in the production image.
+#
+# Install both runtime + dev:
+#   pip install -r requirements.txt -r requirements-dev.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Pulls in all runtime deps first
+-r requirements.txt
+
+# Testing
+pytest==9.0.3
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+
+# Code quality
+black==26.3.1
+isort==5.13.2
+flake8==6.1.0
+mypy==1.7.1

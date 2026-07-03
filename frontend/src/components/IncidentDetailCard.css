@@ -1,0 +1,111 @@
+/* ─────────────────────────────────────────────────
+   IncidentDetailCard — inline row expansion panel
+   Strict design palette (same as EventsFeed/ILT)
+───────────────────────────────────────────────── */
+
+.idc-root {
+  margin: 0;
+  padding: 1rem 1.25rem 1.1rem;
+  background: #1a1f2e;
+  border-top: 1px solid #2d3748;
+  border-bottom: 1px solid #2d3748;
+  animation: idc-slide-in 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes idc-slide-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Header ─────────────────────────────────────── */
+.idc-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.875rem;
+}
+
+.idc-header-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #6b7a93;
+}
+
+.idc-header-meta {
+  font-size: 0.7rem;
+  color: #4a5568;
+}
+
+/* ── Key-value grid ─────────────────────────────── */
+.idc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 0.875rem;
+}
+
+@media (max-width: 1100px) {
+  .idc-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .idc-grid { grid-template-columns: 1fr; }
+}
+
+.idc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.idc-key {
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7a93;
+  white-space: nowrap;
+}
+
+.idc-val {
+  font-size: 0.82rem;
+  color: #e8eef5;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.idc-val-governance {
+  color: #a0aec0;
+  font-style: italic;
+  font-size: 0.78rem;
+}
+
+/* ── Description ────────────────────────────────── */
+.idc-description-section {
+  border-top: 1px solid #2d3748;
+  padding-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.idc-description {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #a0aec0;
+  line-height: 1.65;
+  max-height: 7rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;  /* break long tokens like [Neo.DatabaseError…] */
+  word-break: break-word;
+}
+
+.idc-description::-webkit-scrollbar       { width: 3px; }
+.idc-description::-webkit-scrollbar-thumb { background: #3d4557; border-radius: 2px; }

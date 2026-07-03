@@ -1,0 +1,68 @@
+version: "1.0"
+workflow_type: request
+description: "Service Request fulfillment workflow"
+
+start_step: assignment_agent
+
+steps:
+  assignment_agent:
+    name: "Assign Request"
+    type: agent
+    agent: librarian
+    next_steps:
+      default: validation_agent
+    timeout_seconds: 300
+    retry_count: 1
+
+  validation_agent:
+    name: "Validate Request"
+    type: agent
+    agent: validation_agent
+    next_steps:
+      valid: fulfillment_agent
+      invalid: mark_rejected
+    timeout_seconds: 300
+    retry_count: 1
+
+  fulfillment_agent:
+    name: "Fulfill Request"
+    type: agent
+    agent: mechanic
+    next_steps:
+      success: verification_agent
+      failure: mark_failed
+    timeout_seconds: 3600
+    retry_count: 2
+
+  verification_agent:
+    name: "Verify Fulfillment"
+    type: agent
+    agent: verifier
+    next_steps:
+      success: mark_resolved
+      failure: fulfillment_agent
+    timeout_seconds: 600
+    retry_count: 2
+
+  mark_resolved:
+    name: "Mark as Fulfilled"
+    type: agent
+    agent: mark_resolved
+    timeout_seconds: 60
+
+  mark_rejected:
+    name: "Mark as Rejected"
+    type: agent
+    agent: mark_rejected
+    timeout_seconds: 60
+
+  mark_failed:
+    name: "Mark as Failed"
+    type: agent
+    agent: mark_failed
+    timeout_seconds: 60
+
+end_steps:
+  - mark_resolved
+  - mark_rejected
+  - mark_failed

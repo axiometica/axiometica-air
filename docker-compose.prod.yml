@@ -1,0 +1,81 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Axiometica AIR — Production overrides
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#     up -d --build --scale frontend=0
+#
+#   --build          rebuilds the nginx prod image (React app baked in)
+#   --scale frontend=0  drops the standalone frontend container (nginx serves
+#                        the pre-built SPA directly — one fewer container)
+#
+# IMPORTANT — PORT LOCKING:
+#   Docker Compose merge concatenates port/volume arrays; it cannot REMOVE
+#   entries declared in the base file.  To prevent direct access to internal
+#   services from outside the host, lock down with the OS firewall AFTER
+#   starting containers:
+#
+#   Linux (ufw):
+#     sudo ufw allow 80/tcp
+#     sudo ufw allow 443/tcp
+#     sudo ufw deny 3000/tcp   # frontend — nginx only (scaled to 0 in prod)
+#     sudo ufw deny 5432/tcp   # postgres
+#     sudo ufw deny 6379/tcp   # redis
+#     sudo ufw deny 7474/tcp   # neo4j http
+#     sudo ufw deny 7687/tcp   # neo4j bolt
+#     sudo ufw deny 5555/tcp   # flower — SSH tunnel or VPN only
+#     sudo ufw enable
+#
+#   Cloud: use your provider's security groups / firewall rules to expose
+#   only 80 and 443 to the internet.
+#
+# What this file changes vs docker-compose.yml:
+#   • nginx: rebuilt from nginx/Dockerfile.prod — multi-stage build that bakes
+#            the React app into the nginx image (TLS + static files + API proxy
+#            all in one container — no separate frontend hop)
+#   • frontend: scaled to 0 via --scale frontend=0 on the CLI
+#   • backend: ALLOWED_ORIGINS set to HTTPS-only, LOG_FORMAT forced to json
+#   • Dev source bind-mounts are NOT applied — they live in
+#     docker-compose.override.yml which is only auto-loaded by bare `docker compose up`
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: '3.9'
+
+services:
+
+  # Backend — production CORS + explicit LOG_FORMAT/LEVEL override.
+  backend:
+    environment:
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-https://localhost}"
+      LOG_FORMAT: json
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+
+  # Nginx (prod) — single container: TLS + built React SPA + API proxy
+  #
+  # Replaces the two-container dev setup (outer nginx TLS proxy → frontend nginx).
+  # Built from nginx/Dockerfile.prod which is a multi-stage build:
+  #   Stage 1 (node:20-alpine): npm ci && npm run build  →  dist/
+  #   Stage 2 (nginx:alpine):   serves dist/ with TLS, proxies /api and /ws to backend
+  #
+  # The context is the project root so the Dockerfile can COPY both
+  # frontend/ (source) and nginx/ (entrypoint + config).
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile.prod
+    volumes:
+      # Replace with your CA-signed cert before going live.
+      # See nginx/entrypoint.sh for Let's Encrypt / Certbot instructions.
+      - ./nginx/certs:/etc/nginx/certs
+    depends_on:
+      - backend
+      # (frontend is scaled to 0 — no longer a dependency)
+
+  # celery_worker and watcher no longer need volume overrides here — dev source
+  # mounts were moved to docker-compose.override.yml which is NOT applied when
+  # using the explicit -f flag in production.
+  #
+  # NOTE: All Neo4j credentials are inherited from docker-compose.yml base file
+  # (celery_worker, celery_beat, celery_default_worker, watcher, watcher_test).
+  # This ensures all services can authenticate with CMDB in production.
+  # See DEPLOYMENT_FIXES.md for full details on all critical fixes applied.

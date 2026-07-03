@@ -1,0 +1,218 @@
+/* ─────────────────────────────────────────────────
+   ChangeForm — strict design system
+───────────────────────────────────────────────── */
+
+.cf-page {
+  min-height: 100%;
+  padding: 2.5rem 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.cf-card {
+  width: 100%;
+  max-width: 600px;
+  background: #1a1f2e;
+  border: 1px solid #3d4557;
+  border-radius: 12px;
+  padding: 2rem;
+}
+
+/* ── Header ─────────────────────────────────────── */
+.cf-header {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #2d3748;
+}
+
+.cf-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #93c5fd;
+  flex-shrink: 0;
+}
+
+.cf-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #e8eef5;
+  letter-spacing: -0.2px;
+}
+
+.cf-subtitle {
+  margin: 0.1rem 0 0;
+  font-size: 0.78rem;
+  color: #6b7a93;
+}
+
+/* ── Error banner ────────────────────────────────── */
+.cf-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.5);
+  border: 1px solid #b91c1c;
+  color: #fca5a5;
+  font-size: 0.82rem;
+}
+
+/* ── Form ────────────────────────────────────────── */
+.cf-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.cf-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #6b7a93;
+}
+
+.cf-required {
+  color: #fca5a5;
+  margin-left: 2px;
+}
+
+.cf-hint {
+  font-size: 0.73rem;
+  color: #4a5568;
+  margin-top: 0.15rem;
+}
+
+/* ── Change type — card pills ────────────────────── */
+.cf-type-pills {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+}
+
+.cf-type-pill {
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid #3d4557;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms, background 150ms;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cf-type-pill:hover {
+  background: rgba(255,255,255,.03);
+}
+
+.cf-type-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #a0aec0;
+  transition: color 150ms;
+}
+
+.cf-type-hint {
+  font-size: 0.67rem;
+  color: #4a5568;
+  line-height: 1.4;
+  transition: color 150ms;
+}
+
+/* active state applied via inline style + class */
+.cf-type-pill.active .cf-type-label {
+  color: inherit;       /* inherits from inline style */
+}
+.cf-type-pill.active .cf-type-hint {
+  color: currentColor;
+  opacity: 0.65;
+}
+
+/* ── Text inputs / selects / textareas ───────────── */
+.cf-input,
+.cf-select,
+.cf-textarea {
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+  background: #252c3c;
+  border: 1px solid #3d4557;
+  border-radius: 8px;
+  color: #e8eef5;
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+  box-sizing: border-box;
+}
+
+.cf-input::placeholder,
+.cf-textarea::placeholder {
+  color: #4a5568;
+}
+
+.cf-input:hover,
+.cf-select:hover,
+.cf-textarea:hover {
+  border-color: #4a5568;
+}
+
+.cf-input:focus,
+.cf-select:focus,
+.cf-textarea:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.cf-textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+
+/* ── Submit button ───────────────────────────────── */
+.cf-submit {
+  margin-top: 0.5rem;
+  padding: 0.65rem 1.5rem;
+  width: 100%;
+  background: #2563eb;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms, opacity 150ms, transform 100ms;
+}
+
+.cf-submit:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.cf-submit:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.cf-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

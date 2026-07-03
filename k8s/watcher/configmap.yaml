@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: watcher-config
+  namespace: axiometica-air
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+data:
+  # ── Instance identity ───────────────────────────────────────────────────────
+  WATCHER_NAME: "watcher_k8s_prod"
+
+  # ── Adapter (auto-detected from KUBERNETES_SERVICE_HOST, but explicit is safer) ──
+  WATCHER_ADAPTER: "kubernetes"
+
+  # ── Kubernetes scope ────────────────────────────────────────────────────────
+  # Leave WATCHER_K8S_NAMESPACE empty to watch "default", or set to a specific ns.
+  # Use WATCHER_K8S_LABEL_SELECTOR to filter pods, e.g. "environment=production"
+  WATCHER_K8S_NAMESPACE: "default"
+  WATCHER_K8S_LABEL_SELECTOR: ""
+  WATCHER_K8S_METRICS_SERVER: "true"
+
+  # ── Platform API ────────────────────────────────────────────────────────────
+  # Point to the external NGINX URL of the Agentic Platform.
+  WATCHER_API_URL: "https://your-platform.example.com"
+  WATCHER_NGINX_URL: "https://your-platform.example.com"
+
+  # ── Kill-API (port 8080 on this Pod) ────────────────────────────────────────
+  # Platform routes remediation calls back to this URL.
+  # Replace <watcher-pod-ip> with a stable service address if using a Service.
+  WATCHER_KILL_API_URL: "http://watcher.axiometica-air.svc.cluster.local:8080"
+
+  # ── Monitoring thresholds ────────────────────────────────────────────────────
+  WATCHER_POLL_INTERVAL: "20"
+  WATCHER_COOLDOWN_SECONDS: "60"
+  WATCHER_CPU_THRESHOLD: "80.0"
+  WATCHER_MEMORY_THRESHOLD: "85.0"
+  WATCHER_DISK_THRESHOLD: "90.0"
+  WATCHER_CONNECTION_THRESHOLD: "1000"
+  WATCHER_MIN_CONSECUTIVE_POLLS: "3"
+  WATCHER_ANOMALY_THRESHOLD: "5000"
+
+  # ── Sentinel: disable eBPF in K8s (use privileged DaemonSet instead) ────────
+  SENTINEL_CONTAINER: ""
+
+  # ── Discovery ───────────────────────────────────────────────────────────────
+  WATCHER_DISCOVERY_ENABLED: "false"   # CMDB discovery uses Docker; disable in K8s
+
+  # ── Log File Monitoring ─────────────────────────────────────────────────────
+  # Watcher can tail log files and emit custom events when patterns are matched.
+  # Each monitor specifies: name, file path, regex pattern, event_type, interval
+  WATCHER_LOG_MONITORS: |
+    [
+      {
+        "name": "app_error_detector",
+        "file": "/var/log/app.log",
+        "pattern": "ERROR|CRITICAL|panic|Traceback|Exception",
+        "event_type": "log_error_detected",
+        "interval_sec": 5,
+        "enabled": true
+      }
+    ]
+
+  # Python
+  PYTHONUNBUFFERED: "1"
+  PYTHONPATH: "/app/src"

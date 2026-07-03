@@ -1,0 +1,95 @@
+version: "1.0"
+workflow_type: change
+description: "Change management workflow with CAB approval"
+
+start_step: change_risk_assessor
+
+steps:
+  change_risk_assessor:
+    name: "Risk Assessment"
+    type: agent
+    agent: change_risk_assessor
+    next_steps:
+      default: deployment_scheduler
+    timeout_seconds: 600
+    retry_count: 1
+
+  deployment_scheduler:
+    name: "CAB Review Request"
+    type: human_approval
+    handler: deployment_scheduler
+    next_steps:
+      default: deployment_checker
+    timeout_seconds: 259200  # 72 hours for CAB approval
+
+  deployment_checker:
+    name: "Deployment Validation"
+    type: agent
+    agent: deployment_checker
+    next_steps:
+      approved: deployer
+      rejected: mark_rejected
+    timeout_seconds: 300
+    retry_count: 1
+
+  deployer:
+    name: "Execute Deployment"
+    type: agent
+    agent: deployer
+    next_steps:
+      success: deployment_verifier
+      failure: mark_rolled_back
+    timeout_seconds: 1800
+    retry_count: 2
+
+  deployment_verifier:
+    name: "Verify Deployment"
+    type: agent
+    agent: deployment_verifier
+    next_steps:
+      success: validation_agent
+      failure: mark_rolled_back
+    timeout_seconds: 600
+    retry_count: 2
+
+  validation_agent:
+    name: "Validation"
+    type: agent
+    agent: validation_agent
+    next_steps:
+      success: documentation_service
+      failure: mark_rolled_back
+    timeout_seconds: 300
+    retry_count: 1
+
+  documentation_service:
+    name: "Documentation"
+    type: agent
+    agent: documentation_service
+    next_steps:
+      default: mark_deployed
+    timeout_seconds: 300
+    retry_count: 1
+
+  mark_deployed:
+    name: "Mark as Deployed"
+    type: agent
+    agent: mark_deployed
+    timeout_seconds: 60
+
+  mark_rolled_back:
+    name: "Mark as Rolled Back"
+    type: agent
+    agent: mark_rolled_back
+    timeout_seconds: 60
+
+  mark_rejected:
+    name: "Mark as Rejected"
+    type: agent
+    agent: mark_rejected
+    timeout_seconds: 60
+
+end_steps:
+  - mark_deployed
+  - mark_rolled_back
+  - mark_rejected

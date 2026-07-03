@@ -1,0 +1,198 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# DOCUMENTATION POLICY: Only commit key docs to GitHub
+# ═══════════════════════════════════════════════════════════════════════════════
+# ALLOWED in root:        README.md, CHANGELOG.md, CONTRIBUTING.md, SECURITY.md
+# NOT allowed in root:    *.md (except above), *.docx, *.pdf, auto-generated docs
+# docs/ folder is the official documentation library — all .md files tracked
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# All markdown files (except key documentation, whitelisted below)
+*.md
+!README.md
+!CHANGELOG.md
+!CONTRIBUTING.md
+!SECURITY.md
+!LICENSE
+# docs/ folder is the official documentation library — all .md files tracked
+!docs/*.md
+!docs/**/*.md
+# frontend/src/docs/ — in-app help content, must be committed
+!frontend/src/docs/*.md
+!frontend/src/docs/**/*.md
+
+# All Microsoft Office documents and PDFs (local only)
+*.docx
+*.xlsx
+*.pptx
+*.pdf
+
+# Auto-generated documentation (API docs, etc.)
+docs/auto-generated/
+generated/
+_generated/
+
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+.windows
+.linux
+.mac
+
+# Testing
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.tox/
+test-report*.html
+junit*.xml
+
+# Build artifacts
+*.pyc
+*.pyo
+
+# Frontend specific
+frontend/.turbo/
+frontend/.cache/
+
+# Backend specific
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.state/
+
+# Redis dump
+dump.rdb
+
+# Docker
+.docker
+
+# Local Docker Compose overrides (local-only services, never committed)
+docker-compose.override.yml
+
+# Archives
+*.zip
+*.tar.gz
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.tmp_*
+.tmp_session_extracts/
+
+# Development archive — old dev docs, session logs, planning notes
+_dev_archive/
+
+# Local RAG reference folder — AI assistant context docs, not source code
+_rag/
+
+# Marketing collateral and business documents — stored locally, not source code
+MarketDocs/
+RD_TAX_CREDIT_PREP/
+
+# Claude Code local config (editor tooling, not project code)
+.claude/
+**/.claude/
+
+# UI component backups (timestamped snapshot folders)
+BACKUPS_UI_*/
+
+# Runtime backup output — entire backups/ folder excluded from git.
+# The backup scripts (scripts/backup.sh, tasks/backup.py) create these
+# directories at runtime; they must not be committed.
+backups/
+
+# Vite dev cache
+frontend/.vite/
+
+# Auto-generated code (scaffolding, migrations, etc.)
+*.generated.*
+*.scaffold.*
+
+# Local development notes and scratch files (AI-generated or manual)
+*.scratch
+NOTES.local.md
+ANALYSIS.md
+INVESTIGATION.md
+local-notes/
+scratch/
+
+# Generated analysis and reports
+*_analysis.md
+*_report.md
+*_summary.md
+analysis_*.txt
+
+# Nginx TLS certificates (auto-generated; never commit private keys)
+nginx/certs/
+
+# Old release assets and local reference docs (covered by *.md and *.docx above)
+postgresql.conf
+
+# Local-only testing tools (never push)
+event_simulator/

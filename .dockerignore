@@ -1,0 +1,45 @@
+# Root .dockerignore — used when building with context=. (e.g. nginx/Dockerfile.prod)
+# Keeps the build context small by excluding everything that isn't needed.
+
+# Version control
+.git
+.gitignore
+
+# Python bytecode and caches
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+
+# Node / frontend build artefacts
+frontend/node_modules
+frontend/dist
+frontend/.env.local
+frontend/.env.*.local
+
+# Runbook editor build artefacts
+runbook-editor/node_modules
+runbook-editor/dist
+
+# Backend virtual environments
+backend/.venv
+backend/venv
+backend/env
+
+# Docker / compose state
+nginx/certs
+**/.state
+
+# Docs and non-essential files
+docs/
+*.md
+!frontend/README.md
+*.pdf
+
+# IDE
+.idea
+.vscode
+**/.DS_Store
