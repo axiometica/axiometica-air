@@ -155,12 +155,29 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
             {/* Model */}
             <div>
               <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">Model</label>
-              <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm"
-                style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
-              >
-                {getProviderOptions().map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+              {isOllama ? (
+                <>
+                  <input type="text" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}
+                    placeholder="e.g. qwen2.5:3b, llama3:latest"
+                    className="w-full px-3 py-2 rounded-lg text-sm"
+                    style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
+                    list="ollama-model-suggestions"
+                  />
+                  <datalist id="ollama-model-suggestions">
+                    {getProviderOptions().map(m => <option key={m} value={m} />)}
+                  </datalist>
+                  <p style={{ color: '#7a8ba3' }} className="text-xs mt-1">
+                    Enter the exact model name as pulled — run <code style={{ color: '#a0aec0' }}>ollama list</code> to see available models.
+                  </p>
+                </>
+              ) : (
+                <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
+                >
+                  {getProviderOptions().map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              )}
             </div>
 
             {/* API Key / Base URL */}
