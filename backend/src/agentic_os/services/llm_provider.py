@@ -691,7 +691,7 @@ class OllamaProvider(LLMProvider):
     # Cloud providers use 2000 for rich summaries; 1200 keeps quality while
     # cutting generation time roughly in half on small models.
     MAX_TOKENS_RICH = 1200
-    MAX_TOKENS_AGENT = 500
+    MAX_TOKENS_AGENT = 300
 
     def __init__(self, base_url: Optional[str] = None, model: str = "llama3"):
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL") or self.DEFAULT_BASE_URL).rstrip("/")
