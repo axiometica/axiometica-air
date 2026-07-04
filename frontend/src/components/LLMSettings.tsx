@@ -186,6 +186,7 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
                 <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">API Endpoint URL</label>
                 <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
                   placeholder="e.g. http://localhost:11434 or https://api.groq.com/openai"
+                  autoComplete="off"
                   className="w-full px-3 py-2 rounded-lg text-sm"
                   style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
                 />
@@ -200,6 +201,7 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
                 <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">API Key <span style={{ color: '#4a5568', fontWeight: 400 }}>(optional)</span></label>
                 <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
                   placeholder="Leave blank if your endpoint doesn't require auth"
+                  autoComplete="new-password"
                   className="w-full px-3 py-2 rounded-lg text-sm"
                   style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
                 />
@@ -212,6 +214,7 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
                 <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">API Key</label>
                 <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
                   placeholder="Enter your API key"
+                  autoComplete="new-password"
                   className="w-full px-3 py-2 rounded-lg text-sm"
                   style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
                 />
