@@ -169,9 +169,10 @@ class SummaryService:
         cls._cache.clear()
 
 
-# Singleton instance
+# Singleton instance — reinitialised automatically when the DB config changes
 _summary_service: Optional[SummaryService] = None
 _insights_enabled: bool = True
+_loaded_config_key: Optional[tuple] = None   # (provider, model, base_url)
 
 
 def get_insights_enabled() -> bool:
@@ -217,35 +218,55 @@ def get_summary_service(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
 ) -> SummaryService:
-    """Get or create summary service instance"""
-    global _summary_service, _insights_enabled
+    """Return the summary service, reinitialising if the DB config has changed.
 
-    if _summary_service is None:
-        # Try to load from database first
+    Reads from the database on every call so that Celery workers (separate
+    processes) pick up provider changes immediately without a restart.
+    """
+    global _summary_service, _insights_enabled, _loaded_config_key
+
+    db_config = None
+    try:
+        from agentic_os.db.database import SessionLocal
+        from agentic_os.db.llm_config_repository import LLMConfigRepository
+
+        db = SessionLocal()
         try:
-            from agentic_os.db.database import SessionLocal
-            from agentic_os.db.llm_config_repository import LLMConfigRepository
+            db_config = LLMConfigRepository(db).get_config("default")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Could not read LLM config from database: {e}")
 
-            db = SessionLocal()
-            try:
-                repo = LLMConfigRepository(db)
-                db_config = repo.get_config("default")
-                if db_config:
-                    logger.info(f"Loaded LLM config from database: {db_config['provider']}")
-                    _insights_enabled = db_config.get("insights_enabled", True)
-                    _summary_service = SummaryService(
-                        provider_name=db_config.get("provider", provider_name),
-                        api_key=db_config.get("api_key", api_key),
-                        model=db_config.get("model", model),
-                        base_url=db_config.get("base_url"),
-                    )
-                else:
-                    _summary_service = SummaryService(provider_name, api_key, model)
-            finally:
-                db.close()
-        except Exception as e:
-            logger.warning(f"Could not load LLM config from database: {e}, using defaults")
+    # Build a fingerprint from the fields that determine which LLM is used.
+    # api_key is intentionally excluded — it changes on rotate but provider stays.
+    if db_config:
+        config_key = (
+            db_config.get("provider"),
+            db_config.get("model"),
+            db_config.get("base_url"),
+        )
+    else:
+        config_key = None
+
+    if _summary_service is None or config_key != _loaded_config_key:
+        if _summary_service is not None:
+            logger.info(
+                f"LLM config changed ({_loaded_config_key} → {config_key}), "
+                "reinitialising summary service"
+            )
+        if db_config:
+            _insights_enabled = db_config.get("insights_enabled", True)
+            _summary_service = SummaryService(
+                provider_name=db_config.get("provider", provider_name),
+                api_key=db_config.get("api_key", api_key),
+                model=db_config.get("model", model),
+                base_url=db_config.get("base_url"),
+            )
+            logger.info(f"Summary service initialised: {db_config.get('provider')} / {db_config.get('model')}")
+        else:
             _summary_service = SummaryService(provider_name, api_key, model)
+        _loaded_config_key = config_key
 
     return _summary_service
 
