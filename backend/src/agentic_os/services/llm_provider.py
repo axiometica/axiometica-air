@@ -687,26 +687,25 @@ class AnthropicProvider(LLMProvider):
             yield "\n[Stream error — please try again]"
 
 
-class OllamaProvider(LLMProvider):
-    """Ollama local LLM provider — uses the OpenAI-compatible API at /v1."""
+class GenericOpenAIProvider(LLMProvider):
+    """Generic OpenAI-compatible provider — works with any endpoint that speaks the OpenAI chat API.
 
-    DEFAULT_BASE_URL = "http://localhost:11434"
-    # Local models are CPU/GPU-bound — cap token output to avoid long waits.
-    # Cloud providers use 2000 for rich summaries; 1200 keeps quality while
-    # cutting generation time roughly in half on small models.
-    MAX_TOKENS_RICH = 1200
-    MAX_TOKENS_AGENT = 300
+    Covers: Azure OpenAI, LiteLLM proxy, vLLM, Groq, Together AI, Mistral, Perplexity,
+    Ollama, and any enterprise GPU inference server. No token caps — enterprise endpoints
+    are assumed to have adequate capacity.
+    """
 
-    def __init__(self, base_url: Optional[str] = None, model: str = "llama3"):
-        self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL") or self.DEFAULT_BASE_URL).rstrip("/")
-        self.model = model or "llama3"
+    def __init__(self, base_url: Optional[str] = None, api_key: Optional[str] = None, model: str = ""):
+        self.base_url = (base_url or os.getenv("CUSTOM_LLM_BASE_URL") or "").rstrip("/")
+        self.api_key  = api_key or os.getenv("CUSTOM_LLM_API_KEY") or "none"
+        self.model    = model or os.getenv("CUSTOM_LLM_MODEL") or ""
 
     def is_configured(self) -> bool:
-        return bool(self.base_url)
+        return bool(self.base_url and self.model)
 
     def _client(self):
         from openai import AsyncOpenAI
-        return AsyncOpenAI(base_url=f"{self.base_url}/v1", api_key="ollama")
+        return AsyncOpenAI(base_url=f"{self.base_url}/v1", api_key=self.api_key)
 
     async def _chat(self, messages: list, max_tokens: int = 700, temperature: float = 0.3) -> Optional[str]:
         try:
@@ -718,7 +717,7 @@ class OllamaProvider(LLMProvider):
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
-            logger.error(f"Ollama request failed: {e}", exc_info=True)
+            logger.error(f"Custom LLM request failed: {e}", exc_info=True)
             return None
 
     async def generate_summary(self, incident_data: dict) -> str:
@@ -740,7 +739,7 @@ class OllamaProvider(LLMProvider):
         raw = await self._chat(
             [{"role": "system", "content": RICH_SUMMARY_SYSTEM_PROMPT},
              {"role": "user",   "content": prompt}],
-            max_tokens=self.MAX_TOKENS_RICH,
+            max_tokens=2000,
         )
         if raw is None:
             return {"summary": None, "technical_summary": None}
@@ -768,7 +767,7 @@ class OllamaProvider(LLMProvider):
         return await self._chat(
             [{"role": "system", "content": system_prompt},
              {"role": "user",   "content": user_content}],
-            max_tokens=min(max_tokens, self.MAX_TOKENS_AGENT),
+            max_tokens=max_tokens,
             temperature=temperature,
         )
 
@@ -780,14 +779,14 @@ class OllamaProvider(LLMProvider):
         temperature: float = 0.25,
     ):
         if not self.is_configured():
-            yield "LLM is not configured. Go to Settings → LLM to configure Ollama."
+            yield "LLM is not configured. Go to Settings → LLM to configure the custom provider."
             return
         try:
             stream = await self._client().chat.completions.create(
                 model=self.model,
                 messages=[{"role": "system", "content": system_prompt},
                           {"role": "user",   "content": user_content}],
-                max_tokens=min(max_tokens, self.MAX_TOKENS_AGENT),
+                max_tokens=max_tokens,
                 temperature=temperature,
                 stream=True,
             )
@@ -796,7 +795,7 @@ class OllamaProvider(LLMProvider):
                 if delta:
                     yield delta
         except Exception as e:
-            logger.error(f"Ollama stream failed: {e}", exc_info=True)
+            logger.error(f"Custom LLM stream failed: {e}", exc_info=True)
             yield "\n[Stream error — please try again]"
 
 
@@ -813,7 +812,7 @@ def get_llm_provider(
         return OpenAIProvider(api_key=api_key, model=model or "gpt-3.5-turbo")
     elif provider_name == "anthropic":
         return AnthropicProvider(api_key=api_key, model=model or "claude-3-haiku-20240307")
-    elif provider_name == "ollama":
-        return OllamaProvider(base_url=base_url, model=model or "llama3")
+    elif provider_name == "custom":
+        return GenericOpenAIProvider(base_url=base_url, api_key=api_key, model=model or "")
     else:
         raise ValueError(f"Unknown LLM provider: {provider_name}")

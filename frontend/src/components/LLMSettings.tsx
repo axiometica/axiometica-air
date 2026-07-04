@@ -13,7 +13,7 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
   const [selectedProvider, setSelectedProvider] = useState('openai')
   const [selectedModel, setSelectedModel]   = useState('gpt-4o')
   const [apiKey, setApiKey]                 = useState('')
-  const [baseUrl, setBaseUrl]               = useState('http://localhost:11434')
+  const [baseUrl, setBaseUrl]               = useState('')
   const [insightsEnabled, setInsightsEnabled] = useState(true)
   const [insightsSaving, setInsightsSaving]   = useState(false)
   const [loading, setLoading]               = useState(false)
@@ -30,7 +30,7 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
     if (internalExpanded) { loadLLMStatus(); loadProviders() }
   }, [internalExpanded])
 
-  const isOllama = selectedProvider === 'ollama'
+  const isCustom = selectedProvider === 'custom'
   const currentProvider = providers.find(p => p.name === selectedProvider)
 
   // Reset "tested" badge whenever credentials change
@@ -55,13 +55,15 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
 
   // Step 1: Test credentials without saving
   const handleTestConfig = async () => {
-    if (isOllama && !baseUrl.trim()) { setError('Enter the Ollama base URL first'); return }
-    if (!isOllama && !apiKey.trim()) { setError('Enter an API key first'); return }
+    if (isCustom && !baseUrl.trim()) { setError('Enter the API endpoint URL first'); return }
+    if (!isCustom && !apiKey.trim()) { setError('Enter an API key first'); return }
     try {
       setTesting(true); setTestResult(null); setError(null)
       const response = await llmService.testConfig({
         provider: selectedProvider,
-        ...(isOllama ? { base_url: baseUrl } : { api_key: apiKey }),
+        ...(isCustom
+          ? { base_url: baseUrl, ...(apiKey ? { api_key: apiKey } : {}) }
+          : { api_key: apiKey }),
         model: selectedModel,
       })
       setTestResult(response.data.test_summary || 'Connection test passed!')
@@ -79,7 +81,9 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
       setLoading(true); setError(null)
       await llmService.setConfig({
         provider: selectedProvider,
-        ...(isOllama ? { base_url: baseUrl } : { api_key: apiKey }),
+        ...(isCustom
+          ? { base_url: baseUrl, ...(apiKey ? { api_key: apiKey } : {}) }
+          : { api_key: apiKey }),
         model: selectedModel,
       })
       setSaveSuccess(true)
@@ -155,19 +159,15 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
             {/* Model */}
             <div>
               <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">Model</label>
-              {isOllama ? (
+              {isCustom ? (
                 <>
                   <input type="text" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}
-                    placeholder="e.g. qwen2.5:3b, llama3:latest"
+                    placeholder="e.g. llama3, mistral, meta/llama-3-70b-instruct"
                     className="w-full px-3 py-2 rounded-lg text-sm"
                     style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
-                    list="ollama-model-suggestions"
                   />
-                  <datalist id="ollama-model-suggestions">
-                    {getProviderOptions().map(m => <option key={m} value={m} />)}
-                  </datalist>
                   <p style={{ color: '#7a8ba3' }} className="text-xs mt-1">
-                    Enter the exact model name as pulled — run <code style={{ color: '#a0aec0' }}>ollama list</code> to see available models.
+                    Exact model name as accepted by your endpoint — the value passed as <code style={{ color: '#a0aec0' }}>model</code> in the OpenAI API request.
                   </p>
                 </>
               ) : (
@@ -181,16 +181,30 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
             </div>
 
             {/* API Key / Base URL */}
-            {isOllama ? (
+            {isCustom ? (
               <div>
-                <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">Ollama Base URL</label>
+                <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">API Endpoint URL</label>
                 <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder="http://localhost:11434"
+                  placeholder="e.g. http://localhost:11434 or https://api.groq.com/openai"
                   className="w-full px-3 py-2 rounded-lg text-sm"
                   style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
                 />
                 <p style={{ color: '#7a8ba3' }} className="text-xs mt-1">
-                  URL where Ollama is running. No API key needed — model must already be pulled (<code style={{ color: '#a0aec0' }}>ollama pull {selectedModel}</code>).
+                  Base URL of any OpenAI-compatible endpoint — Ollama, LiteLLM, vLLM, Groq, Together AI, Azure OpenAI, etc.
+                  The <code style={{ color: '#a0aec0' }}>/v1</code> suffix is added automatically.
+                </p>
+              </div>
+            ) : null}
+            {isCustom ? (
+              <div>
+                <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">API Key <span style={{ color: '#4a5568', fontWeight: 400 }}>(optional)</span></label>
+                <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Leave blank if your endpoint doesn't require auth"
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
+                />
+                <p style={{ color: '#7a8ba3' }} className="text-xs mt-1">
+                  Required for Groq, Together AI, Perplexity, etc. Leave blank for local/internal endpoints.
                 </p>
               </div>
             ) : (
@@ -270,11 +284,11 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
             {/* Action Buttons — Test first, then Save */}
             <div style={{ display: 'flex', gap: 8 }}>
               {/* Step 1: Test */}
-              <button onClick={handleTestConfig} disabled={testing || (isOllama ? !baseUrl : !apiKey)}
+              <button onClick={handleTestConfig} disabled={testing || (isCustom ? !baseUrl || !selectedModel : !apiKey)}
                 style={{ flex: 1, padding: '8px 12px', borderRadius: 8, fontWeight: 600, fontSize: '0.85rem',
                   backgroundColor: '#1a1f2e', color: testPassed ? '#10b981' : '#a0aec0',
                   border: testPassed ? '1px solid #10b981' : '1px solid #3d4557',
-                  opacity: testing || (isOllama ? !baseUrl : !apiKey) ? 0.5 : 1, cursor: testing || (isOllama ? !baseUrl : !apiKey) ? 'not-allowed' : 'pointer',
+                  opacity: testing || (isCustom ? !baseUrl || !selectedModel : !apiKey) ? 0.5 : 1, cursor: testing || (isCustom ? !baseUrl || !selectedModel : !apiKey) ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                 {testPassed ? <IconCheck size={14} /> : <IconRefresh size={14} className={testing ? 'animate-spin' : ''} />}
                 {testing ? 'Testing…' : testPassed ? 'Test Passed' : 'Test Connection'}
@@ -293,8 +307,8 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
             </div>
 
             <p style={{ color: '#7a8ba3' }} className="text-xs">
-              {isOllama
-                ? 'Test first to verify Ollama is reachable and the model is pulled, then Save.'
+              {isCustom
+                ? 'Test first to verify the endpoint is reachable and the model responds, then Save.'
                 : 'Test first to validate credentials, then Save to persist them.'}
               {' '}Used for AI-generated incident summaries.
             </p>

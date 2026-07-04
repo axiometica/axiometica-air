@@ -24,9 +24,9 @@ router = APIRouter(prefix="/api/llm", tags=["llm-settings"])
 
 class LLMConfig(BaseModel):
     """LLM provider configuration"""
-    provider: str  # "openai", "anthropic", "ollama"
-    api_key: Optional[str] = None   # required for openai/anthropic; omitted for ollama
-    base_url: Optional[str] = None  # required for ollama; ignored for cloud providers
+    provider: str  # "openai", "anthropic", "custom"
+    api_key: Optional[str] = None   # required for openai/anthropic; optional for custom endpoints
+    base_url: Optional[str] = None  # required for custom; ignored for cloud providers
     model: Optional[str] = None
     insights_enabled: Optional[bool] = True
 
@@ -71,16 +71,16 @@ async def set_llm_config(config: LLMConfig):
         logger.info(f"LLM Config received: provider={config.provider}, api_key={key_preview}, model={config.model}")
 
         # Validate provider name
-        if config.provider.lower() not in ["openai", "anthropic", "ollama"]:
+        if config.provider.lower() not in ["openai", "anthropic", "custom"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unknown provider: {config.provider}. Supported: openai, anthropic, ollama"
+                detail=f"Unknown provider: {config.provider}. Supported: openai, anthropic, custom"
             )
 
-        # ollama requires a base_url, cloud providers require an api_key
-        if config.provider.lower() == "ollama":
+        # custom provider requires a base_url; cloud providers require an api_key
+        if config.provider.lower() == "custom":
             if not config.base_url:
-                raise HTTPException(status_code=400, detail="base_url is required for the ollama provider")
+                raise HTTPException(status_code=400, detail="base_url is required for the custom provider")
         else:
             if not config.api_key:
                 raise HTTPException(status_code=400, detail="api_key is required for cloud providers")
@@ -231,10 +231,10 @@ async def get_supported_providers():
                 "requires_api_key": True,
             },
             {
-                "name": "ollama",
-                "models": ["llama3", "llama3.1", "llama3.2", "mistral", "mixtral", "qwen2.5", "phi3", "gemma2", "deepseek-r1"],
-                "default_model": "llama3",
-                "description": "Local models via Ollama",
+                "name": "custom",
+                "models": ["llama3", "llama3.1", "llama3.2", "mistral", "mixtral", "qwen2.5", "phi3", "gemma2", "deepseek-r1", "gpt-4o", "claude-3-haiku-20240307"],
+                "default_model": "",
+                "description": "Any OpenAI-compatible endpoint",
                 "requires_api_key": False,
             },
         ]
