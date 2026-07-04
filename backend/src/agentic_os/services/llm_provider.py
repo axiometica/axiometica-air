@@ -687,6 +687,11 @@ class OllamaProvider(LLMProvider):
     """Ollama local LLM provider — uses the OpenAI-compatible API at /v1."""
 
     DEFAULT_BASE_URL = "http://localhost:11434"
+    # Local models are CPU/GPU-bound — cap token output to avoid long waits.
+    # Cloud providers use 2000 for rich summaries; 1200 keeps quality while
+    # cutting generation time roughly in half on small models.
+    MAX_TOKENS_RICH = 1200
+    MAX_TOKENS_AGENT = 500
 
     def __init__(self, base_url: Optional[str] = None, model: str = "llama3"):
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL") or self.DEFAULT_BASE_URL).rstrip("/")
@@ -731,7 +736,7 @@ class OllamaProvider(LLMProvider):
         raw = await self._chat(
             [{"role": "system", "content": RICH_SUMMARY_SYSTEM_PROMPT},
              {"role": "user",   "content": prompt}],
-            max_tokens=2000,
+            max_tokens=self.MAX_TOKENS_RICH,
         )
         if raw is None:
             return {"summary": None, "technical_summary": None}
@@ -759,7 +764,8 @@ class OllamaProvider(LLMProvider):
         return await self._chat(
             [{"role": "system", "content": system_prompt},
              {"role": "user",   "content": user_content}],
-            max_tokens=max_tokens, temperature=temperature,
+            max_tokens=min(max_tokens, self.MAX_TOKENS_AGENT),
+            temperature=temperature,
         )
 
     async def stream_agent_completion(
@@ -777,7 +783,7 @@ class OllamaProvider(LLMProvider):
                 model=self.model,
                 messages=[{"role": "system", "content": system_prompt},
                           {"role": "user",   "content": user_content}],
-                max_tokens=max_tokens,
+                max_tokens=min(max_tokens, self.MAX_TOKENS_AGENT),
                 temperature=temperature,
                 stream=True,
             )
