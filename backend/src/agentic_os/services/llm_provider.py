@@ -23,6 +23,10 @@ RICH_SUMMARY_SYSTEM_PROMPT = (
     "Do NOT repeat the section headers in your prose. "
     "CRITICAL: Use ONLY the exact severity, risk score, and field values provided in "
     "the incident data — never infer or upgrade severity from other fields. "
+    "CRITICAL: Every metric you cite (percentages, counts, durations) must come verbatim from "
+    "the incident data and must be labelled correctly — e.g. do not call a syscall count "
+    "a 'disk usage' figure. If you cannot identify the metric type from the data, omit the number. "
+    "Never copy any numbers or names from prompt examples into your output. "
     "The executive summary is for managers: exactly 3 sentences, separated by blank lines — "
     "what happened, what was decided, what was the outcome. No step lists, no repetition, no padding. "
     "The technical digest is for senior engineers: detailed, precise, mechanism-focused."
@@ -136,14 +140,14 @@ State whether manual approval was required and what was decided. Name the runboo
 Sentence 3 (covers: outcome — MANDATORY, do not omit):
 State whether resolved. One clause of evidence (e.g. service returned to running). Done.
 
-Example of correct output shape (do not copy the content, only the shape — no labels, 3 sentences,
-blank line between each):
-The agentic_os_redis disk reached 96% capacity in the production environment, triggering a disk_full alert. HIGH severity, risk score 71/100.
+Example of correct output shape — structure only, do NOT copy numbers, resource names, or wording:
+The <resource> service in <environment> experienced a <event_type> event, triggering a <threshold> threshold breach. <SEVERITY> severity, risk score <N>/100.
 
-Manual approval was required and granted, selecting the "Disk Full — Log Rotation" runbook.
+Manual approval was required and granted, selecting the "<Runbook Name>" runbook.
 
-The incident was resolved after log rotation freed 14GB, returning disk usage to 62%.
+The incident was resolved after <remediation action> restored <primary metric> to normal levels.
 
+⚠️ USE ONLY DATA FROM THE INCIDENT BELOW. Never use numbers, names, or phrases from the example above.
 ⛔ STOP after 3 sentences — but all 3 must be present. Do not add context, implications, or step descriptions.
 
 ## [TECHNICAL DIGEST]
