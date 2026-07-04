@@ -1,6 +1,6 @@
 # Axiometica AIR v1.2.0
 
-> Fundamental Intelligence for Autonomous Operations — enterprise AI-driven IT ops platform with autonomous incident detection, triage, enrichment, remediation, and resolution with human-in-the-loop governance.
+> Fundamental Intelligence for Autonomous Operations — enterprise AI-driven IT ops platform with autonomous incident detection, triage, enrichment, remediation, and resolution with operator-controlled governance.
 
 [![Status](https://img.shields.io/badge/Status-v1.2.0-brightgreen)]()
 [![License](https://img.shields.io/badge/License-Source%20Available-blue)](./LICENSE)
@@ -19,9 +19,9 @@
 
 ## Platform Overview
 
-Axiometica AIR is an autonomous IT operations platform that detects, investigates, and resolves incidents in real-time. Using AI agents, deep infrastructure visibility, and human-in-the-loop controls, it reduces MTTR from hours to minutes while maintaining operator oversight and governance.
+Axiometica AIR is an autonomous IT operations platform that detects, investigates, and resolves incidents in real-time. Using AI agents, deep infrastructure visibility, and team-controlled governance, it reduces MTTR from hours to minutes while maintaining full operator oversight.
 
-Built for teams suffering from **alert fatigue**, **on-call burnout**, and the cost of manual incident response. Axiometica AIR is a self-hosted AIOps platform that closes the gap between detection and resolution — without requiring a human in the loop for every event.
+Built for teams suffering from **alert fatigue**, **on-call burnout**, and the cost of manual incident response. Axiometica AIR is a self-hosted AIOps platform that closes the gap between detection and resolution — so your team focuses on the problems that actually need them.
 
 ---
 
@@ -31,31 +31,31 @@ Built for teams suffering from **alert fatigue**, **on-call burnout**, and the c
 
 Most "AI-powered" ITSM tools are decades-old ticketing systems with a chatbot added on top. **Axiometica AIR was built the opposite way:** agents are the primary worker from the ground up.
 
-**Incidents don't wait in a queue for a human with an AI assistant — they're worked the moment they're detected.**
+**Incidents don't wait in a queue for someone to pick them up — they're worked the moment they're detected.**
 
 ### How It's Different
 
 | Aspect | Legacy ITSM + AI | Axiometica AIR |
 |--------|---|---|
-| **Architecture** | Ticket queue → human assigns → AI assists | Event stream → 7 agents investigate & act immediately |
-| **Incident Response** | Humans wait for alerts; AI provides suggestions | Agents detect, triage, score, remediate autonomously |
+| **Architecture** | Ticket queue → engineer assigns → AI assists | Event stream → 7 agents investigate & act immediately |
+| **Incident Response** | Engineers wait for alerts; AI provides suggestions | Agents detect, triage, score, remediate autonomously |
 | **Decision Flow** | Sequential manual steps with AI widgets | Parallel agent pipelines with built-in governance gates |
-| **Time to Resolution** | Hours to days (human dependent) | Minutes (autonomous + approval gates) |
+| **Time to Resolution** | Hours to days (manually dependent) | Minutes (autonomous + approval gates) |
 | **Learning** | Static AI models, manual tuning | Continuous feedback loop from runbook outcomes |
 | **Governance** | Post-mortem approval (change was already made) | Pre-execution approval gates (control before action) |
-| **Scale** | Requires more humans as infrastructure grows | Scales with agents, not headcount |
+| **Scale** | Headcount grows with infrastructure | Scales with agents, not headcount |
 
 ### Agent-Native Means
 
 - **Sentinel Agent** — Classifies every anomaly the moment it's detected
 - **Librarian Agent** — Enriches with CMDB context automatically (not after a ticket is created)
-- **Risk Assessor** — Scores impact instantly; no waiting for humans to estimate
+- **Risk Assessor** — Scores impact instantly; no manual estimation delay
 - **Mechanic Agent** — Selects the best runbook based on historical outcomes
 - **Policy Broker** — Applies governance rules before execution (CAB gates for high-risk)
 - **Tool Registry** — Executes remediation with step-level abort policies
 - **Verifier Agent** — Confirms resolution; feeds learning back into the system
 
-**Each agent runs autonomously**, working incidents while humans sleep, vacation, or focus on strategic work. Yet operators retain full control through approval gates on high-risk changes.
+**Each agent runs autonomously**, working incidents around the clock so your team focuses on strategic work — not routine remediation. Operators retain full control through approval gates on high-risk changes.
 
 ---
 
@@ -160,8 +160,8 @@ Automatically triage and remediate incidents using specialized AI agents:
 6. **Tool Registry** — Executes approved runbook steps; handles step-level abort policies
 7. **Verifier Agent** — Confirms the incident is resolved; sets resolution_source
 
-### 4. **Human-in-the-Loop Governance**
-- **CAB Approval Workflow:** Halts execution for high-risk changes pending approval
+### 4. **Operator-Controlled Governance**
+- **CAB Approval Workflow:** Halts execution for high-risk changes pending operator sign-off
 - **Runbook Control:** Step-level abort policies prevent cascading failures
 - **Audit Trail:** Complete history of all decisions and actions
 - **Manual Overrides:** Operators can pause, resume, or cancel automation at any time
@@ -231,7 +231,7 @@ Axiometica AIR watches your infrastructure in real-time and autonomously manages
 2. **Watcher** detects anomalies (syscall bombs, health failures, CPU/memory/disk/network spikes, error patterns)
 3. **Storm Agent** detects correlated event bursts across multiple resources and groups them into a single parent incident — preventing redundant remediations when the root cause is shared
 4. **7-agent pipeline** triages, enriches, risk-scores, proposes, governs, executes, and verifies each incident
-5. **CAB approval queue** halts execution for human sign-off on high-risk changes; storm parents use `awaiting_manual` — the operator coordinates investigation before any remediation is attempted
+5. **CAB approval queue** halts execution for operator sign-off on high-risk changes; storm parents use `awaiting_manual` — the operator coordinates investigation before any remediation is attempted
 6. **All-clear mechanism** closes incidents when the watcher confirms the condition has normalised
 
 ---
@@ -332,7 +332,7 @@ Incidents track five separate dimensions — all stored as dedicated columns:
 | `remediation_outcome` | `succeeded` / `failed` / `aborted` / `skipped` / `pending` / `rejected` | How automation performed |
 | `resolution_source` | `automated_remediation` / `watcher_all_clear` / `manual` | What cleared the condition |
 | `all_clear_received_at` | ISO timestamp | When the watcher confirmed the condition cleared |
-| `incident_number` / `incident_number_str` | `42` / `INC0042` | Human-readable incident identifiers |
+| `incident_number` / `incident_number_str` | `42` / `INC0042` | Operator-friendly incident identifiers |
 
 **Example:** An incident with `lifecycle_state=resolved` + `remediation_outcome=aborted` + `resolution_source=watcher_all_clear` means: automation was stopped (a step timed out), but the condition cleared naturally and the watcher confirmed it.
 
@@ -436,7 +436,7 @@ docker exec agentic_os_neo4j pkill yes
 | **Incident Correlation & Storms** | ✅ | ⚠️ (manual) | ⚠️ (threshold-based) |
 | **CMDB Integration** | ✅ (Neo4j graph) | ⚠️ (static) | ❌ |
 | **eBPF Kernel Monitoring** | ✅ | ❌ | ⚠️ (agent-based) |
-| **Human-in-the-Loop Governance** | ✅ | ✅ | ❌ |
+| **Operator-Controlled Governance** | ✅ | ✅ | ❌ |
 | **Runbook Automation** | ✅ (visual editor) | ✅ (workflow builder) | ⚠️ (scripts) |
 | **Slack ChatOps** | ✅ | ⚠️ (integrations) | ✅ |
 | **Source Available** | ✅ (free for internal use) | ❌ | ✅ |
