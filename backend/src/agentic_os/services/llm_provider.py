@@ -683,7 +683,119 @@ class AnthropicProvider(LLMProvider):
             yield "\n[Stream error — please try again]"
 
 
-def get_llm_provider(provider_name: str, api_key: Optional[str] = None, model: Optional[str] = None) -> LLMProvider:
+class OllamaProvider(LLMProvider):
+    """Ollama local LLM provider — uses the OpenAI-compatible API at /v1."""
+
+    DEFAULT_BASE_URL = "http://localhost:11434"
+
+    def __init__(self, base_url: Optional[str] = None, model: str = "llama3"):
+        self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL") or self.DEFAULT_BASE_URL).rstrip("/")
+        self.model = model or "llama3"
+
+    def is_configured(self) -> bool:
+        return bool(self.base_url)
+
+    def _client(self):
+        from openai import AsyncOpenAI
+        return AsyncOpenAI(base_url=f"{self.base_url}/v1", api_key="ollama")
+
+    async def _chat(self, messages: list, max_tokens: int = 700, temperature: float = 0.3) -> Optional[str]:
+        try:
+            resp = await self._client().chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            logger.error(f"Ollama request failed: {e}", exc_info=True)
+            return None
+
+    async def generate_summary(self, incident_data: dict) -> str:
+        event_type = incident_data.get("event_type", "Unknown event")
+        resource   = incident_data.get("resource", "Unknown resource")
+        severity   = incident_data.get("severity", "Unknown")
+        impact     = incident_data.get("impact", f"Severity: {severity}")
+        prompt = (
+            f"In 3-4 professional sentences summarise this IT incident: "
+            f"event={event_type}, resource={resource}, severity={severity}, impact={impact}. "
+            f"Cover what happened, business impact, and resolution status."
+        )
+        return await self._chat([{"role": "user", "content": prompt}], max_tokens=250)
+
+    async def generate_rich_summary(self, full_context: dict) -> Dict[str, str]:
+        if not self.is_configured():
+            return {"summary": None, "technical_summary": None}
+        prompt = _build_rich_prompt(full_context)
+        raw = await self._chat(
+            [{"role": "system", "content": RICH_SUMMARY_SYSTEM_PROMPT},
+             {"role": "user",   "content": prompt}],
+            max_tokens=2000,
+        )
+        if raw is None:
+            return {"summary": None, "technical_summary": None}
+        return _parse_rich_response(raw)
+
+    async def generate_storm_hypothesis(self, storm_context: dict) -> Optional[str]:
+        if not self.is_configured():
+            return None
+        system_p, user_p = _build_storm_prompt(storm_context)
+        return await self._chat(
+            [{"role": "system", "content": system_p},
+             {"role": "user",   "content": user_p}],
+            max_tokens=350, temperature=0.2,
+        )
+
+    async def generate_agent_completion(
+        self,
+        system_prompt: str,
+        user_content: str,
+        max_tokens: int = 700,
+        temperature: float = 0.2,
+    ) -> Optional[str]:
+        if not self.is_configured():
+            return None
+        return await self._chat(
+            [{"role": "system", "content": system_prompt},
+             {"role": "user",   "content": user_content}],
+            max_tokens=max_tokens, temperature=temperature,
+        )
+
+    async def stream_agent_completion(
+        self,
+        system_prompt: str,
+        user_content: str,
+        max_tokens: int = 600,
+        temperature: float = 0.25,
+    ):
+        if not self.is_configured():
+            yield "LLM is not configured. Go to Settings → LLM to configure Ollama."
+            return
+        try:
+            stream = await self._client().chat.completions.create(
+                model=self.model,
+                messages=[{"role": "system", "content": system_prompt},
+                          {"role": "user",   "content": user_content}],
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+        except Exception as e:
+            logger.error(f"Ollama stream failed: {e}", exc_info=True)
+            yield "\n[Stream error — please try again]"
+
+
+def get_llm_provider(
+    provider_name: str,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    base_url: Optional[str] = None,
+) -> LLMProvider:
     """Factory function to get LLM provider by name"""
     provider_name = (provider_name or "openai").lower()
 
@@ -691,5 +803,7 @@ def get_llm_provider(provider_name: str, api_key: Optional[str] = None, model: O
         return OpenAIProvider(api_key=api_key, model=model or "gpt-3.5-turbo")
     elif provider_name == "anthropic":
         return AnthropicProvider(api_key=api_key, model=model or "claude-3-haiku-20240307")
+    elif provider_name == "ollama":
+        return OllamaProvider(base_url=base_url, model=model or "llama3")
     else:
         raise ValueError(f"Unknown LLM provider: {provider_name}")

@@ -2,7 +2,8 @@ import axios from 'axios'
 
 export interface LLMConfig {
   provider: string
-  api_key: string
+  api_key?: string     // required for openai/anthropic; omitted for ollama
+  base_url?: string    // required for ollama
   model?: string
 }
 
@@ -19,6 +20,7 @@ export interface SupportedProvider {
   models: string[]
   default_model: string
   description: string
+  requires_api_key: boolean
 }
 
 export const llmService = {

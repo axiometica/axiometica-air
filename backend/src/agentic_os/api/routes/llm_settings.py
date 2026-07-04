@@ -24,8 +24,9 @@ router = APIRouter(prefix="/api/llm", tags=["llm-settings"])
 
 class LLMConfig(BaseModel):
     """LLM provider configuration"""
-    provider: str  # "openai", "anthropic"
-    api_key: str
+    provider: str  # "openai", "anthropic", "ollama"
+    api_key: Optional[str] = None   # required for openai/anthropic; omitted for ollama
+    base_url: Optional[str] = None  # required for ollama; ignored for cloud providers
     model: Optional[str] = None
     insights_enabled: Optional[bool] = True
 
@@ -70,17 +71,26 @@ async def set_llm_config(config: LLMConfig):
         logger.info(f"LLM Config received: provider={config.provider}, api_key={key_preview}, model={config.model}")
 
         # Validate provider name
-        if config.provider.lower() not in ["openai", "anthropic"]:
+        if config.provider.lower() not in ["openai", "anthropic", "ollama"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unknown provider: {config.provider}. Supported: openai, anthropic"
+                detail=f"Unknown provider: {config.provider}. Supported: openai, anthropic, ollama"
             )
+
+        # ollama requires a base_url, cloud providers require an api_key
+        if config.provider.lower() == "ollama":
+            if not config.base_url:
+                raise HTTPException(status_code=400, detail="base_url is required for the ollama provider")
+        else:
+            if not config.api_key:
+                raise HTTPException(status_code=400, detail="api_key is required for cloud providers")
 
         # Update configuration
         logger.info(f"Calling set_summary_service_config with api_key={key_preview}")
         service = set_summary_service_config(
             provider_name=config.provider.lower(),
             api_key=config.api_key,
+            base_url=config.base_url,
             model=config.model,
             insights_enabled=config.insights_enabled if config.insights_enabled is not None else True,
         )
@@ -108,6 +118,7 @@ class LLMTestRequest(BaseModel):
     """Optional credentials for test-before-save flow"""
     provider: Optional[str] = None
     api_key: Optional[str] = None
+    base_url: Optional[str] = None
     model: Optional[str] = None
 
 
@@ -126,15 +137,17 @@ async def test_llm_config(body: LLMTestRequest = LLMTestRequest()):
     logger = logging.getLogger(__name__)
 
     try:
-        if body.api_key:
+        if body.api_key or body.base_url:
             # Test-before-save: use the supplied credentials without persisting
             from agentic_os.services.summary_service import SummaryService
             service = SummaryService(
                 provider_name=body.provider or "openai",
                 api_key=body.api_key,
+                base_url=body.base_url,
                 model=body.model,
             )
-            logger.info(f"Testing supplied credentials: provider={body.provider}, key={body.api_key[:10]}...")
+            key_hint = (body.api_key[:10] + "...") if body.api_key else body.base_url
+            logger.info(f"Testing supplied credentials: provider={body.provider}, credential={key_hint}")
         else:
             # Test currently saved config
             service = get_summary_service()
@@ -199,19 +212,30 @@ async def get_supported_providers():
         "providers": [
             {
                 "name": "openai",
-                "models": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
-                "default_model": "gpt-3.5-turbo",
+                "models": ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
+                "default_model": "gpt-4o",
                 "description": "OpenAI GPT models",
+                "requires_api_key": True,
             },
             {
                 "name": "anthropic",
                 "models": [
-                    "claude-3-opus-20240229",
-                    "claude-3-sonnet-20240229",
+                    "claude-opus-4-8",
+                    "claude-sonnet-4-6",
+                    "claude-haiku-4-5-20251001",
+                    "claude-3-5-sonnet-20241022",
                     "claude-3-haiku-20240307",
                 ],
-                "default_model": "claude-3-haiku-20240307",
+                "default_model": "claude-haiku-4-5-20251001",
                 "description": "Anthropic Claude models",
+                "requires_api_key": True,
+            },
+            {
+                "name": "ollama",
+                "models": ["llama3", "llama3.1", "llama3.2", "mistral", "mixtral", "qwen2.5", "phi3", "gemma2", "deepseek-r1"],
+                "default_model": "llama3",
+                "description": "Local models via Ollama",
+                "requires_api_key": False,
             },
         ]
     }

@@ -11,8 +11,9 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
   const [llmStatus, setLlmStatus]           = useState<LLMStatus | null>(null)
   const [providers, setProviders]           = useState<SupportedProvider[]>([])
   const [selectedProvider, setSelectedProvider] = useState('openai')
-  const [selectedModel, setSelectedModel]   = useState('gpt-3.5-turbo')
+  const [selectedModel, setSelectedModel]   = useState('gpt-4o')
   const [apiKey, setApiKey]                 = useState('')
+  const [baseUrl, setBaseUrl]               = useState('http://localhost:11434')
   const [insightsEnabled, setInsightsEnabled] = useState(true)
   const [insightsSaving, setInsightsSaving]   = useState(false)
   const [loading, setLoading]               = useState(false)
@@ -29,8 +30,11 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
     if (internalExpanded) { loadLLMStatus(); loadProviders() }
   }, [internalExpanded])
 
+  const isOllama = selectedProvider === 'ollama'
+  const currentProvider = providers.find(p => p.name === selectedProvider)
+
   // Reset "tested" badge whenever credentials change
-  useEffect(() => { setTestPassed(false); setTestResult(null); setError(null) }, [apiKey, selectedProvider, selectedModel])
+  useEffect(() => { setTestPassed(false); setTestResult(null); setError(null) }, [apiKey, baseUrl, selectedProvider, selectedModel])
 
   const loadLLMStatus = async () => {
     try {
@@ -51,12 +55,13 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
 
   // Step 1: Test credentials without saving
   const handleTestConfig = async () => {
-    if (!apiKey.trim()) { setError('Enter an API key first'); return }
+    if (isOllama && !baseUrl.trim()) { setError('Enter the Ollama base URL first'); return }
+    if (!isOllama && !apiKey.trim()) { setError('Enter an API key first'); return }
     try {
       setTesting(true); setTestResult(null); setError(null)
       const response = await llmService.testConfig({
         provider: selectedProvider,
-        api_key: apiKey,
+        ...(isOllama ? { base_url: baseUrl } : { api_key: apiKey }),
         model: selectedModel,
       })
       setTestResult(response.data.test_summary || 'Connection test passed!')
@@ -72,7 +77,11 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
     if (!testPassed) { setError('Test the credentials first'); return }
     try {
       setLoading(true); setError(null)
-      await llmService.setConfig({ provider: selectedProvider, api_key: apiKey, model: selectedModel })
+      await llmService.setConfig({
+        provider: selectedProvider,
+        ...(isOllama ? { base_url: baseUrl } : { api_key: apiKey }),
+        model: selectedModel,
+      })
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
       await loadLLMStatus()
@@ -130,6 +139,7 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
                   setSelectedProvider(e.target.value)
                   const p = providers.find(p => p.name === e.target.value)
                   if (p) setSelectedModel(p.default_model)
+                  setApiKey(''); setTestPassed(false); setTestResult(null); setError(null)
                 }}
                 className="w-full px-3 py-2 rounded-lg text-sm"
                 style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
@@ -153,18 +163,32 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
               </select>
             </div>
 
-            {/* API Key */}
-            <div>
-              <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">API Key</label>
-              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your API key"
-                className="w-full px-3 py-2 rounded-lg text-sm"
-                style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
-              />
-              <p style={{ color: '#7a8ba3' }} className="text-xs mt-1">
-                Your API key is stored securely in the database and persists across restarts.
-              </p>
-            </div>
+            {/* API Key / Base URL */}
+            {isOllama ? (
+              <div>
+                <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">Ollama Base URL</label>
+                <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder="http://localhost:11434"
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
+                />
+                <p style={{ color: '#7a8ba3' }} className="text-xs mt-1">
+                  URL where Ollama is running. No API key needed — model must already be pulled (<code style={{ color: '#a0aec0' }}>ollama pull {selectedModel}</code>).
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">API Key</label>
+                <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter your API key"
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ backgroundColor: '#2d3748', color: '#e8eef5', border: '1px solid #3d4557' }}
+                />
+                <p style={{ color: '#7a8ba3' }} className="text-xs mt-1">
+                  Your API key is stored securely in the database and persists across restarts.
+                </p>
+              </div>
+            )}
 
             {/* Error */}
             {error && (
@@ -229,11 +253,11 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
             {/* Action Buttons — Test first, then Save */}
             <div style={{ display: 'flex', gap: 8 }}>
               {/* Step 1: Test */}
-              <button onClick={handleTestConfig} disabled={testing || !apiKey}
+              <button onClick={handleTestConfig} disabled={testing || (isOllama ? !baseUrl : !apiKey)}
                 style={{ flex: 1, padding: '8px 12px', borderRadius: 8, fontWeight: 600, fontSize: '0.85rem',
                   backgroundColor: '#1a1f2e', color: testPassed ? '#10b981' : '#a0aec0',
                   border: testPassed ? '1px solid #10b981' : '1px solid #3d4557',
-                  opacity: testing || !apiKey ? 0.5 : 1, cursor: testing || !apiKey ? 'not-allowed' : 'pointer',
+                  opacity: testing || (isOllama ? !baseUrl : !apiKey) ? 0.5 : 1, cursor: testing || (isOllama ? !baseUrl : !apiKey) ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                 {testPassed ? <IconCheck size={14} /> : <IconRefresh size={14} className={testing ? 'animate-spin' : ''} />}
                 {testing ? 'Testing…' : testPassed ? 'Test Passed' : 'Test Connection'}
@@ -252,7 +276,10 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
             </div>
 
             <p style={{ color: '#7a8ba3' }} className="text-xs">
-              Test first to validate credentials, then Save to persist them. Used for AI-generated incident summaries.
+              {isOllama
+                ? 'Test first to verify Ollama is reachable and the model is pulled, then Save.'
+                : 'Test first to validate credentials, then Save to persist them.'}
+              {' '}Used for AI-generated incident summaries.
             </p>
           </div>
         </div>

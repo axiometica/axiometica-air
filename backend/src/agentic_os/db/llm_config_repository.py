@@ -23,6 +23,7 @@ class LLMConfigRepository:
                 "provider": config.provider,
                 "api_key": config.api_key,
                 "model": config.model,
+                "base_url": config.base_url,
                 "insights_enabled": config.insights_enabled if config.insights_enabled is not None else True,
             }
         return None
@@ -34,6 +35,7 @@ class LLMConfigRepository:
         model: str | None,
         config_key: str = "default",
         insights_enabled: bool = True,
+        base_url: str | None = None,
     ) -> dict:
         """Save or update LLM configuration"""
         existing = self.db.query(LLMConfigModel).filter(
@@ -48,6 +50,7 @@ class LLMConfigRepository:
                     provider=provider,
                     api_key=api_key,
                     model=model,
+                    base_url=base_url,
                     insights_enabled=insights_enabled,
                     updated_at=datetime.utcnow()
                 )
@@ -58,6 +61,7 @@ class LLMConfigRepository:
                 provider=provider,
                 api_key=api_key,
                 model=model,
+                base_url=base_url,
                 insights_enabled=insights_enabled,
             )
             self.db.add(config)
@@ -68,6 +72,7 @@ class LLMConfigRepository:
             "provider": provider,
             "api_key": api_key,
             "model": model,
+            "base_url": base_url,
             "insights_enabled": insights_enabled,
         }
 

@@ -711,9 +711,10 @@ class LLMConfigModel(Base):
     config_key = Column(String(100), nullable=False, unique=True, index=True)  # e.g., "default"
 
     # Provider configuration
-    provider = Column(String(50), nullable=False)  # "openai", "anthropic"
-    api_key = Column(EncryptedString(1500), nullable=True)  # Encrypted at rest (Fernet, see security/crypto.py)
-    model = Column(String(100), nullable=True)    # e.g., "gpt-3.5-turbo"
+    provider = Column(String(50), nullable=False)  # "openai", "anthropic", "ollama"
+    api_key = Column(EncryptedString(1500), nullable=True)  # Encrypted at rest; null for local providers
+    model = Column(String(100), nullable=True)    # e.g., "gpt-3.5-turbo", "llama3"
+    base_url = Column(String(500), nullable=True)  # For local providers (e.g. Ollama: http://localhost:11434)
 
     # Feature flags
     insights_enabled = Column(Boolean, nullable=False, default=True, server_default='true')

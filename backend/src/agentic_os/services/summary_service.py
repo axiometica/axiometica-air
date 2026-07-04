@@ -18,9 +18,9 @@ class SummaryService:
     # In-memory cache for summaries (in production, use Redis or database)
     _cache = {}
 
-    def __init__(self, provider_name: str = "openai", api_key: Optional[str] = None, model: Optional[str] = None):
+    def __init__(self, provider_name: str = "openai", api_key: Optional[str] = None, model: Optional[str] = None, base_url: Optional[str] = None):
         """Initialize summary service with LLM provider"""
-        self.provider: LLMProvider = get_llm_provider(provider_name, api_key, model)
+        self.provider: LLMProvider = get_llm_provider(provider_name, api_key, model, base_url)
         self.provider_name = provider_name
         self.model = model
 
@@ -237,6 +237,7 @@ def get_summary_service(
                         provider_name=db_config.get("provider", provider_name),
                         api_key=db_config.get("api_key", api_key),
                         model=db_config.get("model", model),
+                        base_url=db_config.get("base_url"),
                     )
                 else:
                     _summary_service = SummaryService(provider_name, api_key, model)
@@ -254,11 +255,12 @@ def set_summary_service_config(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     insights_enabled: bool = True,
+    base_url: Optional[str] = None,
 ) -> SummaryService:
     """Update summary service configuration and save to database"""
     global _summary_service, _insights_enabled
 
-    _summary_service = SummaryService(provider_name, api_key, model)
+    _summary_service = SummaryService(provider_name, api_key, model, base_url)
     _insights_enabled = insights_enabled
 
     try:
@@ -268,7 +270,7 @@ def set_summary_service_config(
         db = SessionLocal()
         try:
             repo = LLMConfigRepository(db)
-            repo.save_config(provider_name, api_key, model, "default", insights_enabled=insights_enabled)
+            repo.save_config(provider_name, api_key, model, "default", insights_enabled=insights_enabled, base_url=base_url)
             logger.info(f"LLM config saved to database: {provider_name}, insights_enabled={insights_enabled}")
         finally:
             db.close()
