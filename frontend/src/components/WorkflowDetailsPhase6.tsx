@@ -399,14 +399,19 @@ function parseHighlights(raw: string): HlSegment[] {
 }
 
 function HighlightedLine({ text }: { text: string }) {
-  const segs = parseHighlights(text)
+  // Split on **bold** markers first, then apply colour highlights within each segment
+  const boldParts = text.split(/\*\*/)
   return (
     <>
-      {segs.map((s, i) =>
-        s.color
-          ? <span key={i} style={{ color: s.color, fontWeight: s.bold ? 700 : 400 }}>{s.text}</span>
-          : <span key={i}>{s.text}</span>
-      )}
+      {boldParts.map((part, idx) => {
+        const isBold = idx % 2 === 1
+        const segs = parseHighlights(part)
+        return segs.map((s, i) =>
+          s.color
+            ? <span key={`${idx}-${i}`} style={{ color: s.color, fontWeight: (isBold || s.bold) ? 700 : 400 }}>{s.text}</span>
+            : <span key={`${idx}-${i}`} style={{ fontWeight: isBold ? 700 : 400 }}>{s.text}</span>
+        )
+      })}
     </>
   )
 }
@@ -445,8 +450,9 @@ function TechnicalDigestCard({ text }: { text: string }) {
 
           if (!trimmed) return <div key={i} style={{ height: '0.5rem' }} />
 
-          const cleanHeader = trimmed.replace(/^#{1,3}\s*/, '').replace(/:$/, '')
-          if (SECTION_RE.test(trimmed)) {
+          const stripped    = trimmed.replace(/\*\*/g, '')
+          const cleanHeader = stripped.replace(/^#{1,3}\s*/, '').replace(/:$/, '')
+          if (SECTION_RE.test(stripped)) {
             return (
               <p
                 key={i}
