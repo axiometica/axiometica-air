@@ -197,11 +197,11 @@ function NotificationTeamArgCombobox({ value, onChange }: { value: string; onCha
       {open && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: '#161b28', border: '1px solid #2a3548', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,.5)', maxHeight: 200, overflowY: 'auto', marginTop: 2 }}>
           {teams.length === 0 ? (
-            <div style={{ padding: '8px 11px', fontSize: 10.5, color: '#4a5068' }}>
+            <div style={{ padding: '8px 11px', fontSize: 10.5, color: '#64748b' }}>
               No notification teams configured yet (Settings → Notification Teams)
             </div>
           ) : filtered.length === 0 ? (
-            <div style={{ padding: '8px 11px', fontSize: 10.5, color: '#4a5068' }}>No matching teams</div>
+            <div style={{ padding: '8px 11px', fontSize: 10.5, color: '#64748b' }}>No matching teams</div>
           ) : (
             filtered.map(t => (
               <div key={t.name} onMouseDown={() => { setQuery(t.name); onChange(t.name); setOpen(false); }}
@@ -268,14 +268,14 @@ function ToolCombobox({
           placeholder="search tools…"
         />
         <button type="button" onClick={() => setOpen(o => !o)}
-          style={{ background: '#1e2537', border: '1px solid #2a3548', borderLeft: 'none', borderRadius: '0 5px 5px 0', padding: '6px 7px', cursor: 'pointer', color: '#4a5068', lineHeight: 1, fontSize: 11 }}>
+          style={{ background: '#1e2537', border: '1px solid #2a3548', borderLeft: 'none', borderRadius: '0 5px 5px 0', padding: '6px 7px', cursor: 'pointer', color: '#64748b', lineHeight: 1, fontSize: 11 }}>
           ▾
         </button>
       </div>
       {open && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: '#161b28', border: '1px solid #2a3548', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,.5)', maxHeight: 280, overflowY: 'auto', marginTop: 2 }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: '10px 12px', fontSize: 11, color: '#4a5068' }}>
+            <div style={{ padding: '10px 12px', fontSize: 11, color: '#64748b' }}>
               {approvedActions.length === 0 ? 'Loading tools…' : 'No matching tools'}
             </div>
           ) : (
@@ -352,7 +352,7 @@ function VariableHelper({
 
   if (upstreamNodes.length === 0) {
     return (
-      <div style={{ fontSize: 10, color: '#334155', padding: '8px 0', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 10, color: '#64748b', padding: '8px 0', lineHeight: 1.6 }}>
         Connect diagnostic or action steps upstream of this step to see available variables.
       </div>
     );
@@ -368,12 +368,12 @@ function VariableHelper({
 
         return (
           <div key={n.id} style={{ background: '#13161f', border: '1px solid #1e2231', borderRadius: 6, padding: '8px 10px' }}>
-            <div style={{ fontSize: 10, color: '#475569', fontFamily: 'monospace', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontSize: 10, color: '#64748b', fontFamily: 'monospace', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ color: '#7c85a0', fontWeight: 600 }}>{n.data.name || n.id}</span>
-              {tool && <span style={{ color: '#334155' }}>· {tool}</span>}
+              {tool && <span style={{ color: '#64748b' }}>· {tool}</span>}
             </div>
             {allVars.length === 0 ? (
-              <div style={{ fontSize: 10, color: '#334155' }}>No known outputs for this tool</div>
+              <div style={{ fontSize: 10, color: '#64748b' }}>No known outputs for this tool</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {allVars.map(v => {
@@ -391,8 +391,8 @@ function VariableHelper({
                         style={{ fontFamily: 'monospace', fontSize: 10, color: '#60a5fa', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: 4, padding: '2px 6px', cursor: 'grab', flexShrink: 0, whiteSpace: 'nowrap', userSelect: 'none' }}>
                         ⠿ {varRef}
                       </button>
-                      <span style={{ fontSize: 9, color: '#334155', flexShrink: 0, background: '#1e2231', borderRadius: 3, padding: '1px 4px', fontFamily: 'monospace' }}>{v.type}</span>
-                      <span style={{ fontSize: 9, color: '#4a5068', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.desc}</span>
+                      <span style={{ fontSize: 9, color: '#64748b', flexShrink: 0, background: '#1e2231', borderRadius: 3, padding: '1px 4px', fontFamily: 'monospace' }}>{v.type}</span>
+                      <span style={{ fontSize: 9, color: '#64748b', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.desc}</span>
                     </div>
                   );
                 })}
@@ -403,16 +403,16 @@ function VariableHelper({
       })}
 
       {/* Condition syntax hint */}
-      <div style={{ fontSize: 9, color: '#334155', lineHeight: 1.7, borderTop: '1px solid #1e2231', paddingTop: 6 }}>
-        <span style={{ color: '#475569', fontWeight: 600 }}>Syntax: </span>
+      <div style={{ fontSize: 9, color: '#475569', lineHeight: 1.7, borderTop: '1px solid #1e2231', paddingTop: 6 }}>
+        <span style={{ color: '#64748b', fontWeight: 600 }}>Syntax: </span>
         <code style={{ color: '#60a5fa' }}>step_id.variable</code>
-        <span style={{ color: '#334155' }}> operator </span>
+        <span style={{ color: '#64748b' }}> operator </span>
         <code style={{ color: '#7c85a0' }}>value</code>
         <br />
-        <span style={{ color: '#334155' }}>Operators: </span>
+        <span style={{ color: '#64748b' }}>Operators: </span>
         <code style={{ color: '#7c85a0' }}>{'== != > >= < <='}</code>
         <br />
-        <span style={{ color: '#475569', fontWeight: 600 }}>Examples:</span><br />
+        <span style={{ color: '#64748b', fontWeight: 600 }}>Examples:</span><br />
         <code style={{ color: '#94a3b8' }}>diag_1.error_count == 0</code><br />
         <code style={{ color: '#94a3b8' }}>diag_1.disk_percent &gt; 80</code><br />
         <code style={{ color: '#94a3b8' }}>diag_1.has_errors</code>
@@ -438,7 +438,7 @@ function MetricHelper({
 
   return (
     <div style={{ marginTop: 6, background: '#13161f', border: '1px solid #1e2231', borderRadius: 6, padding: '7px 9px' }}>
-      <div style={{ fontSize: 9, color: '#475569', fontWeight: 700, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+      <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.08em' }}>
         Available metrics — click to insert
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -469,7 +469,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
   if (!node) {
     return (
       <div style={panelStyle}>
-        <div style={{ padding: 24, color: '#334155', fontSize: 12, textAlign: 'center', marginTop: 40, lineHeight: 1.6 }}>
+        <div style={{ padding: 24, color: '#475569', fontSize: 12, textAlign: 'center', marginTop: 40, lineHeight: 1.6 }}>
           Click any node to edit its properties
         </div>
       </div>
@@ -564,7 +564,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
           )}
         </div>
         <div style={{ fontSize: 10, color: '#7c85a0', marginTop: 4 }}>
-          ID: <span style={{ fontFamily: 'monospace', color: '#4a5068' }}>{node.id}</span>
+          ID: <span style={{ fontFamily: 'monospace', color: '#64748b' }}>{node.id}</span>
         </div>
       </div>
 
@@ -588,7 +588,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
               onChange={e => set({ duration_seconds: e.target.value ? Number(e.target.value) : undefined })}
               placeholder="e.g. 30"
             />
-            <div style={{ fontSize: 10, color: '#4a5068', marginTop: 3 }}>Runbook pauses here for this many seconds before continuing</div>
+            <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>Runbook pauses here for this many seconds before continuing</div>
           </Field>
         )}
 
@@ -600,7 +600,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
               <option value="escalated">Escalated</option>
               <option value="acknowledged">Acknowledged</option>
             </select>
-            <div style={{ fontSize: 10, color: '#4a5068', marginTop: 3 }}>
+            <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>
               Only runs if every step before it succeeded — verification failing aborts the
               runbook before reaching this step, so no condition is needed here.
             </div>
@@ -626,7 +626,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
           <Field label="Retry on failure">
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 9, color: '#475569', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.06em' }}>Attempts</div>
+                <div style={{ fontSize: 9, color: '#64748b', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.06em' }}>Attempts</div>
                 <input
                   style={inputSt}
                   type="number"
@@ -638,7 +638,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
                 />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 9, color: '#475569', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.06em' }}>Delay (s)</div>
+                <div style={{ fontSize: 9, color: '#64748b', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.06em' }}>Delay (s)</div>
                 <input
                   style={inputSt}
                   type="number"
@@ -649,7 +649,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
                 />
               </div>
             </div>
-            <div style={{ fontSize: 10, color: '#4a5068', marginTop: 3 }}>Re-run this step up to N times before marking failed</div>
+            <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>Re-run this step up to N times before marking failed</div>
           </Field>
         )}
 
@@ -670,7 +670,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
                 }}
                 placeholder="e.g. diag_1.error_count == 0 — or drag a variable pill here"
               />
-              <div style={{ fontSize: 9, color: '#334155', marginTop: 3 }}>
+              <div style={{ fontSize: 9, color: '#64748b', marginTop: 3 }}>
                 true → right handle &nbsp;·&nbsp; false → left handle
               </div>
               {validateCondition(d.condition || '', allNodes, approvedActions).map((w, i) => (
@@ -699,11 +699,11 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
                           {targetNode?.data?.name || edge.target}
                         </span>
                         {targetNode?.data?.name && (
-                          <span style={{ fontSize: 10, color: '#475569', fontFamily: 'monospace' }}>({edge.target})</span>
+                          <span style={{ fontSize: 10, color: '#64748b', fontFamily: 'monospace' }}>({edge.target})</span>
                         )}
                       </>
                     ) : (
-                      <span style={{ fontSize: 10, color: '#334155', fontStyle: 'italic' }}>
+                      <span style={{ fontSize: 10, color: '#475569', fontStyle: 'italic' }}>
                         Not connected — drag from the {handleDesc} handle
                       </span>
                     )}
@@ -748,7 +748,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
             {Object.entries(d.args || {}).map(([k, v]) => (
               <div key={k} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
                 <input style={{ ...inputSt, flex: 1, fontFamily: 'monospace', fontSize: 10.5 }} value={k} readOnly />
-                <span style={{ color: '#4a5068' }}>→</span>
+                <span style={{ color: '#64748b' }}>→</span>
                 {k === 'team' ? (
                   <NotificationTeamArgCombobox
                     value={String(v)}
@@ -783,7 +783,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
             </div>
             {Object.keys(d.args || {}).length > 0 && (
               <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 9, color: '#4a5068', marginBottom: 4 }}>
+                <div style={{ fontSize: 9, color: '#64748b', marginBottom: 4 }}>
                   {focusedArgKey
                     ? <>Inserting into <code style={{ color: '#60a5fa' }}>{focusedArgKey}</code> — click a field above to switch, or drag a pill directly onto any arg.</>
                     : 'Click an arg value above, then click a variable below to insert it there — or drag a pill directly onto any arg.'}
@@ -800,12 +800,12 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
         {(d.stepType === 'diagnostic' || d.stepType === 'action' || d.stepType === 'verification') &&
           d.tool && getAutoOutputs(d.tool, approvedActions).length > 0 && (
           <Field label="Output">
-            <div style={{ fontSize: 9, color: '#334155', background: '#0d0f14', border: '1px solid #1e2231', borderRadius: 4, padding: '5px 8px', lineHeight: 1.6 }}>
-              <span style={{ color: '#475569', fontWeight: 700 }}>Auto-parsed: </span>
+            <div style={{ fontSize: 9, color: '#64748b', background: '#0d0f14', border: '1px solid #1e2231', borderRadius: 4, padding: '5px 8px', lineHeight: 1.6 }}>
+              <span style={{ color: '#64748b', fontWeight: 700 }}>Auto-parsed: </span>
               {getAutoOutputs(d.tool, approvedActions).map(v => (
                 <span key={v.name} style={{ color: '#60a5fa', fontFamily: 'monospace' }}>{v.name}</span>
-              )).reduce((acc: any[], el, i, arr) => [...acc, el, i < arr.length - 1 ? <span key={`s${i}`} style={{ color: '#334155' }}>, </span> : null], [])}
-              <span style={{ color: '#334155' }}> — usable in decisions/run_if as {`{step_id}.{field}`}</span>
+              )).reduce((acc: any[], el, i, arr) => [...acc, el, i < arr.length - 1 ? <span key={`s${i}`} style={{ color: '#64748b' }}>, </span> : null], [])}
+              <span style={{ color: '#64748b' }}> — usable in decisions/run_if as {`{step_id}.{field}`}</span>
             </div>
           </Field>
         )}
@@ -826,7 +826,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
               }}
               placeholder="e.g. step_1.disk_percent <= 90 — or drag a variable pill here"
             />
-            <div style={{ fontSize: 10, color: '#4a5068', marginTop: 3 }}>Step is skipped if condition is false</div>
+            <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>Step is skipped if condition is false</div>
             {validateCondition(d.run_if || '', allNodes, approvedActions).map((w, i) => (
               <div key={i} style={{ fontSize: 9, color: '#f59e0b', marginTop: 3, display: 'flex', gap: 4, alignItems: 'flex-start' }}>
                 <span style={{ flexShrink: 0 }}>⚠</span><span>{w}</span>
@@ -865,7 +865,7 @@ export function PropertiesPanel({ node, allNodeIds, allNodes, edges, onChange, o
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 9, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 5 }}>{label}</div>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#4d6080', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 5 }}>{label}</div>
       {children}
     </div>
   );

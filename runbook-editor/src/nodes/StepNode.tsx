@@ -5,8 +5,8 @@ type NodeProps<T> = { data: T; selected?: boolean; id: string };
 
 // One accent colour per type — everything else is neutral dark
 const ACCENT: Record<StepType, string> = {
-  start:           '#64748b',
-  end:             '#64748b',
+  start:           '#94a3b8',
+  end:             '#94a3b8',
   diagnostic:      '#3b82f6',
   action:          '#f59e0b',
   verification:    '#10b981',
@@ -157,7 +157,7 @@ export function StepNode({ data, selected }: NodeProps<RunbookStepData>) {
         {/* Output capture */}
         {data.outputCapture && Object.keys(data.outputCapture).length > 0 && (
           <div style={{ marginTop: 7, background: '#0d1018', border: '1px solid #1e2a3a', borderRadius: 4, padding: '5px 8px' }}>
-            <div style={{ fontSize: 9, color: '#334155', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 3 }}>Captures</div>
+            <div style={{ fontSize: 9, color: '#4d6080', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 3 }}>Captures</div>
             {Object.entries(data.outputCapture).map(([k]) => (
               <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, marginBottom: 2 }}>
                 <span style={{ width: 4, height: 4, borderRadius: '50%', background: accent, flexShrink: 0, display: 'inline-block' }} />
@@ -196,7 +196,7 @@ function BranchChip({ label, color, bg }: { label: string; color: string; bg: st
 
 function Row({ label, value, color = '#94a3b8' }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ fontSize: 11, color: '#475569', display: 'flex', gap: 4, marginBottom: 3, flexWrap: 'wrap' }}>
+    <div style={{ fontSize: 11, color: '#64748b', display: 'flex', gap: 4, marginBottom: 3, flexWrap: 'wrap' }}>
       {label}:&nbsp;<span style={{ fontFamily: 'monospace', fontSize: 10.5, color }}>{value}</span>
     </div>
   );

@@ -213,7 +213,7 @@ export function EventTypeCombobox({
                   style={{
                     fontFamily: 'monospace',
                     fontSize: 9,
-                    color: '#475569',
+                    color: '#64748b',
                     marginTop: 1,
                     paddingLeft: 2,
                   }}
@@ -336,7 +336,7 @@ export function Sidebar({
           <div style={{ fontSize: 10, color: '#ef4444', marginTop: 3 }}>Event type is required</div>
         )}
         {!eventTypeError && triggerType && (
-          <div style={{ fontSize: 9, color: '#334155', marginTop: 3, fontFamily: 'monospace',
+          <div style={{ fontSize: 9, color: '#64748b', marginTop: 3, fontFamily: 'monospace',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {triggerType}
           </div>
@@ -380,7 +380,7 @@ export function Sidebar({
             background: 'transparent',
             border: '1px solid #1e2a3a',
             borderRadius: 5,
-            color: '#475569',
+            color: '#64748b',
             fontSize: 10,
             fontWeight: 600,
             letterSpacing: '.06em',
@@ -424,7 +424,7 @@ export function Sidebar({
                 placeholder="blank = catch-all"
                 style={{ ...inputSt, fontSize: 11 }}
               />
-              <div style={{ fontSize: 9, color: '#334155', marginTop: 3 }}>
+              <div style={{ fontSize: 9, color: '#64748b', marginTop: 3 }}>
                 Narrow this runbook to a specific service
               </div>
             </div>
@@ -443,7 +443,7 @@ export function Sidebar({
                 <option value={4}>4 — High (data impact)</option>
                 <option value={5}>5 — Critical (destructive)</option>
               </select>
-              <div style={{ fontSize: 9, color: '#334155', marginTop: 3 }}>
+              <div style={{ fontSize: 9, color: '#64748b', marginTop: 3 }}>
                 Governs approval requirements in policy rules
               </div>
             </div>
@@ -489,7 +489,7 @@ export function Sidebar({
             <span style={{ width: 3, height: 28, borderRadius: 2, background: s.color, flexShrink: 0, display: 'inline-block' }} />
             <div>
               <div style={{ fontSize: 12, color: '#cbd5e1', fontWeight: 500 }}>{s.label}</div>
-              <div style={{ fontSize: 10, color: '#475569' }}>{s.sub}</div>
+              <div style={{ fontSize: 10, color: '#64748b' }}>{s.sub}</div>
             </div>
           </div>
         ))}
@@ -508,12 +508,12 @@ export function Sidebar({
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {q.tool}
               </div>
-              <div style={{ fontSize: 10, color: '#334155' }}>{q.description || q.type}</div>
+              <div style={{ fontSize: 10, color: '#64748b' }}>{q.description || q.type}</div>
             </div>
           </div>
         ))}
         {approvedActions.length > 10 && (
-          <div style={{ fontSize: 10, color: '#334155', padding: '4px 2px' }}>
+          <div style={{ fontSize: 10, color: '#64748b', padding: '4px 2px' }}>
             + {approvedActions.length - 10} more — search in properties panel
           </div>
         )}
@@ -545,7 +545,7 @@ function SectionLabel({
       style={{
         fontSize: 9,
         fontWeight: 700,
-        color: '#334155',
+        color: '#4d6080',
         textTransform: 'uppercase',
         letterSpacing: '.1em',
         marginBottom: 7,
@@ -564,7 +564,7 @@ function StatRow({ label, value }: { label: string; value: number }) {
         display: 'flex',
         justifyContent: 'space-between',
         fontSize: 11,
-        color: '#475569',
+        color: '#64748b',
         marginBottom: 2,
       }}
     >

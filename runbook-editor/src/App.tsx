@@ -328,7 +328,7 @@ function parseRunbookJSON(text: string): ImportResult {
       const eid = `e-${prevId}-${step.id}`;
       if (!seen.has(eid)) {
         seen.add(eid);
-        newEdges.push({ id: eid, source: prevId, target: step.id, style: { stroke: '#2d3450', strokeWidth: 2 } });
+        newEdges.push({ id: eid, source: prevId, target: step.id, style: { stroke: '#3d4f6e', strokeWidth: 2 } });
       }
     }
     if (step.type === 'decision') {
@@ -338,7 +338,7 @@ function parseRunbookJSON(text: string): ImportResult {
       }
       if (step.on_false && stepIds.has(step.on_false)) {
         const id = `e-${step.id}-false`;
-        if (!seen.has(id)) { seen.add(id); newEdges.push({ id, source: step.id, target: step.on_false, sourceHandle: 'false', style: { stroke: '#f43f5e', strokeWidth: 2, strokeDasharray: '5 3' }, label: 'false', labelStyle: { fill: '#f43f5e', fontSize: 10 }, labelBgStyle: { fill: '#3d0a14' } }); }
+        if (!seen.has(id)) { seen.add(id); newEdges.push({ id, source: step.id, target: step.on_false, sourceHandle: 'false', style: { stroke: '#f43f5e', strokeWidth: 2.5, strokeDasharray: '8 4' }, label: 'false', labelStyle: { fill: '#f43f5e', fontSize: 10 }, labelBgStyle: { fill: '#3d0a14' } }); }
       }
     }
   });
@@ -383,7 +383,7 @@ function runSimulation(
 ) {
   const steps = nodes.filter(n => !['start', 'end'].includes(n.data.stepType));
   setNodes((ns: Node<RunbookStepData>[]) => ns.map(n => ({ ...n, data: { ...n.data, status: ['start','end'].includes(n.data.stepType) ? undefined : 'pending' as const, liveOutput: {} } })));
-  setEdges((es: Edge[]) => es.map(e => ({ ...e, animated: false, style: { ...e.style, opacity: 0.2, strokeWidth: 1.5 } })));
+  setEdges((es: Edge[]) => es.map(e => ({ ...e, animated: false, style: { ...e.style, opacity: 0.35, strokeWidth: 1.5 } })));
   let delay = 0;
   steps.forEach((node, idx) => {
     delay += 550;
@@ -615,7 +615,7 @@ export default function App() {
               const id = e.id || `e-${e.source}-${e.target}${sh ? '-' + sh : ''}`;
               return {
                 ...e, id, sourceHandle: sh,
-                style: { stroke: sh === 'true' ? '#10b981' : sh === 'false' ? '#f43f5e' : '#2d3450', strokeWidth: 2, strokeDasharray: sh === 'false' ? '5 3' : undefined },
+                style: { stroke: sh === 'true' ? '#10b981' : sh === 'false' ? '#f43f5e' : '#3d4f6e', strokeWidth: sh === 'false' ? 2.5 : 2, strokeDasharray: sh === 'false' ? '8 4' : undefined },
                 label:        sh === 'true' ? 'true' : sh === 'false' ? 'false' : '',
                 labelStyle:   { fill: sh === 'true' ? '#10b981' : sh === 'false' ? '#f43f5e' : '#7c85a0', fontSize: 10 },
                 labelBgStyle: { fill: sh === 'true' ? '#0d3025' : sh === 'false' ? '#3d0a14' : '#13161f' },
@@ -1292,7 +1292,7 @@ export default function App() {
               AI
             </span>
           )}
-          {editingId && <span style={{ fontSize: 10, color: '#4a5068', fontWeight: 400, fontFamily: 'monospace' }}>#{editingId.slice(0,8)}</span>}
+          {editingId && <span style={{ fontSize: 10, color: '#64748b', fontWeight: 400, fontFamily: 'monospace' }}>#{editingId.slice(0,8)}</span>}
         </div>
         <div style={{ background: '#1e2231', border: '1px solid #2d3450', color: '#7c85a0', fontSize: 11, padding: '2px 8px', borderRadius: 4, fontFamily: 'monospace' }}>{triggerType || '—'}</div>
         <div style={{ display: 'flex', gap: 2, background: '#0d0f14', border: '1px solid #1e2231', borderRadius: 7, padding: 3 }}>
@@ -1411,7 +1411,7 @@ export default function App() {
 
             {/* Watcher dropdown */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: '#4a5068' }}>Watcher:</span>
+              <span style={{ fontSize: 11, color: '#64748b' }}>Watcher:</span>
               {watchers.length > 0 ? (
                 <select value={liveWatcher} onChange={e => { const w = watchers.find(w => w.watcher_name === e.target.value); setLiveWatcher(e.target.value); if (w) setLiveTarget(w.sentinel_container || ''); }}
                   style={{ background: '#161b28', border: '1px solid #2a3548', borderRadius: 5, padding: '4px 8px', color: '#e2e8f0', fontSize: 12, outline: 'none', cursor: 'pointer' }}>
@@ -1425,14 +1425,14 @@ export default function App() {
 
             {/* Target container */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: '#4a5068' }}>Target:</span>
+              <span style={{ fontSize: 11, color: '#64748b' }}>Target:</span>
               <input value={liveTarget} onChange={e => setLiveTarget(e.target.value)} placeholder="container name"
                 style={{ width: 200, background: '#161b28', border: '1px solid #2a3548', borderRadius: 5, padding: '4px 8px', color: '#e2e8f0', fontSize: 12, fontFamily: 'monospace', outline: 'none' }} />
             </div>
 
             {/* On-failure policy */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: '#4a5068', flexShrink: 0 }}>On fail:</span>
+              <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0 }}>On fail:</span>
               <select value={onStepFailure} onChange={e => setOnStepFailure(e.target.value as typeof onStepFailure)}
                 style={{ background: '#161b28', border: '1px solid #2a3548', borderRadius: 5, padding: '4px 8px', color: onStepFailure === 'continue' ? '#7c85a0' : onStepFailure === 'stop_actions' ? '#f59e0b' : '#f43f5e', fontSize: 11, outline: 'none', cursor: 'pointer' }}>
                 <option value="continue">Continue all</option>
@@ -1465,26 +1465,26 @@ export default function App() {
           {/* Row 2: context parameter fields (collapsible) */}
           {showCtxFields && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 20px 8px', borderTop: '1px solid #1a1d26', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 10, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', flexShrink: 0 }}>Incident Context</span>
+              <span style={{ fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', flexShrink: 0 }}>Incident Context</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ fontSize: 11, color: '#4a5068' }}>service_url</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>service_url</span>
                 <input value={ctxServiceUrl} onChange={e => setCtxServiceUrl(e.target.value)}
                   placeholder="http://my-service:8080"
                   style={{ width: 200, background: '#161b28', border: '1px solid #2a3548', borderRadius: 5, padding: '3px 7px', color: '#e2e8f0', fontSize: 11, fontFamily: 'monospace', outline: 'none' }} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ fontSize: 11, color: '#4a5068' }}>process_name</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>process_name</span>
                 <input value={ctxProcessName} onChange={e => setCtxProcessName(e.target.value)}
                   placeholder="nginx"
                   style={{ width: 130, background: '#161b28', border: '1px solid #2a3548', borderRadius: 5, padding: '3px 7px', color: '#e2e8f0', fontSize: 11, fontFamily: 'monospace', outline: 'none' }} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ fontSize: 11, color: '#4a5068' }}>anomaly_process</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>anomaly_process</span>
                 <input value={ctxAnomalyProc} onChange={e => setCtxAnomalyProc(e.target.value)}
                   placeholder="python3"
                   style={{ width: 130, background: '#161b28', border: '1px solid #2a3548', borderRadius: 5, padding: '3px 7px', color: '#e2e8f0', fontSize: 11, fontFamily: 'monospace', outline: 'none' }} />
               </div>
-              <span style={{ fontSize: 10, color: '#334155' }}>These fill {`{service_url}`}, {`{process_name}`}, {`{{top_process_name}}`} placeholders in step args</span>
+              <span style={{ fontSize: 10, color: '#475569' }}>These fill {`{service_url}`}, {`{process_name}`}, {`{{top_process_name}}`} placeholders in step args</span>
             </div>
           )}
         </div>
@@ -1519,7 +1519,7 @@ export default function App() {
                 onDrop={onDrop} onDragOver={onDragOver} onInit={setRfInstance}
                 nodeTypes={nodeTypes}
                 style={{ background: '#0d0f14' }}
-                defaultEdgeOptions={{ style: { stroke: '#2d3450', strokeWidth: 2 } }}
+                defaultEdgeOptions={{ style: { stroke: '#3d4f6e', strokeWidth: 2 } }}
               >
                 <Background variant={BackgroundVariant.Dots} color="#1e2231" gap={24} size={1} />
                 <Controls style={{ background: '#13161f', border: '1px solid #1e2231', borderRadius: 8 }} />
@@ -1528,7 +1528,7 @@ export default function App() {
                     const t = (n as Node<RunbookStepData>).data?.stepType;
                     return t === 'diagnostic' ? '#1e3a5f' : t === 'action' ? '#3d2800' : t === 'verification' ? '#0d3025' : t === 'decision' ? '#3d0a14' : '#2e1a5c';
                   }} />
-                <Panel position="top-right" style={{ background: '#13161f', border: '1px solid #1e2231', borderRadius: 8, padding: '7px 12px', fontSize: 11, color: '#4a5068' }}>
+                <Panel position="top-right" style={{ background: '#13161f', border: '1px solid #1e2231', borderRadius: 8, padding: '7px 12px', fontSize: 11, color: '#64748b' }}>
                   Drag to add · Click to edit · Del to delete · Dbl-click edge to remove · Ctrl+Z undo
                 </Panel>
               </ReactFlow>
@@ -1598,7 +1598,7 @@ export default function App() {
 
             {/* description */}
             <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>What do you want the runbook to handle?</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>What do you want the runbook to handle?</div>
               <textarea
                 value={genDesc}
                 onChange={e => { setGenDesc(e.target.value); setGenError(''); }}
@@ -1612,11 +1612,11 @@ export default function App() {
             {/* optional fields row */}
             <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
               <div style={{ flex: 2 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 5 }}>Event Type (optional)</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 5 }}>Event Type (optional)</div>
                 <EventTypeCombobox value={triggerType} onChange={setTriggerType} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 5 }}>Platform</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 5 }}>Platform</div>
                 <select value={platform} onChange={e => setPlatform(e.target.value)}
                   style={{ width: '100%', background: '#161b28', border: '1px solid #2a3548', borderRadius: 6, padding: '7px 10px', fontSize: 11, color: '#e2e8f0', outline: 'none', cursor: 'pointer' }}>
                   <option value="any">any</option>
@@ -1693,7 +1693,7 @@ function StepRow({ r }: { r: StepResult }) {
         <span style={{ fontSize: 9, fontWeight: 700, color: TYPE_COLOR[r.step_type] || '#7c85a0', textTransform: 'uppercase', letterSpacing: '.07em', flexShrink: 0 }}>
           {r.step_type}
         </span>
-        <span style={{ fontSize: 9, color: '#334155', fontFamily: 'monospace', flexShrink: 0 }}>{r.elapsed_ms}ms</span>
+        <span style={{ fontSize: 9, color: '#475569', fontFamily: 'monospace', flexShrink: 0 }}>{r.elapsed_ms}ms</span>
       </div>
 
       {(r.skip_reason || (r.message && !isDryRun)) && (
@@ -1707,7 +1707,7 @@ function StepRow({ r }: { r: StepResult }) {
           {Object.entries(r.structured.resolved_args as Record<string, unknown>).map(([k, v]) => (
             <div key={k} style={{ fontSize: 10, fontFamily: 'monospace' }}>
               <span style={{ color: '#f59e0b' }}>{k}</span>
-              <span style={{ color: '#4a5068' }}> = </span>
+              <span style={{ color: '#64748b' }}> = </span>
               <span style={{ color: '#fcd34d' }}>{String(v)}</span>
             </div>
           ))}
@@ -1727,7 +1727,7 @@ function StepRow({ r }: { r: StepResult }) {
           <div style={{ marginTop: 4, fontSize: 10, fontFamily: 'monospace', color: '#94a3b8', background: '#0a100d', border: '1px solid #1e2a3a', borderRadius: 4, padding: '4px 7px', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
             {visible}
             {(hidden > 0 || r.truncated) && (
-              <div style={{ marginTop: 3, color: '#475569', fontStyle: 'italic', fontFamily: 'sans-serif', fontSize: 9 }}>
+              <div style={{ marginTop: 3, color: '#64748b', fontStyle: 'italic', fontFamily: 'sans-serif', fontSize: 9 }}>
                 {hidden > 0 ? `… ${hidden} more line${hidden === 1 ? '' : 's'}` : '… output truncated'}
               </div>
             )}
@@ -1739,7 +1739,7 @@ function StepRow({ r }: { r: StepResult }) {
           {Object.entries(r.structured).map(([k, v]) => (
             <div key={k} style={{ fontSize: 10, fontFamily: 'monospace' }}>
               <span style={{ color: '#3b82f6' }}>{k}</span>
-              <span style={{ color: '#4a5068' }}> = </span>
+              <span style={{ color: '#64748b' }}> = </span>
               <span style={{ color: '#10b981' }}>{String(v)}</span>
             </div>
           ))}
@@ -1767,7 +1767,7 @@ function RunningRow({ step }: { step: StepResult }) {
         </span>
       </div>
       {step.tool && (
-        <div style={{ fontSize: 10, color: '#4a5068', marginTop: 3, fontFamily: 'monospace', paddingLeft: 20 }}>
+        <div style={{ fontSize: 10, color: '#64748b', marginTop: 3, fontFamily: 'monospace', paddingLeft: 20 }}>
           {step.tool}
         </div>
       )}
@@ -1808,7 +1808,7 @@ function LiveResultPanel({ result, displayedResults, runningStep, running, onClo
 
         {/* Step counter */}
         {(displayedResults.length > 0 || runningStep) && !allDone && (
-          <span style={{ fontSize: 10, color: '#4a5068', fontFamily: 'monospace' }}>
+          <span style={{ fontSize: 10, color: '#64748b', fontFamily: 'monospace' }}>
             {displayedResults.length}/{totalExpected}
           </span>
         )}
@@ -1836,9 +1836,9 @@ function LiveResultPanel({ result, displayedResults, runningStep, running, onClo
       {result && (
         <div style={{ padding: '7px 15px', background: '#0a100d', borderBottom: '1px solid #1e2a3a', flexShrink: 0 }}>
           <div style={{ fontSize: 10, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <span><span style={{ color: '#334155' }}>target: </span><span style={{ fontFamily: 'monospace', color: '#10b981' }}>{result.target}</span></span>
-            <span><span style={{ color: '#334155' }}>adapter: </span><span style={{ fontFamily: 'monospace', color: '#7c85a0' }}>{result.adapter}</span></span>
-            <span><span style={{ color: '#334155' }}>time: </span><span style={{ color: '#7c85a0' }}>{result.elapsed_ms}ms</span></span>
+            <span><span style={{ color: '#475569' }}>target: </span><span style={{ fontFamily: 'monospace', color: '#10b981' }}>{result.target}</span></span>
+            <span><span style={{ color: '#475569' }}>adapter: </span><span style={{ fontFamily: 'monospace', color: '#7c85a0' }}>{result.adapter}</span></span>
+            <span><span style={{ color: '#475569' }}>time: </span><span style={{ color: '#7c85a0' }}>{result.elapsed_ms}ms</span></span>
           </div>
         </div>
       )}
@@ -1846,7 +1846,7 @@ function LiveResultPanel({ result, displayedResults, runningStep, running, onClo
       {/* ── Steps (progressive) ── */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
         {running && !result && (
-          <div style={{ padding: 24, color: '#4a5068', fontSize: 12, textAlign: 'center' }}>
+          <div style={{ padding: 24, color: '#64748b', fontSize: 12, textAlign: 'center' }}>
             Contacting watcher…
           </div>
         )}
@@ -1861,7 +1861,7 @@ function LiveResultPanel({ result, displayedResults, runningStep, running, onClo
       {/* ── Summary — only when animation is fully complete ── */}
       {allDone && result && (
         <div className="lre-step-enter" style={{ padding: '10px 15px', borderTop: '1px solid #1e2a3a', background: '#0a100d', flexShrink: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: '#334155', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Summary</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Summary</div>
           <div style={{ display: 'flex', gap: 7 }}>
             <Pill label={`${result.succeeded} succeeded`} bg="#061a12" color="#10b981" />
             {result.skipped > 0 && <Pill label={`${result.skipped} skipped`}  bg="#1a1d26" color="#475569" />}
@@ -1900,7 +1900,7 @@ function SimLogPanel({ logs, done, diskPct, onClose }: { logs: SimLog[]; done: b
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
               <span style={{ fontSize: 12, color: STATUS_COLOR[l.status], fontWeight: 700 }}>{STATUS_ICON[l.status]}</span>
               <span style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0' }}>{l.name}</span>
-              <span style={{ fontSize: 10, color: '#4a5068', marginLeft: 'auto', fontFamily: 'monospace' }}>{l.type}</span>
+              <span style={{ fontSize: 10, color: '#64748b', marginLeft: 'auto', fontFamily: 'monospace' }}>{l.type}</span>
             </div>
             <div style={{ fontSize: 10.5, color: '#7c85a0', lineHeight: 1.5 }}>{l.message}</div>
             {l.outputs && Object.keys(l.outputs).length > 0 && (
@@ -1912,11 +1912,11 @@ function SimLogPanel({ logs, done, diskPct, onClose }: { logs: SimLog[]; done: b
             )}
           </div>
         ))}
-        {!done && logs.length === 0 && <div style={{ padding: 20, color: '#4a5068', fontSize: 12, textAlign: 'center' }}>Starting…</div>}
+        {!done && logs.length === 0 && <div style={{ padding: 20, color: '#64748b', fontSize: 12, textAlign: 'center' }}>Starting…</div>}
       </div>
       {done && (
         <div style={{ padding: '10px 15px', borderTop: '1px solid #1e2231', background: '#0d0f14', flexShrink: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: '#4a5068', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 7 }}>Summary</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 7 }}>Summary</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <Pill label={`${succeeded} success`} bg="#0d3025" color="#10b981" />
             <Pill label={`${skipped} skipped`}   bg="#1e2231" color="#7c85a0" />
@@ -1929,7 +1929,7 @@ function SimLogPanel({ logs, done, diskPct, onClose }: { logs: SimLog[]; done: b
 }
 
 function Kv({ k, v, color = '#94a3b8' }: { k: string; v: string; color?: string }) {
-  return <div style={{ fontSize: 10 }}><span style={{ color: '#4a5068' }}>{k}: </span><span style={{ fontFamily: 'monospace', color }}>{v}</span></div>;
+  return <div style={{ fontSize: 10 }}><span style={{ color: '#64748b' }}>{k}: </span><span style={{ fontFamily: 'monospace', color }}>{v}</span></div>;
 }
 function Pill({ label, bg, color }: { label: string; bg: string; color: string }) {
   return <div style={{ fontSize: 10, background: bg, color, border: `1px solid ${color}30`, borderRadius: 10, padding: '2px 8px' }}>{label}</div>;
