@@ -3153,7 +3153,7 @@ class ToolRegistryAgent(Agent):
         {param} placeholders in command_template are interpolated from proposal.
         The watcher's adapter (Docker/SSH/K8s/SSM) handles the actual transport.
         """
-        import httpx, uuid
+        import httpx, re as _re, uuid
         exec_id = f"exec-{uuid.uuid4().hex[:8]}"
 
         # Build substitution dict: merge proposal args + common convenience keys.
@@ -3198,8 +3198,30 @@ class ToolRegistryAgent(Agent):
                 return "{" + key + "}"
 
         subs_str = {k: str(v) for k, v in subs.items()}
+
+        # SECURITY: block shell metacharacters before they reach the command template.
+        # Alert payload data flows through proposal → subs → subs_str. A crafted value
+        # like "nginx; rm -rf /" would otherwise survive format_map and execute on the host.
+        # Regex covers: command separators (;|), redirects (<>), quotes ('"),
+        # backtick subshell, newlines, null bytes, and $(...) / ${...} expansions.
+        _SHELL_INJECT_RE = _re.compile(r"""[;|<>'"`\n\r\x00]|\$[\(\{]""")
+        for _sk, _sv in subs_str.items():
+            if _SHELL_INJECT_RE.search(_sv):
+                _blocked_msg = (
+                    f"[SECURITY] Execution blocked: parameter '{_sk}' "
+                    f"contains shell metacharacters — possible injection attack."
+                )
+                logger.error(f"[EXEC:{exec_id}] {_blocked_msg} action={action_name!r}")
+                return {
+                    "success":      False,
+                    "execution_id": exec_id,
+                    "command":      "BLOCKED",
+                    "error":        _blocked_msg,
+                    "parameters":   subs,
+                }
+
         try:
-            import re as _re
+            import re as _re  # noqa: F811 — already imported above, no-op
             # Shell ${var} and ${var:-default} use the same {..} delimiters as Python format_map.
             # The embedded colon/dash causes ValueError ("Sign not allowed in string format
             # specifier"). Double-brace them before each format_map call so they pass through
