@@ -196,3 +196,4 @@ postgresql.conf
 
 # Local-only testing tools (never push)
 event_simulator/
+backend/tests/unit/
