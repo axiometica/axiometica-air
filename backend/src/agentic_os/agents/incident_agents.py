@@ -2010,6 +2010,23 @@ class ToolRegistryAgent(Agent):
                 return state
             diagnostics_only_mode = False
 
+        # BLAST RADIUS GATE: enforce the policy's max_blast_radius constraint.
+        # blast_radius_limit is set by PolicyBroker from constraints.max_blast_radius
+        # but was never compared at execution time — this closes that gap.
+        blast_radius_limit = ctx.governance.blast_radius_limit if ctx.governance else None
+        actual_blast_radius = ctx.risk.blast_radius if ctx.risk else 1
+        if blast_radius_limit and actual_blast_radius > blast_radius_limit:
+            reasoning += (
+                f"\n  ⛔ REMEDIATION BLOCKED: blast radius constraint violated\n"
+                f"  Incident blast radius : {actual_blast_radius}\n"
+                f"  Policy maximum        : {blast_radius_limit}\n"
+                f"  Action: escalate to human operator — reduce scope or raise policy limit.\n"
+            )
+            state.lifecycle_state = LifecycleState.WAITING_APPROVAL
+            state.context["decision_result"] = "blocked_blast_radius"
+            state = self._add_trace(state, reasoning)
+            return state
+
         # Approval check passed — update lifecycle state and log execution mode
         state.lifecycle_state = LifecycleState.EXECUTING
 
