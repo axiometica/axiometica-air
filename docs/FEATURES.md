@@ -1,7 +1,7 @@
 # Axiometica AIR — Feature Catalog
 
-**Last updated:** 2026-06-20
-**Platform status:** v1.1.2 — Production Ready
+**Last updated:** 2026-07-11
+**Platform status:** v1.6.0 — Production Ready
 
 ---
 
@@ -19,7 +19,8 @@
 9. [Typed Agent Context](#9-typed-agent-context)
 10. [LLM Summaries](#10-llm-summaries)
 11. [Change Management](#11-change-management)
-12. [Feature Status Table](#12-feature-status-table)
+12. [AI Tool Builder — Approved Actions Catalog](#12-ai-tool-builder--approved-actions-catalog)
+13. [Feature Status Table](#13-feature-status-table)
 
 ---
 
@@ -642,7 +643,94 @@ Change management reuses policy governance, runbook execution, typed context, an
 
 ---
 
-## 12. Feature Status Table
+## 12. AI Tool Builder — Approved Actions Catalog
+
+The AI Tool Builder generates complete, multi-environment Approved Action catalog entries from a plain-English description. It uses a **three-call LLM pipeline** to produce higher-quality output than a single prompt can achieve.
+
+### Three-Call Pipeline
+
+| Call | Purpose | Output |
+|------|---------|--------|
+| **Call 0 — Research** | Identifies the single best bare shell command for the task and produces 8–10 realistic sample output lines with real-looking values (IPs, PIDs, sizes, port numbers) | `{"command": "...", "sample_output": [...]}` |
+| **Call 1 — Structure** | Drafts the full catalog entry (tool name, description, per-adapter command variants, parameters, output field names and types) informed by the researched command and sample | Full tool JSON without patterns |
+| **Call 2 — Patterns** | Analyses the authoritative research sample to locate each output field by position or marker; Python builds the regex mechanically from a location strategy — the LLM never writes regex syntax directly | Completed `output_fields` with `kind` and `pattern` |
+
+### Location Strategies (Call 2)
+
+Rather than asking the LLM to write regex, Call 2 maps each field to a **location strategy** and Python constructs the pattern:
+
+| Strategy | Use case | Example |
+|----------|---------|---------|
+| `single_value` | Entire line is the value | `wc -l` output: `42` |
+| `column` | Whitespace-delimited token at position N | Column 3 of `ps aux` output |
+| `after_literal` | Value follows a fixed label | `used_memory:1048576` |
+| `end_split_before` | Value is before a delimiter in the last token | `1234` from `1234/sshd` |
+| `end_split_after` | Value is after a delimiter in the last token | `sshd` from `1234/sshd` |
+| `last_column` | Value is the final whitespace-delimited token | |
+| `count` | Count lines matching a pattern; always returns an integer | Lines containing `LISTEN` |
+
+**Column header matching** — when a command prints a header row (`ss`, `netstat`, `docker ps`), Call 2 identifies which header label semantically matches each output field and uses that column's position, preventing the common off-by-one error of using the Nth field name as column N.
+
+**Header-row filtering** — lines with no digit characters are excluded from pattern validation (headers like `Netid State Recv-Q Send-Q` contain no digits), so patterns are validated only against real data rows.
+
+### Tabular Output Handling
+
+Commands that produce multi-row tables (`ss`, `netstat`, `ps`, `df`, `docker ps`) are handled through one of three strategies, chosen based on the description's intent:
+
+- **Parameterise + filter** — add a `{{port}}` or `{{process_name}}` parameter and pipe through `grep` so the output is 0–1 matching lines. Best for "check if X is present" queries.
+- **Aggregate** — pipe through `| wc -l` or `| grep -c <pattern>` to produce a single count. Best for "how many X" queries. Generates a `<noun>_count` field with `type: integer`.
+- **Both** — when the description asks for a count and a specific check, both patterns are applied.
+
+For descriptions without a clear filter/count intent, the AI still appends a `_count` summary field so runbooks can threshold on row volume.
+
+### `kind: count` Extraction Mode
+
+Output fields with `kind: count` count the number of lines in the command output matching a pattern at runtime, rather than capturing a value from a single line. This is set automatically when Call 2 detects a `*_count` field name against tabular output.
+
+```json
+{
+  "field": "listen_count",
+  "kind": "count",
+  "pattern": "LISTEN",
+  "type": "integer"
+}
+```
+
+At execution time, `_extract_output_fields()` uses `re.findall(pattern, output, re.MULTILINE)` and returns the match count. An empty pattern counts all non-empty lines.
+
+### Multi-Environment Command Generation
+
+Call 1 generates adapter-specific command variants for every environment the platform supports:
+
+| Adapter | Convention |
+|---------|-----------|
+| `docker` | `docker exec {{container_name}} <bare-command>` |
+| `kubernetes` | `kubectl exec -n {{namespace}} {{pod_name}} -- <bare-command>` |
+| `ssh` | Bare shell command, runs on remote host |
+| `aws_ssm` | Bare shell command, delivered via SSM Run Command |
+| `azure` | Bare shell command, delivered via Azure Run Command |
+| `any` | Bare shell fallback for unrecognised adapters |
+
+Adapter-scoped parameters (`container_name`, `namespace`, `pod_name`) are automatically marked `required: false` — they are injected from the watcher's registration context, not supplied by the operator.
+
+### Command Conventions Enforced by Prompt
+
+- **curl HTTP checks** — always uses `-s -o /dev/null -w "%{http_code} %{time_total}\n"` producing a single space-separated line. JSON format strings and non-existent curl constructs (e.g. `${if_eq:200}`) are explicitly prohibited.
+- **Tabular commands** — always piped to produce a single value rather than a raw table.
+
+### Modal UI
+
+The AI Tool Builder opens as a **portal modal** (rendered via `createPortal` to avoid stacking context issues) with three steps:
+
+1. **Describe** — plain-English description with optional adapter hints. Cmd/Ctrl+Enter to generate.
+2. **Review** — read-only JSON preview of the generated definition; collapsible **Refine with Real Output** accordion pre-filled with the research sample. The Refine step merges: fields that already have patterns are kept; blank-pattern fields are updated; new fields are appended.
+3. **Register** — tool is saved to the catalog as **disabled by default**, with an inline notice to test before enabling.
+
+A three-stage spinner is shown during generation, listing the three pipeline calls in progress.
+
+---
+
+## 13. Feature Status Table
 
 | Feature | Status |
 |---|---|
@@ -756,6 +844,18 @@ Change management reuses policy governance, runbook execution, typed context, an
 | **Deployment** | |
 | Docker Compose deployment (all services containerized) | Implemented |
 | Change management workflow | Implemented |
+| **AI Tool Builder** *(v1.6.0)* | |
+| 3-call LLM pipeline — research command + sample, draft structure, generate patterns | Implemented (v1.6.0) |
+| Location-strategy pattern generation — column, after_literal, end_split, count (no LLM regex) | Implemented (v1.6.0) |
+| Column header matching — semantic header-to-column resolution for ss/netstat/docker ps | Implemented (v1.6.0) |
+| Header-row filtering — digit-presence heuristic excludes header lines from pattern validation | Implemented (v1.6.0) |
+| `kind: count` extraction mode — counts matching lines at runtime via re.findall | Implemented (v1.6.0) |
+| Tabular output handling — parameterise+filter, aggregate (wc -l / grep -c), or both | Implemented (v1.6.0) |
+| Multi-environment command generation — docker, kubernetes, ssh, aws_ssm, azure, any | Implemented (v1.6.0) |
+| Portal modal UI — spinner, step pills, read-only JSON preview, collapsible Refine accordion | Implemented (v1.6.0) |
+| Research sample pre-fill — Refine textarea pre-populated from Call 0 output | Implemented (v1.6.0) |
+| Merge logic — Refine keeps existing patterns, fills blanks, appends new fields | Implemented (v1.6.0) |
+| Tools registered as disabled by default with inline test-before-enable notice | Implemented (v1.6.0) |
 | **Planned** | |
 | Kubernetes / Helm deployment | Planned |
 | Distributed tracing (OpenTelemetry + Jaeger) | Planned |

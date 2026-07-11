@@ -9,6 +9,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [1.6.0] — 2026-07-11
+
+### New Features ✨
+
+**AI Tool Builder — Three-Call LLM Pipeline**
+- New **AI Tool Builder** modal generates complete, multi-environment Approved Action catalog entries from a plain-English description in one click
+- **Call 0 — Research**: identifies the single best bare shell command for the task and produces 8–10 realistic sample output lines (real IPs, PIDs, port numbers — not placeholders); the researched command and sample are fed into Call 1 as authoritative context so command_variants are grounded in a verified command format
+- **Call 1 — Structure**: drafts the full catalog entry (tool name, description, per-adapter command variants, parameters, output field names and types) informed by the Call 0 research
+- **Call 2 — Patterns**: locates each output field by position or marker using 7 named strategies (`single_value`, `column`, `after_literal`, `end_split_before`, `end_split_after`, `last_column`, `count`); Python builds the regex mechanically — the LLM never writes regex syntax directly, eliminating the most common source of invalid patterns
+- **Column header matching**: when a command prints a header row (`ss`, `netstat`, `docker ps`, `kubectl get`), Call 2 semantically matches each field to its header label and uses that column's 1-based position, preventing off-by-one errors
+- **Header-row filtering**: lines with no digit characters are excluded from pattern validation so header rows (`Netid State Recv-Q Send-Q…`) cannot accidentally satisfy a pattern intended for data rows
+- **Tabular output handling**: AI detects tabular commands and applies one of three strategies — parameterise+filter (add a `{{port}}` param and pipe through grep), aggregate (pipe through `wc -l` / `grep -c`), or both — rather than returning an unextractable multi-row table
+- **curl convention**: `curl` HTTP health checks always use `-s -o /dev/null -w "%{http_code} %{time_total}\n"` producing a parseable single-line output; invalid curl constructs (JSON format strings, `${if_eq:…}`) are explicitly prohibited in the system prompt
+
+**`kind: count` Extraction Mode**
+- New output field extraction mode `kind: count` counts lines in command output matching a pattern at runtime via `re.findall(pattern, output, re.MULTILINE)`, always returning an integer
+- Added to `ActionEditor` output field dropdown alongside `regex` and `jsonpath`
+- AI builder assigns `kind: count` automatically to `*_count` fields and provides an optional `match_pattern` filter regex (empty = count all non-empty lines)
+
+**Tool Builder Modal UI**
+- Replaced the inline panel with a **portal modal** (`createPortal`) matching the platform's `ApprovalModal` style — AI violet (`#a855f7`) accent, backdrop blur, shadow
+- Three-stage spinner during generation lists each pipeline call in progress
+- Step pills (Describe → Review → Register) track progress through the workflow
+- **Read-only JSON preview** replaces the editable textarea — the generated definition is displayed but not editable; the Action Editor handles post-registration edits
+- **Refine with Real Output** — collapsible accordion pre-filled from the Call 0 research sample (marked with a `pre-filled` badge). Merge logic: fields with existing patterns are kept; blank-pattern fields are updated from the real output parse; new fields are appended
+- Tools registered as **disabled by default** with an inline info notice: "AI-generated tools may contain mistakes — test before enabling"
+
 - Kubernetes Helm charts for cloud-native deployments
 - Distributed tracing via OpenTelemetry + Jaeger
 - Advanced analytics dashboard (MTTR trend lines over time, service health scorecards)
