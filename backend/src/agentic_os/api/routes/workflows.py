@@ -537,7 +537,8 @@ async def close_incident(
                     SET lifecycle_state   = 'resolved',
                         resolution_source = 'manual',
                         resolution_notes  = :note,
-                        updated_at        = :now
+                        updated_at        = :now,
+                        resolved_at       = COALESCE(resolved_at, :now)
                     WHERE storm_id::text = :parent_id
                       AND workflow_id::text != :parent_id
                       AND lifecycle_state NOT IN ('resolved', 'closed')

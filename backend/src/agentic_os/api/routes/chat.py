@@ -402,22 +402,31 @@ def _detect_action_intent(
         inc_num = _fetch_workflow_incident_number(db, context_workflow_id)
 
     # ── 3. Single unambiguous waiting_approval incident ───────────────────────
+    waiting_candidates: list[str] = []
     if not inc_num:
         try:
             rows = db.execute(text("""
                 SELECT incident_number_str FROM workflow_states
                 WHERE CAST(workflow_type   AS TEXT) = 'incident'
                 AND   CAST(lifecycle_state AS TEXT) = 'waiting_approval'
-                LIMIT 2
+                ORDER BY updated_at DESC
+                LIMIT 10
             """)).fetchall()
+            waiting_candidates = [r[0] for r in rows if r[0]]
             # Only infer when there is exactly one candidate — avoids wrong guesses
-            if len(rows) == 1:
-                inc_num = rows[0][0]
+            if len(waiting_candidates) == 1:
+                inc_num = waiting_candidates[0]
         except Exception as exc:
             logger.warning("waiting_approval fallback lookup failed: %s", exc)
 
     if not inc_num:
-        return None  # Cannot determine which incident — LLM will ask for clarification
+        # Action intent was clear but incident can't be resolved — return a clarification
+        # spec so _build_prompt_inputs can inject context for the LLM to ask specifically.
+        return {
+            "type":       "clarify",
+            "action_type": action_type,
+            "candidates": waiting_candidates,
+        }
 
     try:
         row = db.execute(text("""
@@ -1118,7 +1127,27 @@ def _build_prompt_inputs(body: ChatRequest, db: Session) -> tuple[str, str, dict
 
     # Augment system prompt when an action is requested
     extra = ""
-    if action_spec:
+    if action_spec and action_spec["type"] == "clarify":
+        verb = action_spec["action_type"]
+        candidates = action_spec.get("candidates", [])
+        if candidates:
+            cand_list = ", ".join(candidates)
+            extra = (
+                f"\n\nOPERATOR ACTION (AMBIGUOUS):\n"
+                f"The operator wants to {verb} an incident but did not specify which one.\n"
+                f"Incidents currently waiting for approval: {cand_list}\n"
+                f"Ask the operator to specify which incident (e.g. '{verb} {candidates[0]}')."
+            )
+        else:
+            extra = (
+                f"\n\nOPERATOR ACTION (NO CANDIDATES):\n"
+                f"The operator wants to {verb} an incident but there are no incidents "
+                f"currently waiting for approval. Inform them of this and suggest they check "
+                f"the Incidents list for the current status."
+            )
+        # Clear action_spec so no action event is emitted to the frontend
+        action_spec = None
+    elif action_spec:
         verb = "approving" if action_spec["type"] == "approve" else "rejecting"
         effect = ("remediation will begin immediately"
                   if action_spec["type"] == "approve"

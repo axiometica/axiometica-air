@@ -241,7 +241,8 @@ async def _handle_condition_cleared(
             SET lifecycle_state        = 'resolved',
                 resolution_source      = 'watcher_all_clear',
                 all_clear_received_at  = :now,
-                updated_at             = :now
+                updated_at             = :now,
+                resolved_at            = COALESCE(resolved_at, :now)
             WHERE workflow_id = :workflow_id
         """), {"workflow_id": workflow_id, "now": now})
 

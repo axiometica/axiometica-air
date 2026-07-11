@@ -101,15 +101,18 @@ async def get_incident_metrics(db: Session = Depends(get_session)):
         avg_result = result.scalar()
         avg_resolution_time = float(avg_result) if avg_result else 0.0
 
-        # Approval rate — incidents that passed through the approval step
-        result = db.execute(text("""
-            SELECT COUNT(*) FROM workflow_states
-            WHERE workflow_type = 'incident'
-            AND lifecycle_state IN ('approved', 'executing', 'resolved', 'deployed')
-        """))
-        approval_approved = result.scalar() or 0
+        # Approval rate — approved / total approval requests (from the approvals table,
+        # not lifecycle_state, which was counting auto-resolved incidents as "approved")
+        appr_row = db.execute(text("""
+            SELECT
+                COUNT(*) FILTER (WHERE status = 'approved') AS approved_count,
+                COUNT(*) FILTER (WHERE status IN ('approved', 'rejected'))  AS decided_count
+            FROM approvals
+        """)).fetchone()
+        approval_approved  = appr_row[0] or 0
+        approval_decided   = appr_row[1] or 0
 
-        approval_rate = (approval_approved / total_incidents) if total_incidents > 0 else 0.0
+        approval_rate = (approval_approved / approval_decided) if approval_decided > 0 else 0.0
 
         # Remediation success rate — incidents that resolved successfully
         result = db.execute(text("""
@@ -183,48 +186,59 @@ async def get_incident_metrics(db: Session = Depends(get_session)):
 async def get_remediation_metrics(db: Session = Depends(get_session)):
     """Get remediation metrics and statistics"""
     try:
-        result = db.execute(text("""
-            SELECT lifecycle_state FROM workflow_states
+        # Use resolution_source + remediation_outcome from settled incidents.
+        # Previous impl counted 'approved' lifecycle_state (transient, cleared in seconds)
+        # for manual attempts and mixed live + historical states for auto — both wrong.
+        rows = db.execute(text("""
+            SELECT
+                COALESCE(resolution_source, 'unknown')  AS src,
+                COALESCE(remediation_outcome, 'unknown') AS outcome
+            FROM workflow_states
             WHERE workflow_type = 'incident'
-        """))
-        rows = result.fetchall()
+            AND lifecycle_state IN ('resolved', 'deployed', 'rolled_back', 'closed',
+                                    'failed', 'awaiting_manual')
+        """)).fetchall()
 
-        auto_remediation_attempts = 0
+        auto_remediation_attempts  = 0
         manual_remediation_attempts = 0
-        auto_remediation_success = 0
+        auto_remediation_success   = 0
         manual_remediation_success = 0
 
-        for row in rows:
-            state = row[0]
-            if state in ('approved',):
-                manual_remediation_attempts += 1
-            elif state in ('executing', 'resolved', 'deployed', 'failed'):
+        _auto_sources = {'automated_remediation', 'watcher_all_clear'}
+
+        for src, outcome in rows:
+            is_auto    = src in _auto_sources
+            is_success = outcome == 'succeeded'
+            if is_auto:
                 auto_remediation_attempts += 1
-                if state in ('resolved', 'deployed'):
+                if is_success:
                     auto_remediation_success += 1
+            else:
+                manual_remediation_attempts += 1
+                if is_success:
+                    manual_remediation_success += 1
 
         total_remediations = auto_remediation_attempts + manual_remediation_attempts
-        remediation_success_rate = (
-            (auto_remediation_success + manual_remediation_success) / total_remediations
-        ) if total_remediations > 0 else 0.0
+        total_success      = auto_remediation_success + manual_remediation_success
+        remediation_success_rate = (total_success / total_remediations) if total_remediations > 0 else 0.0
 
         return {
-            "auto_remediation_success": auto_remediation_success,
+            "auto_remediation_success":   auto_remediation_success,
             "manual_remediation_success": manual_remediation_success,
-            "total_remediations": total_remediations,
-            "auto_remediation_attempts": auto_remediation_attempts,
+            "total_remediations":         total_remediations,
+            "auto_remediation_attempts":  auto_remediation_attempts,
             "manual_remediation_attempts": manual_remediation_attempts,
-            "remediation_success_rate": remediation_success_rate,
+            "remediation_success_rate":   remediation_success_rate,
         }
 
     except Exception as e:
         return {
-            "auto_remediation_success": 0,
+            "auto_remediation_success":   0,
             "manual_remediation_success": 0,
-            "total_remediations": 0,
-            "auto_remediation_attempts": 0,
+            "total_remediations":         0,
+            "auto_remediation_attempts":  0,
             "manual_remediation_attempts": 0,
-            "remediation_success_rate": 0.0,
+            "remediation_success_rate":   0.0,
         }
 
 

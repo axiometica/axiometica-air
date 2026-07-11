@@ -54,6 +54,12 @@ class WorkflowRepository:
             existing.execution_log = workflow.execution_log
             existing.state_history = workflow.state_history
             existing.updated_at = datetime.utcnow()
+            # Stamp resolved_at once, on first transition to a terminal state.
+            # Never overwrite — preserves the actual resolution timestamp even if
+            # subsequent saves (e.g. summary generation) touch the row later.
+            _RESOLVED_STATES = {'resolved', 'deployed', 'rolled_back', 'closed'}
+            if str(workflow.lifecycle_state) in _RESOLVED_STATES and existing.resolved_at is None:
+                existing.resolved_at = datetime.utcnow()
         else:
             # Create new
             # Phase 10: Serialize context_schema if present (use to_dict() for proper serialization)

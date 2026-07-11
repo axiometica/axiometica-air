@@ -40,11 +40,13 @@ class RunbookGeneratorAgent(Agent):
     Prerequisite: MechanicAgent has failed to find matching runbook
     """
 
-    # Model configuration
-    LLM_PROVIDER = "openai"  # Can be: anthropic, openai, local
-    LLM_MODEL = "gpt-4o"
     LLM_MAX_TOKENS = 2000
     LLM_TEMPERATURE = 0.7
+
+    _SYSTEM_PROMPT = (
+        "You are an expert SRE engineer generating incident remediation runbooks. "
+        "Respond with ONLY valid JSON — no markdown fences, no extra text."
+    )
 
     # Similarity threshold for finding related runbooks
     SIMILARITY_THRESHOLD = 0.5
@@ -58,7 +60,6 @@ class RunbookGeneratorAgent(Agent):
         """Initialize RunbookGenerator agent."""
         super().__init__("runbook_generator")
         self.version = "1.0.0"
-        self.llm_client = None  # Lazy initialize
 
         # Runbook storage (in production: query database)
         self.generated_runbooks = {}
@@ -155,37 +156,11 @@ class RunbookGeneratorAgent(Agent):
             },
         }
 
-    async def initialize(self):
-        """
-        Initialize LLM client by reusing the platform's existing LLM integration.
-        Delegates to get_summary_service() so we share the same provider, API key,
-        and model that is already configured in the database — no duplication.
-        """
+    def _get_provider(self):
+        """Return the platform LLMProvider — reads DB config on every call so provider
+        changes take effect immediately without restarting the worker."""
         from agentic_os.services.summary_service import get_summary_service
-        from openai import AsyncOpenAI
-
-        service = get_summary_service()       # loads from DB automatically
-        llm_provider = service.provider       # OpenAIProvider or AnthropicProvider
-
-        provider_name = type(llm_provider).__name__.lower()  # "openaiprovider" / "anthropicprovider"
-
-        if "openai" in provider_name:
-            self.llm_client = AsyncOpenAI(api_key=llm_provider.api_key)
-            self.LLM_PROVIDER = "openai"
-            self.LLM_MODEL = llm_provider.model or "gpt-4o"
-        elif "anthropic" in provider_name:
-            from anthropic import Anthropic
-            self.llm_client = Anthropic(api_key=llm_provider.api_key)
-            self.LLM_PROVIDER = "anthropic"
-            self.LLM_MODEL = llm_provider.model or "claude-3-5-sonnet-20241022"
-        else:
-            raise RuntimeError(
-                f"[RunbookGenerator] Unsupported platform LLM provider: {type(llm_provider)}"
-            )
-
-        logger.info(
-            f"[RunbookGenerator] Reusing platform LLM: {self.LLM_PROVIDER} / {self.LLM_MODEL}"
-        )
+        return get_summary_service().provider
 
     async def run(self, workflow_state: WorkflowState) -> WorkflowState:
         """
@@ -508,49 +483,30 @@ class RunbookGeneratorAgent(Agent):
         Returns:
             Generated runbook structure
         """
-        if not self.llm_client:
-            await self.initialize()
+        provider = self._get_provider()
+        if not provider.is_configured():
+            raise RuntimeError("[RunbookGenerator] LLM is not configured — go to Settings → LLM")
 
-        # Build prompt
-        prompt = self._build_generation_prompt(
+        user_prompt = self._build_generation_prompt(
             sentinel_context,
             cmdb_context,
             risk_context,
             similar_runbooks
         )
 
-        logger.debug(f"Sending LLM prompt ({len(prompt)} chars) to {self.LLM_PROVIDER}")
+        logger.debug(
+            "[RunbookGenerator] Sending prompt (%d chars) via %s",
+            len(user_prompt), type(provider).__name__,
+        )
 
-        # Call LLM
-        if self.LLM_PROVIDER == "anthropic":
-            response = self.llm_client.messages.create(
-                model=self.LLM_MODEL,
-                max_tokens=self.LLM_MAX_TOKENS,
-                temperature=self.LLM_TEMPERATURE,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            )
-            generated_text = response.content[0].text
-        elif self.LLM_PROVIDER == "openai":
-            response = await self.llm_client.chat.completions.create(
-                model=self.LLM_MODEL,
-                max_tokens=self.LLM_MAX_TOKENS,
-                temperature=self.LLM_TEMPERATURE,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            )
-            generated_text = response.choices[0].message.content
-        else:
-            # Local LLM: future implementation
-            raise NotImplementedError(f"LLM provider {self.LLM_PROVIDER} not yet implemented")
+        generated_text = await provider.generate_agent_completion(
+            system_prompt=self._SYSTEM_PROMPT,
+            user_content=user_prompt,
+            max_tokens=self.LLM_MAX_TOKENS,
+            temperature=self.LLM_TEMPERATURE,
+        )
+        if not generated_text:
+            raise RuntimeError("[RunbookGenerator] LLM returned empty response")
 
         # Parse LLM response into runbook structure
         runbook = self._parse_llm_response(generated_text)
@@ -570,9 +526,7 @@ class RunbookGeneratorAgent(Agent):
         resource_name = cmdb_context.resource_name if cmdb_context else "unknown"
         environment = cmdb_context.environment if cmdb_context else "unknown"
 
-        prompt = f"""You are an expert SRE engineer generating incident remediation runbooks.
-
-NOVEL INCIDENT:
+        prompt = f"""NOVEL INCIDENT:
 - Type: {anomaly_type}
 - Affected Resource: {resource_name}
 - Environment: {environment}

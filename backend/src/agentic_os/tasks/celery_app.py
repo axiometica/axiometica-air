@@ -1445,6 +1445,120 @@ def verify_recommendation_outcomes(self):
             pass
 
 
+# ── Backup — settings-driven scheduler ────────────────────────────────────────
+#
+# Uses the same cron-field-matching pattern as run_scheduled_platform_intelligence_analysis:
+# Beat checks every 10 minutes; the task reads general.backup_enabled /
+# general.backup_schedule / general.backup_retention_days from the DB, so changes
+# take effect on the next check without requiring a Beat restart.
+
+@app.task(bind=True, queue="default")
+def run_scheduled_backup(self, window_minutes: int = 15):
+    """
+    Checks general.backup_enabled and general.backup_schedule on every firing
+    (every 10 minutes), then triggers run_backup_task if the cron expression
+    matches the current time window and a backup hasn't already run this window.
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    from agentic_os.db.database import SessionLocal
+    from agentic_os.db.models import PlatformSettingModel
+
+    db = SessionLocal()
+    try:
+        enabled_row = db.get(PlatformSettingModel, "general.backup_enabled")
+        if enabled_row and enabled_row.value.lower() in ("false", "0", "no"):
+            return {"status": "skipped", "reason": "backups disabled"}
+
+        cron_row = db.get(PlatformSettingModel, "general.backup_schedule")
+        cron_expr = cron_row.value.strip() if cron_row else "0 1 * * *"
+
+        retention_row = db.get(PlatformSettingModel, "general.backup_retention_days")
+        retention_days = int(retention_row.value) if retention_row else 7
+
+        last_run_row = db.get(PlatformSettingModel, "general.last_backup_at")
+        now = _dt.utcnow()
+        if last_run_row and last_run_row.value:
+            try:
+                last_run = _dt.fromisoformat(last_run_row.value.replace("Z", "+00:00").replace("+00:00", ""))
+                if (now - last_run) < _td(minutes=window_minutes - 1):
+                    return {"status": "skipped", "reason": "already ran within this window"}
+            except (ValueError, TypeError):
+                pass
+
+        due = any(
+            _cron_matches_at(cron_expr, now - _td(minutes=m))
+            for m in range(window_minutes + 1)
+        )
+        if not due:
+            return {"status": "skipped", "reason": "not due"}
+
+        logger.info("[Backup-Schedule] Cron '%s' due — starting backup (retain %d days)", cron_expr, retention_days)
+        from agentic_os.tasks.backup import run_backup_task
+        result = run_backup_task.delay(retention_days=retention_days)
+        return {"status": "queued", "task_id": str(result.id)}
+
+    except Exception as exc:
+        logger.error("[Backup-Schedule] Failed: %s", exc, exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return {"status": "error", "reason": str(exc)}
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+# ── Watcher heartbeat watchdog ────────────────────────────────────────────────
+
+WATCHER_OFFLINE_THRESHOLD_MINUTES = 5
+
+@app.task(bind=True, queue="default")
+def check_watcher_heartbeats(self):
+    """
+    Detects approved watchers that have gone silent (last_seen older than
+    WATCHER_OFFLINE_THRESHOLD_MINUTES). Logs at ERROR so ops dashboards/alert
+    rules can pick it up. Does not send notifications — that pass is handled
+    separately.
+    """
+    from agentic_os.db.database import SessionLocal
+    from agentic_os.db.models import WatcherRegistrationModel
+    from datetime import datetime, timedelta
+    from sqlalchemy import text
+
+    db = SessionLocal()
+    try:
+        cutoff = datetime.utcnow() - timedelta(minutes=WATCHER_OFFLINE_THRESHOLD_MINUTES)
+        offline = (
+            db.query(WatcherRegistrationModel)
+            .filter(
+                WatcherRegistrationModel.registration_status == "approved",
+                WatcherRegistrationModel.last_seen < cutoff,
+            )
+            .all()
+        )
+        if offline:
+            for w in offline:
+                elapsed = (datetime.utcnow() - w.last_seen).total_seconds() / 60
+                logger.error(
+                    "[WatcherHeartbeat] Watcher '%s' (id=%s) offline — last seen %.1f min ago",
+                    w.watcher_name, w.watcher_id, elapsed,
+                )
+        else:
+            logger.debug("[WatcherHeartbeat] All approved watchers alive")
+        return {"status": "ok", "offline_count": len(offline)}
+    except Exception as exc:
+        logger.error("[WatcherHeartbeat] Check failed: %s", exc, exc_info=True)
+        return {"status": "error", "reason": str(exc)}
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
 # ── Celery Beat Schedule ───────────────────────────────────────────────────────
 
 from celery.schedules import crontab  # noqa: E402 — intentional late import
@@ -1482,13 +1596,21 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute="*/2"),
         "options": {"queue": "default"},
     },
-    # Rotating backup task — configured via platform settings
-    # Enabled: general.backup_enabled (default: true)
-    # Frequency: general.backup_schedule (default: "0 1 * * *" = 01:00 UTC daily)
-    # Retention: general.backup_retention_days (default: 7 days)
+    # Watcher offline watchdog — logs ERROR for approved watchers with last_seen
+    # older than 5 minutes. Checked every 2 minutes to catch a missed heartbeat
+    # quickly; threshold is 5 min so a single slow poll doesn't false-alarm.
+    "check-watcher-heartbeats": {
+        "task":    "agentic_os.tasks.celery_app.check_watcher_heartbeats",
+        "schedule": crontab(minute="*/2"),
+        "options": {"queue": "default"},
+    },
+    # Rotating backup task — reads general.backup_enabled / general.backup_schedule /
+    # general.backup_retention_days from the DB on every firing, so schedule changes
+    # take effect without a Beat restart. Checked every 10 minutes; window matching
+    # absorbs drift so exact-minute cron entries aren't missed.
     "platform-backup-rotating": {
-        "task":    "backup.run",
-        "schedule": crontab(hour=1, minute=0),   # 01:00 UTC daily (configurable via settings)
+        "task":    "agentic_os.tasks.celery_app.run_scheduled_backup",
+        "schedule": crontab(minute="*/10"),
         "options": {"queue": "default"},
     },
     # Platform Intelligence — close the loop on applied recommendations so
@@ -1821,7 +1943,8 @@ def resume_workflow_task(self, workflow_id: str, approval_id: str):
                     SET lifecycle_state   = 'resolved',
                         resolution_source = 'manual',
                         resolution_notes  = :note,
-                        updated_at        = :now
+                        updated_at        = :now,
+                        resolved_at       = COALESCE(resolved_at, :now)
                     WHERE storm_id::text = :parent_id
                       AND workflow_id::text != :parent_id
                       AND lifecycle_state NOT IN ('resolved', 'closed')

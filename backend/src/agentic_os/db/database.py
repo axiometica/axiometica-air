@@ -268,6 +268,40 @@ $func$
     except Exception as _trig_err:
         _mig_log.warning(f"Trigger install failed: {_trig_err!r}")
 
+    # ── Seed event-type taxonomy (idempotent upsert) ─────────────────────────
+    # Runs on every startup so entries added to event_type_taxonomy_data.py are
+    # picked up without a manual migration. ON CONFLICT DO NOTHING preserves any
+    # operator customisations (label/description edits, enabled flag).
+    try:
+        from agentic_os.db.event_type_taxonomy_data import ALL_ENTRIES
+        import json as _json
+        _seed_sql = __import__("sqlalchemy").text("""
+            INSERT INTO event_type_taxonomy
+                (code, label, description, category, aliases, is_system, enabled, created_at)
+            VALUES
+                (:code, :label, :description, :category, :aliases, :is_system, TRUE, NOW())
+            ON CONFLICT (code) DO NOTHING
+        """)
+        _seeded = 0
+        with engine.connect() as _conn:
+            for _entry in ALL_ENTRIES:
+                result = _conn.execute(_seed_sql, {
+                    "code":        _entry["code"],
+                    "label":       _entry["label"],
+                    "description": _entry.get("description", ""),
+                    "category":    _entry["category"],
+                    "aliases":     _json.dumps(_entry.get("aliases", [])),
+                    "is_system":   _entry.get("is_system", True),
+                })
+                _seeded += result.rowcount
+            _conn.commit()
+        if _seeded:
+            _mig_log.info(f"✓ Event-type taxonomy: seeded {_seeded} new entries")
+        else:
+            _mig_log.debug("Event-type taxonomy: all entries already present")
+    except Exception as _tax_err:
+        _mig_log.warning(f"Taxonomy seed failed (non-fatal): {_tax_err!r}")
+
     print("✓ Database initialized")
 
 
