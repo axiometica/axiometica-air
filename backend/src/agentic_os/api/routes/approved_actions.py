@@ -215,7 +215,7 @@ Return a JSON object with exactly these fields:
     {{"name": "param_name", "type": "string|number|boolean", "required": false, "description": "what it is and which adapter needs it", "default": null}}
   ],
   "output_fields": [
-    {{"field": "snake_case_field", "description": "what this value represents"}}
+    {{"field": "snake_case_field", "description": "what this value represents", "kind": "regex", "pattern": "", "type": "string"}}
   ]
 }}
 
@@ -224,7 +224,7 @@ Rules:
 - requires_approval should be true for blast_radius >= 3
 - infer ALL parameters from {{{{placeholders}}}} used in command_variants — include container_name, namespace, pod_name if those prefixes are used
 - parameter required field: adapter-scoped params (container_name, namespace, pod_name) are ALWAYS required=false because they only apply to one adapter and are injected automatically by the platform from the watcher's registration context; only mark required=true for params the operator must supply explicitly (e.g. a hostname to ping, a process name to kill)
-- output_fields: list every useful individual value the command prints that a downstream runbook step might need — counts, names, statuses, IPs, PIDs, program names; for commands like netstat include both pid AND process_name separately since the column contains both; do NOT leave this empty for diagnostic tools
+- output_fields: list every useful individual value the command prints that a downstream runbook step might need — counts, names, statuses, IPs, PIDs, program names; for commands like netstat include both pid AND process_name separately since the column contains both; do NOT leave this empty for diagnostic tools; always include kind, pattern (leave empty string — user fills via sample output), and type for every field
 - use null only for adapters where the command genuinely cannot apply"""
 
     try:
@@ -261,7 +261,8 @@ async def parse_tool_output_schema(body: ParseOutputRequest):
 
     system_prompt = (
         "You are an expert at parsing shell command output. Extract a structured schema "
-        "from sample stdout. Respond with ONLY valid JSON — no markdown fences, no extra text."
+        "from sample stdout, including a regex pattern with one capture group for each field. "
+        "Respond with ONLY valid JSON — no markdown fences, no extra text."
     )
 
     cmd_context = f"\nCommand: {body.command}" if body.command else ""
@@ -274,7 +275,13 @@ Sample stdout:
 Return a JSON object:
 {{
   "output_fields": [
-    {{"field": "snake_case_field_name", "description": "what this value represents"}}
+    {{
+      "field": "snake_case_field_name",
+      "description": "what this value represents (under 15 words)",
+      "kind": "regex",
+      "pattern": "capturing regex that extracts this field from one output line",
+      "type": "string | number | boolean"
+    }}
   ],
   "parsing_notes": "brief note on parsing strategy (e.g. 'parse column 2 of each line', 'JSON output')"
 }}
@@ -282,14 +289,16 @@ Return a JSON object:
 Rules:
 - Only include fields that are reliably extractable from this sample (not guesses)
 - Use snake_case for field names
-- Keep descriptions concise (under 15 words)
+- pattern MUST be a valid Python regex with exactly one capture group that extracts the value; write it to match a single representative line from the sample
+- For JSON output set kind to "json_path" and pattern to the dot-notation path (e.g. ".items[0].name")
+- type: use "number" if the captured value is always numeric, otherwise "string"
 - If the output is already JSON, note it in parsing_notes"""
 
     try:
         result_text = await provider.generate_agent_completion(
             system_prompt=system_prompt,
             user_content=user_prompt,
-            max_tokens=600,
+            max_tokens=1000,
             temperature=0.1,
         )
         return json.loads(result_text)
