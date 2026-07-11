@@ -41,7 +41,8 @@ export interface WorkflowResponse {
   workflow_id: string
   workflow_type: string
   lifecycle_state: string
-  incident_number?: string | null  // Phase 6.5: INC0001, INC0002, etc.
+  incident_number?: number | null       // Raw integer (1, 2, 3 …)
+  incident_number_str?: string | null   // Formatted: INC000001, INC000002 …
   severity: string | null
   risk_score: number | null
   context: Record<string, any>

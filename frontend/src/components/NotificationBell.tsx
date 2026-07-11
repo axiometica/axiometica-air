@@ -67,15 +67,16 @@ function buildNotifications(
 
   // Pending approvals — highest priority
   for (const a of approvals) {
-    const sum = a.incident_summary
-    const service = sum?.resource || a.workflow_id.slice(0, 8)
-    const type    = sum?.anomaly_type?.replace(/_/g, ' ') || 'incident'
-    const incNum  = (workflows.find(w => w.workflow_id === a.workflow_id) as any)?.incident_number || ''
+    const sum    = a.incident_summary
+    const wf     = workflows.find(w => w.workflow_id === a.workflow_id)
+    const incNum = wf?.incident_number_str || ''
+    const type   = sum?.anomaly_type?.replace(/_/g, ' ') || 'incident'
+    const subTitle = wf?.title ? truncate(wf.title) : truncate(`${type} · ${sum?.resource || a.workflow_id.slice(0, 8)}`)
     notifs.push({
       id:         a.approval_id,
       kind:       'approval',
       title:      `Approval required${incNum ? ' · ' + incNum : ''}`,
-      subtitle:   truncate(`${type} · ${service}`),
+      subtitle:   subTitle,
       timeAgo:    timeAgo(a.requested_at),
       workflowId: a.workflow_id,
       approvalId: a.approval_id,
@@ -87,39 +88,38 @@ function buildNotifications(
   const cutoff15 = Date.now() - 15 * 60_000
 
   for (const w of workflows) {
-    const createdMs  = new Date(w.created_at).getTime()
-    const isNew      = createdMs > cutoff15
-    const incNum     = (w as any).incident_number || ''
-    const type       = ((w as any).anomaly_type || w.lifecycle_state || 'incident').replace(/_/g, ' ')
-    const service    = (w as any).service || 'unknown'
-    const labelBase  = `${incNum ? incNum + ' · ' : ''}${truncate(type)}`
+    const createdMs = new Date(w.created_at).getTime()
+    const isNew     = createdMs > cutoff15
+    const incNum    = w.incident_number_str || ''
+    const subtitle  = truncate(w.title || w.summary || w.lifecycle_state || '—')
 
     if (w.lifecycle_state === 'resolved') {
       notifs.push({
         id: w.workflow_id + '_resolved', kind: 'resolved',
-        title: `Resolved · ${incNum || w.workflow_id.slice(0, 8)}`,
-        subtitle: truncate(service),
-        timeAgo: timeAgo(w.updated_at),
+        title:    `Resolved · ${incNum || w.workflow_id.slice(0, 8)}`,
+        subtitle,
+        timeAgo:    timeAgo(w.updated_at),
         workflowId: w.workflow_id,
-        createdAt: w.updated_at,
+        createdAt:  w.updated_at,
       })
     } else if (w.lifecycle_state === 'failed') {
       notifs.push({
         id: w.workflow_id + '_failed', kind: 'failed',
-        title: `Failed · ${incNum || w.workflow_id.slice(0, 8)}`,
-        subtitle: truncate(service),
-        timeAgo: timeAgo(w.updated_at),
+        title:    `Failed · ${incNum || w.workflow_id.slice(0, 8)}`,
+        subtitle,
+        timeAgo:    timeAgo(w.updated_at),
         workflowId: w.workflow_id,
-        createdAt: w.updated_at,
+        createdAt:  w.updated_at,
       })
     } else if (isNew) {
       notifs.push({
-        id: w.workflow_id, kind: 'incident',
-        title: labelBase || 'New incident',
-        subtitle: truncate(service),
-        timeAgo: timeAgo(w.created_at),
+        id:         w.workflow_id,
+        kind:       'incident',
+        title:      incNum ? `${incNum} · New incident` : (w.title ? truncate(w.title) : 'New incident'),
+        subtitle,
+        timeAgo:    timeAgo(w.created_at),
         workflowId: w.workflow_id,
-        createdAt: w.created_at,
+        createdAt:  w.created_at,
       })
     }
   }
