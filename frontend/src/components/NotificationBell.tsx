@@ -75,7 +75,7 @@ function buildNotifications(
     notifs.push({
       id:         a.approval_id,
       kind:       'approval',
-      title:      `Approval required${incNum ? ' · ' + incNum : ''}`,
+      title:      incNum || 'Approval required',
       subtitle:   subTitle,
       timeAgo:    timeAgo(a.requested_at),
       workflowId: a.workflow_id,
@@ -96,7 +96,7 @@ function buildNotifications(
     if (w.lifecycle_state === 'resolved') {
       notifs.push({
         id: w.workflow_id + '_resolved', kind: 'resolved',
-        title:    `Resolved · ${incNum || w.workflow_id.slice(0, 8)}`,
+        title:      incNum || w.workflow_id.slice(0, 8),
         subtitle,
         timeAgo:    timeAgo(w.updated_at),
         workflowId: w.workflow_id,
@@ -105,7 +105,7 @@ function buildNotifications(
     } else if (w.lifecycle_state === 'failed') {
       notifs.push({
         id: w.workflow_id + '_failed', kind: 'failed',
-        title:    `Failed · ${incNum || w.workflow_id.slice(0, 8)}`,
+        title:      incNum || w.workflow_id.slice(0, 8),
         subtitle,
         timeAgo:    timeAgo(w.updated_at),
         workflowId: w.workflow_id,
@@ -115,7 +115,7 @@ function buildNotifications(
       notifs.push({
         id:         w.workflow_id,
         kind:       'incident',
-        title:      incNum ? `${incNum} · New incident` : (w.title ? truncate(w.title) : 'New incident'),
+        title:      incNum || (w.title ? truncate(w.title) : 'New incident'),
         subtitle,
         timeAgo:    timeAgo(w.created_at),
         workflowId: w.workflow_id,
