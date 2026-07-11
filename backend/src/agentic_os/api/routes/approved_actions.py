@@ -212,7 +212,7 @@ Return a JSON object with exactly these fields:
   "blast_radius": 1,
   "requires_approval": false,
   "parameters": [
-    {{"name": "param_name", "type": "string|number|boolean", "required": true, "description": "what it is", "default": null}}
+    {{"name": "param_name", "type": "string|number|boolean", "required": false, "description": "what it is and which adapter needs it", "default": null}}
   ],
   "output_fields": [
     {{"field": "snake_case_field", "description": "what this value represents"}}
@@ -223,7 +223,8 @@ Rules:
 - blast_radius: 1=read-only, 2=safe change, 3=service impact, 4=data risk, 5=destructive
 - requires_approval should be true for blast_radius >= 3
 - infer ALL parameters from {{{{placeholders}}}} used in command_variants — include container_name, namespace, pod_name if those prefixes are used
-- output_fields: list every useful value the command prints that a downstream runbook step might need (counts, names, statuses, IPs, PIDs) — do NOT leave this empty for diagnostic tools
+- parameter required field: adapter-scoped params (container_name, namespace, pod_name) are ALWAYS required=false because they only apply to one adapter and are injected automatically by the platform from the watcher's registration context; only mark required=true for params the operator must supply explicitly (e.g. a hostname to ping, a process name to kill)
+- output_fields: list every useful individual value the command prints that a downstream runbook step might need — counts, names, statuses, IPs, PIDs, program names; for commands like netstat include both pid AND process_name separately since the column contains both; do NOT leave this empty for diagnostic tools
 - use null only for adapters where the command genuinely cannot apply"""
 
     try:
