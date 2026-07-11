@@ -174,9 +174,19 @@ async def generate_tool_definition(body: GenerateToolRequest):
 
     system_prompt = (
         "You are an expert DevOps engineer generating tool catalog entries for an IT "
-        "automation platform. Each tool runs shell commands on target systems via different "
-        "adapter types: docker, ssh, kubernetes, vcenter, aws_ssm, azure, any. "
-        "Use {{param_name}} placeholders in commands for runtime values. "
+        "automation platform. Each tool is a shell command the platform sends to a watcher "
+        "agent running on the target system. The watcher selects the correct command_variant "
+        "based on its adapter type and executes it directly.\n\n"
+        "CRITICAL adapter command conventions:\n"
+        "- docker:     ALWAYS prefix with 'docker exec {{container_name}} <cmd>' — "
+        "the command runs INSIDE the named container, not on the host.\n"
+        "- ssh:        bare shell command, runs on the remote host directly.\n"
+        "- kubernetes: ALWAYS prefix with 'kubectl exec -n {{namespace}} {{pod_name}} -- <cmd>' "
+        "to run inside a pod, OR use kubectl CLI commands (kubectl get, kubectl describe, etc.).\n"
+        "- aws_ssm:    bare shell command, delivered via SSM Run Command to an EC2 instance.\n"
+        "- azure:      bare shell command, delivered via Azure Run Command to a VM.\n"
+        "- any:        fallback bare shell command for unrecognised adapters.\n\n"
+        "Use {{param_name}} placeholders for runtime values. "
         "Respond with ONLY valid JSON — no markdown fences, no extra text."
     )
 
@@ -190,13 +200,13 @@ Return a JSON object with exactly these fields:
   "name": "Human-Readable Name",
   "description": "1-2 sentence description of what this tool does",
   "command_variants": {{
-    "docker":     "command or null",
-    "ssh":        "command or null",
-    "kubernetes": "command or null",
+    "docker":     "docker exec {{{{container_name}}}} <bare-command>  (or null if N/A)",
+    "ssh":        "<bare-command>  (or null if N/A)",
+    "kubernetes": "kubectl exec -n {{{{namespace}}}} {{{{pod_name}}}} -- <bare-command>  (or null if N/A)",
     "vcenter":    null,
-    "aws_ssm":    "command or null",
-    "azure":      "command or null",
-    "any":        "fallback command or null"
+    "aws_ssm":    "<bare-command>  (or null if N/A)",
+    "azure":      "<bare-command>  (or null if N/A)",
+    "any":        "<bare-command fallback>  (or null if truly adapter-specific)"
   }},
   "category": "diagnostic | remediation_safe | remediation_intrusive",
   "blast_radius": 1,
@@ -204,16 +214,17 @@ Return a JSON object with exactly these fields:
   "parameters": [
     {{"name": "param_name", "type": "string|number|boolean", "required": true, "description": "what it is", "default": null}}
   ],
-  "output_fields": []
+  "output_fields": [
+    {{"field": "snake_case_field", "description": "what this value represents"}}
+  ]
 }}
 
 Rules:
-- blast_radius 1=read-only, 2=safe change, 3=service impact, 4=data risk, 5=destructive
+- blast_radius: 1=read-only, 2=safe change, 3=service impact, 4=data risk, 5=destructive
 - requires_approval should be true for blast_radius >= 3
-- category diagnostic for read-only tools, remediation_safe for low-risk changes, remediation_intrusive for restarts/kills
-- infer parameters from {{placeholders}} used in command_variants
-- set output_fields to [] (inferred separately via /parse-output)
-- use null for adapters where the command does not apply"""
+- infer ALL parameters from {{{{placeholders}}}} used in command_variants — include container_name, namespace, pod_name if those prefixes are used
+- output_fields: list every useful value the command prints that a downstream runbook step might need (counts, names, statuses, IPs, PIDs) — do NOT leave this empty for diagnostic tools
+- use null only for adapters where the command genuinely cannot apply"""
 
     try:
         result_text = await provider.generate_agent_completion(
