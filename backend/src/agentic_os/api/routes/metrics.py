@@ -82,14 +82,13 @@ async def get_incident_metrics(db: Session = Depends(get_session)):
         """))
         active_incidents = result.scalar() or 0
 
-        # Resolved today
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        # Resolved in the last 24 hours (rolling window matches the card subtitle)
         result = db.execute(text("""
             SELECT COUNT(*) FROM workflow_states
             WHERE workflow_type = 'incident'
             AND lifecycle_state IN ('resolved', 'deployed', 'closed')
-            AND updated_at >= :today
-        """), {"today": today})
+            AND updated_at >= NOW() - INTERVAL '24 hours'
+        """))
         resolved_today = result.scalar() or 0
 
         # Average resolution time in seconds (for resolved/deployed incidents)
