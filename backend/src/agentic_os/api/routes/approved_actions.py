@@ -499,6 +499,71 @@ Rules:
 
         return data
 
+    def _sanitize_tool_def(td: dict) -> dict:
+        """
+        Deterministic post-processing of Call 1 output.
+        Fixes known LLM failure patterns so Call 2 works against clean data
+        and the registered tool runs correctly without manual edits.
+        """
+        variants: dict = td.get("command_variants") or {}
+
+        # ── Docker-specific fixes ─────────────────────────────────────────────
+        docker_cmd = variants.get("docker") or ""
+        if docker_cmd:
+            # 1. Normalise container reference: {{container_name}} → {target}
+            docker_cmd = re.sub(r'\{\{container_name\}\}', '{target}', docker_cmd)
+
+            # 2. Remove double-wrapping: docker exec {target} sh -c "docker exec {target} ..."
+            #    Keep only the inner command string.
+            double_wrap = re.match(
+                r'''docker\s+exec\s+\{target\}\s+(?:sh|bash)\s+-c\s+["']docker\s+exec\s+\{target\}\s+(.+)["']''',
+                docker_cmd, re.DOTALL
+            )
+            if double_wrap:
+                docker_cmd = f"docker exec {{target}} bash -c '{double_wrap.group(1)}'"
+
+            # 3. Consolidate: multiple "docker exec {target} <cmd>" calls chained with &&
+            #    → single "docker exec {target} bash -c '<cmd1> && <cmd2> && ...'"
+            #    Only applies when every segment starts with docker exec {target}
+            segments = [s.strip() for s in re.split(r'\s*&&\s*', docker_cmd)]
+            exec_prefix = re.compile(r'^docker\s+exec\s+\{?target\}?\s+')
+            if len(segments) > 1 and all(exec_prefix.match(s) for s in segments):
+                inner_parts = [exec_prefix.sub('', s) for s in segments]
+                docker_cmd = "docker exec {target} bash -c '" + " && ".join(inner_parts) + "'"
+
+            variants["docker"] = docker_cmd
+
+        # ── Apply same {{container_name}} → {target} fix to all other variants ─
+        for key, val in variants.items():
+            if val and key != "docker":
+                variants[key] = re.sub(r'\{\{container_name\}\}', '{target}', val)
+
+        # ── Key=value output: fix bare 'hostname' → echo "hostname=$(hostname)" ─
+        HOSTNAME_BARE = re.compile(r'(?<!["\'\w])hostname(?!\s*=|\s*\(|\w)')
+        for key, val in variants.items():
+            if val and HOSTNAME_BARE.search(val):
+                variants[key] = HOSTNAME_BARE.sub('echo "hostname=$(hostname)"', val)
+
+        # ── Float uptime: awk '{print $1}' /proc/uptime → cut -d. -f1 /proc/uptime ─
+        FLOAT_UPTIME = re.compile(r'''awk\s+['"]\{print\s+\$1\}['"]\s+/proc/uptime''')
+        for key, val in variants.items():
+            if val:
+                variants[key] = FLOAT_UPTIME.sub('cut -d. -f1 /proc/uptime', val)
+
+        td["command_variants"] = variants
+
+        # ── Remove container_name from parameters (it's auto-injected via {target}) ─
+        params: list = td.get("parameters") or []
+        td["parameters"] = [
+            p for p in params
+            if p.get("name") not in ("container_name",)
+        ]
+
+        # ── Safety net: always register as disabled ───────────────────────────
+        td["enabled"] = False
+
+        return td
+
     try:
         # ── Call 0: research correct command + realistic sample output ────────
         research_sample: list[str] = []
@@ -526,7 +591,7 @@ Rules:
             max_tokens=2000,
             temperature=0.2,
         )
-        tool_def = json.loads(result_text.strip())
+        tool_def = _sanitize_tool_def(json.loads(result_text.strip()))
 
         # ── Call 2: regex patterns ────────────────────────────────────────────
         output_fields = tool_def.get("output_fields") or []
@@ -538,10 +603,13 @@ Rules:
                 next((v for v in variants.values() if v), None) or ""
             )
             # Strip docker/kubectl wrapper — use the bare inner command for context
+            # Handles both {target} (sanitized form) and {{container_name}} (legacy)
             bare_cmd = re.sub(
-                r'^(?:docker exec \{\{[^}]+\}\}|kubectl exec -n \{\{[^}]+\}\} \{\{[^}]+\}\} --)\s*',
+                r'^(?:docker exec \{[^}]+\}(?:\s+bash\s+-c\s+["\'])?|kubectl exec -n \{[^}]+\} \{[^}]+\} --)\s*',
                 '', representative_cmd
             ).strip()
+            # Strip trailing quote if bash -c '...' wrapper was removed
+            bare_cmd = bare_cmd.rstrip("'\"").strip()
 
             try:
                 pattern_data = await _generate_patterns(
