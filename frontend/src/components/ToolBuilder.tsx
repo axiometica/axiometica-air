@@ -68,11 +68,13 @@ async function apiFetch(url: string, opts?: RequestInit) {
 interface ToolBuilderProps {
   isExpanded: boolean
   onToggle: () => void
+  /** Called after a tool is successfully registered — e.g. to reload the parent list */
+  onRegistered?: () => void
 }
 
 type Step = 'describe' | 'review' | 'parse' | 'done'
 
-export default function ToolBuilder({ isExpanded, onToggle }: ToolBuilderProps) {
+export default function ToolBuilder({ isExpanded, onToggle, onRegistered }: ToolBuilderProps) {
   const [step, setStep] = useState<Step>('describe')
 
   // Step 1 — describe
@@ -163,6 +165,7 @@ export default function ToolBuilder({ isExpanded, onToggle }: ToolBuilderProps) 
       })
       setRegisteredName(data.name ?? (draft as any).name ?? 'Tool')
       setStep('done')
+      onRegistered?.()
     } catch (e: any) {
       setRegError(e.message)
     } finally {

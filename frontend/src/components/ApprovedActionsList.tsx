@@ -13,6 +13,7 @@ import {
   IconLock,
   IconBell,
 } from './icons'
+import ToolBuilder from './ToolBuilder'
 
 export interface ProcessRule {
   priority: number
@@ -98,13 +99,14 @@ const BLAST_LABELS: Record<number, { label: string; color: string }> = {
 const CATEGORIES = ['all', 'diagnostic', 'remediation_safe', 'remediation_intrusive', 'notify'] as const
 
 export default function ApprovedActionsList({ onEdit, onNew }: Props) {
-  const [actions, setActions]       = useState<ApprovedAction[]>([])
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState<string | null>(null)
-  const [search, setSearch]         = useState('')
-  const [catFilter, setCatFilter]   = useState<string>('all')
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [confirmId, setConfirmId]   = useState<string | null>(null)
+  const [actions, setActions]           = useState<ApprovedAction[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState<string | null>(null)
+  const [search, setSearch]             = useState('')
+  const [catFilter, setCatFilter]       = useState<string>('all')
+  const [deletingId, setDeletingId]     = useState<string | null>(null)
+  const [confirmId, setConfirmId]       = useState<string | null>(null)
+  const [showAIBuilder, setShowAIBuilder] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -164,19 +166,48 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
     <div className="page-transition-enter">
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex items-start justify-between mb-6">
         <div>
           <h2 className="text-section-title mb-1" style={{ color: '#e8eef5' }}>Approved Actions</h2>
           <p className="text-sm" style={{ color: '#a0aec0' }}>
-            Catalog of 40 standard diagnostic and remediation actions. Intrusive actions enforce
+            Catalog of diagnostic and remediation actions. Intrusive actions enforce
             per-process regex allow/deny rules before execution.
           </p>
         </div>
-        <button onClick={onNew} className="btn btn-primary flex items-center gap-2 flex-shrink-0">
-          <IconPlus size={18} />
-          New Action
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <button
+            onClick={() => setShowAIBuilder(v => !v)}
+            className="btn flex items-center gap-2"
+            style={{
+              background: showAIBuilder ? 'rgba(139,92,246,0.15)' : 'transparent',
+              border: `1px solid ${showAIBuilder ? '#8b5cf6' : '#3d4557'}`,
+              color: showAIBuilder ? '#a78bfa' : '#a0aec0',
+              padding: '7px 14px',
+              borderRadius: 7,
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            ✦ Generate with AI
+          </button>
+          <button onClick={onNew} className="btn btn-primary flex items-center gap-2">
+            <IconPlus size={18} />
+            New Action
+          </button>
+        </div>
       </div>
+
+      {/* AI Tool Builder panel */}
+      {showAIBuilder && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <ToolBuilder
+            isExpanded={true}
+            onToggle={() => setShowAIBuilder(false)}
+            onRegistered={() => { load(); setShowAIBuilder(false) }}
+          />
+        </div>
+      )}
 
       {/* Filter tabs */}
       <div className="flex items-center gap-2 mb-5 flex-wrap">
