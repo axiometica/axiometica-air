@@ -181,7 +181,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
       enabled,
       command:           command.trim(),
       command_variants:  Object.fromEntries(
-        Object.entries(commandVariants).filter(([k, v]) => k.trim() && v.trim())
+        Object.entries(commandVariants).filter(([k, v]) => k.trim() && v != null && v.trim())
       ),
       parameters:        parameters.filter(p => p.name.trim()),
       process_rules:     hasProcessRules ? processRules : null,
@@ -428,7 +428,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
               }
               const meta = envMeta[env] || { icon: '⚙', label: env }
               const resolvedTransport = meta.transport
-                ? meta.transport.replace('⟨cmd⟩', cmd.trim() || '⟨cmd⟩')
+                ? meta.transport.replace('⟨cmd⟩', (cmd ?? '').trim() || '⟨cmd⟩')
                 : null
               return (
                 <div key={env} className="space-y-1">
@@ -439,7 +439,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
                       <span>{meta.label}</span>
                     </div>
                     <input
-                      value={cmd}
+                      value={cmd ?? ''}
                       onChange={e => setCommandVariants(prev => ({ ...prev, [env]: e.target.value }))}
                       className="form-input text-sm"
                       style={{ fontFamily: '"Monaco", "Consolas", "Courier New", monospace', fontSize: '0.75rem' }}
