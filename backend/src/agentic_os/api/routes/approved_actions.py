@@ -334,17 +334,25 @@ Rules:
         Python builds the regex — no LLM regex writing.
         If known_sample_lines are provided (from call 0 research), they are used
         directly instead of asking the LLM to generate its own."""
-        def _is_count_field(f: dict) -> bool:
-            """Heuristic: fields named *_count or with integer type and tabular-output context."""
+        def _is_count_field(f: dict, cmd: str = "") -> bool:
+            """True only when the command produces RAW multi-row tabular output and the
+            field counts rows in it. NOT for fields whose value is already a scalar
+            (e.g. produced by piping through wc -l or grep -c)."""
             name = f.get("field", "")
-            return name.endswith("_count") or name in ("count", "total", "num_connections", "num_processes")
+            if not (name.endswith("_count") or name in ("count", "total", "num_connections", "num_processes")):
+                return False
+            # If the command already aggregates to a single value, the field is
+            # a scalar — use regex extraction, not runtime line-counting.
+            if re.search(r'\|\s*(?:wc\s+-l|grep\s+-c)', cmd):
+                return False
+            return True
 
         field_template = json.dumps(
             [{"field": f["field"],
               "description": f.get("description", ""),
               "strategy": (
                   "count"
-                  if _is_count_field(f)
+                  if _is_count_field(f, command)
                   else "<FILL: single_value | column | after_literal | end_split_before | end_split_after | last_column | count>"
               ),
               "col": "<if column: 1-based column number, else omit>",
@@ -538,17 +546,58 @@ Rules:
             if val and key != "docker":
                 variants[key] = re.sub(r'\{\{container_name\}\}', '{target}', val)
 
-        # ── Key=value output: fix bare 'hostname' → echo "hostname=$(hostname)" ─
-        HOSTNAME_BARE = re.compile(r'(?<!["\'\w])hostname(?!\s*=|\s*\(|\w)')
-        for key, val in variants.items():
-            if val and HOSTNAME_BARE.search(val):
-                variants[key] = HOSTNAME_BARE.sub('echo "hostname=$(hostname)"', val)
-
         # ── Float uptime: awk '{print $1}' /proc/uptime → cut -d. -f1 /proc/uptime ─
         FLOAT_UPTIME = re.compile(r'''awk\s+['"]\{print\s+\$1\}['"]\s+/proc/uptime''')
         for key, val in variants.items():
             if val:
                 variants[key] = FLOAT_UPTIME.sub('cut -d. -f1 /proc/uptime', val)
+
+        # ── General: wrap bare unlabeled &&-segments as echo "label=$(cmd)" ──
+        # Commands whose output is inherently formatted — leave them alone.
+        _PASSTHROUGH = re.compile(
+            r'\b(echo|printf|awk|sed|cut|tr|grep|wc|free|ps|df|ss|netstat|'
+            r'cat|tail|head|ls|find|curl|wget|ping|nc|iostat|vmstat|'
+            r'docker|kubectl|systemctl|service|journalctl|python3?|ruby|node)\b'
+        )
+
+        def _is_labeled(seg: str) -> bool:
+            """True if the segment already produces key=value output."""
+            seg = seg.strip()
+            if not seg:
+                return True
+            # echo/printf with an = somewhere after them
+            if re.search(r'\b(echo|printf)\b.*=', seg):
+                return True
+            # key=$(cmd) assignment form
+            if re.search(r'\w+=\$\(', seg):
+                return True
+            # passthrough — complex command whose output we don't touch
+            if _PASSTHROUGH.search(seg):
+                return True
+            return False
+
+        def _wrap_segment(seg: str) -> str:
+            seg = seg.strip()
+            if not seg or _is_labeled(seg):
+                return seg
+            # Derive label from the command name (strip path, hyphens → underscores)
+            label = seg.split()[0].split('/')[-1].replace('-', '_')
+            return f'echo "{label}=$({seg})"'
+
+        def _fix_chain(chain: str) -> str:
+            parts = re.split(r'\s*&&\s*', chain)
+            return ' && '.join(_wrap_segment(p) for p in parts)
+
+        for key, val in list(variants.items()):
+            if not val:
+                continue
+            # Docker: inner chain is wrapped in bash -c '...' or bash -c "..."
+            m = re.match(r"^(docker exec \{target\} bash -c ['\"])(.+)(['\"])$",
+                         val, re.DOTALL)
+            if m:
+                variants[key] = m.group(1) + _fix_chain(m.group(2)) + m.group(3)
+            else:
+                variants[key] = _fix_chain(val)
 
         td["command_variants"] = variants
 
