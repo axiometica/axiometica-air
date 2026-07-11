@@ -14,6 +14,7 @@ import {
 import { IconCheck, IconAlertTriangle } from './icons'
 import LLMSettings from './LLMSettings'
 import NotificationTeams from './NotificationTeams'
+import ToolBuilder from './ToolBuilder'
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const DS = {
@@ -1963,6 +1964,9 @@ export default function Settings() {
         }}>
           <NotificationTeams isExpanded={expandedSections.has('notification-teams')} onToggle={() => toggleSection('notification-teams')} />
         </div>
+
+        {/* ── Tool Builder ───────────────────────────────────────────── */}
+        <ToolBuilder isExpanded={expandedSections.has('tool-builder')} onToggle={() => toggleSection('tool-builder')} />
 
         {/* ── About ── */}
         <div style={{

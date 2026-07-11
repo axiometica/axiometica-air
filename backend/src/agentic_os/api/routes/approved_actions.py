@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Any
 from uuid import UUID
 import re
+import json
 
 from agentic_os.db.database import get_session
 from agentic_os.db.repositories import ApprovedActionRepository
@@ -139,6 +140,154 @@ def delete_action(action_id: UUID, db: Session = Depends(get_session)):
         )
     if not repo.delete(action_id):
         raise HTTPException(status_code=404, detail="Action not found")
+
+
+class GenerateToolRequest(BaseModel):
+    description: str
+    adapter_hints: Optional[List[str]] = None
+
+
+class ParseOutputRequest(BaseModel):
+    tool_name:    str
+    sample_output: str
+    command:      Optional[str] = None
+
+
+@router.post("/generate")
+async def generate_tool_definition(body: GenerateToolRequest):
+    """
+    Use the platform LLM to draft a complete approved-action catalog entry from a
+    plain-English description. Returns a JSON object ready for POST /approved-actions.
+    """
+    from agentic_os.services.summary_service import get_summary_service
+
+    provider = get_summary_service().provider
+    if not provider.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="LLM not configured — go to Settings → LLM to set up a provider first.",
+        )
+
+    adapter_hint_text = ""
+    if body.adapter_hints:
+        adapter_hint_text = f"\nFocus especially on these adapters: {', '.join(body.adapter_hints)}."
+
+    system_prompt = (
+        "You are an expert DevOps engineer generating tool catalog entries for an IT "
+        "automation platform. Each tool runs shell commands on target systems via different "
+        "adapter types: docker, ssh, kubernetes, vcenter, aws_ssm, azure, any. "
+        "Use {{param_name}} placeholders in commands for runtime values. "
+        "Respond with ONLY valid JSON — no markdown fences, no extra text."
+    )
+
+    user_prompt = f"""Generate a complete tool catalog entry for this request:
+
+{body.description}{adapter_hint_text}
+
+Return a JSON object with exactly these fields:
+{{
+  "tool_name": "snake_case_unique_identifier",
+  "name": "Human-Readable Name",
+  "description": "1-2 sentence description of what this tool does",
+  "command_variants": {{
+    "docker":     "command or null",
+    "ssh":        "command or null",
+    "kubernetes": "command or null",
+    "vcenter":    null,
+    "aws_ssm":    "command or null",
+    "azure":      "command or null",
+    "any":        "fallback command or null"
+  }},
+  "category": "diagnostic | remediation_safe | remediation_intrusive",
+  "blast_radius": 1,
+  "requires_approval": false,
+  "parameters": [
+    {{"name": "param_name", "type": "string|number|boolean", "required": true, "description": "what it is", "default": null}}
+  ],
+  "output_fields": []
+}}
+
+Rules:
+- blast_radius 1=read-only, 2=safe change, 3=service impact, 4=data risk, 5=destructive
+- requires_approval should be true for blast_radius >= 3
+- category diagnostic for read-only tools, remediation_safe for low-risk changes, remediation_intrusive for restarts/kills
+- infer parameters from {{placeholders}} used in command_variants
+- set output_fields to [] (inferred separately via /parse-output)
+- use null for adapters where the command does not apply"""
+
+    try:
+        result_text = await provider.generate_agent_completion(
+            system_prompt=system_prompt,
+            user_content=user_prompt,
+            max_tokens=1500,
+            temperature=0.2,
+        )
+        return json.loads(result_text)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM returned non-JSON. Raw output: {result_text[:300]}",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/parse-output")
+async def parse_tool_output_schema(body: ParseOutputRequest):
+    """
+    Given sample stdout from a tool command, use the LLM to infer the output_fields
+    schema (field names, types, descriptions) for the catalog entry.
+    """
+    from agentic_os.services.summary_service import get_summary_service
+
+    provider = get_summary_service().provider
+    if not provider.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="LLM not configured — go to Settings → LLM.",
+        )
+
+    system_prompt = (
+        "You are an expert at parsing shell command output. Extract a structured schema "
+        "from sample stdout. Respond with ONLY valid JSON — no markdown fences, no extra text."
+    )
+
+    cmd_context = f"\nCommand: {body.command}" if body.command else ""
+
+    user_prompt = f"""Tool name: {body.tool_name}{cmd_context}
+
+Sample stdout:
+{body.sample_output[:3000]}
+
+Return a JSON object:
+{{
+  "output_fields": [
+    {{"field": "snake_case_field_name", "description": "what this value represents"}}
+  ],
+  "parsing_notes": "brief note on parsing strategy (e.g. 'parse column 2 of each line', 'JSON output')"
+}}
+
+Rules:
+- Only include fields that are reliably extractable from this sample (not guesses)
+- Use snake_case for field names
+- Keep descriptions concise (under 15 words)
+- If the output is already JSON, note it in parsing_notes"""
+
+    try:
+        result_text = await provider.generate_agent_completion(
+            system_prompt=system_prompt,
+            user_content=user_prompt,
+            max_tokens=600,
+            temperature=0.1,
+        )
+        return json.loads(result_text)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM returned non-JSON. Raw output: {result_text[:300]}",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/validate-process")
