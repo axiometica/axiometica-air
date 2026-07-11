@@ -4168,9 +4168,10 @@ class ToolRegistryAgent(Agent):
         Generic, schema-driven output extraction — replaces a hardcoded per-tool parser
         with rules carried on the tool's own catalog definition (approved_actions.output_fields).
 
-        Each rule: {"field": str, "kind": "regex"|"jsonpath", "pattern": str, "type": "boolean"|"integer"|"float"|"string"}
+        Each rule: {"field": str, "kind": "regex"|"count"|"jsonpath", "pattern": str, "type": "boolean"|"integer"|"float"|"string"}
           - regex + boolean: presence-based — True if pattern matches anywhere, else False.
           - regex + other types: first capture group (or whole match if no group), cast to type.
+          - count: counts the number of lines in out that match pattern (re.MULTILINE). Result is always integer.
           - jsonpath: dotted/bracket-index path (e.g. "$[0].State.Health.Status") walked over json.loads(out).
         A rule that fails to match/resolve is simply omitted from the result (except presence-based booleans,
         which resolve to False on no match).
@@ -4229,6 +4230,12 @@ class ToolRegistryAgent(Agent):
                         casted = _cast(raw, type_)
                         if casted is not None:
                             result[field] = casted
+            elif kind == "count":
+                # Count lines matching the pattern — empty pattern counts all non-empty lines
+                if pattern:
+                    result[field] = len(re.findall(pattern, out, re.MULTILINE))
+                else:
+                    result[field] = sum(1 for l in out.splitlines() if l.strip())
             elif kind == "jsonpath":
                 raw = _jsonpath(pattern)
                 if raw is not None:

@@ -698,12 +698,17 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
                     className="form-input text-xs py-1.5"
                   >
                     <option value="regex">regex</option>
+                    <option value="count">count</option>
                     <option value="jsonpath">jsonpath</option>
                   </select>
                   <input
                     value={f.pattern}
                     onChange={e => updateOutputField(idx, 'pattern', e.target.value)}
-                    placeholder={f.kind === 'regex' ? 'HTTP/[\\d.]+\\s+(\\d{3})' : '$.usage_percent'}
+                    placeholder={
+                      f.kind === 'jsonpath' ? '$.usage_percent'
+                      : f.kind === 'count'  ? '^tcp\\s+LISTEN  (lines matching pattern)'
+                      : 'HTTP/[\\d.]+\\s+(\\d{3})'
+                    }
                     className="form-input text-xs py-1.5 font-mono"
                   />
                   <select

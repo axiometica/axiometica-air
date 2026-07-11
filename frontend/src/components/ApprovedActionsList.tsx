@@ -198,15 +198,12 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
         </div>
       </div>
 
-      {/* AI Tool Builder panel */}
+      {/* AI Tool Builder modal */}
       {showAIBuilder && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          <ToolBuilder
-            isExpanded={true}
-            onToggle={() => setShowAIBuilder(false)}
-            onRegistered={() => { load(); setShowAIBuilder(false) }}
-          />
-        </div>
+        <ToolBuilder
+          onClose={() => setShowAIBuilder(false)}
+          onRegistered={() => { load(); setShowAIBuilder(false) }}
+        />
       )}
 
       {/* Filter tabs */}
