@@ -178,16 +178,36 @@ async def generate_tool_definition(body: GenerateToolRequest):
         "agent running on the target system. The watcher selects the correct command_variant "
         "based on its adapter type and executes it directly.\n\n"
         "CRITICAL adapter command conventions:\n"
-        "- docker:     ALWAYS prefix with 'docker exec {{container_name}} <cmd>' — "
-        "the command runs INSIDE the named container, not on the host.\n"
+        "- docker:     Use 'docker exec {target} bash -c '<cmd>'' where {target} is the "
+        "auto-injected container name from the watcher context. "
+        "For chained commands wrap them ALL inside ONE bash -c '...' — a single docker exec "
+        "call, never one docker exec per sub-command. NEVER nest docker exec inside another "
+        "docker exec. NEVER use {{container_name}} — use {target} instead (single braces, "
+        "auto-injected, no manual entry needed).\n"
         "- ssh:        bare shell command, runs on the remote host directly.\n"
         "- kubernetes: ALWAYS prefix with 'kubectl exec -n {{namespace}} {{pod_name}} -- <cmd>' "
         "to run inside a pod, OR use kubectl CLI commands (kubectl get, kubectl describe, etc.).\n"
         "- aws_ssm:    bare shell command, delivered via SSM Run Command to an EC2 instance.\n"
         "- azure:      bare shell command, delivered via Azure Run Command to a VM.\n"
         "- any:        fallback bare shell command for unrecognised adapters.\n\n"
-        "Use {{param_name}} placeholders for runtime values. "
-        "Respond with ONLY valid JSON — no markdown fences, no extra text."
+        "Use {{param_name}} placeholders for runtime values (double braces = user-supplied). "
+        "Use {param_name} (single braces) ONLY for platform-injected values: {target}.\n"
+        "Respond with ONLY valid JSON — no markdown fences, no extra text.\n\n"
+        "Common command conventions:\n"
+        "- key=value output: ALL fields must use 'echo \"key=$(command)\"' format — "
+        "NEVER output a bare unformatted value. This applies to every field including hostname: "
+        "always 'echo \"hostname=$(hostname)\"', never just 'hostname'.\n"
+        "- uptime: use 'cut -d. -f1 /proc/uptime' to get a clean integer (not awk which "
+        "returns a float like 30052.18).\n"
+        "- chained key=value commands: connect with && inside a single bash -c '...' so "
+        "all fields are collected in one exec call.\n"
+        "- curl HTTP checks: always use -s -o /dev/null -w \"%{http_code} %{time_total}\\n\" "
+        "to produce a single space-separated line. NEVER use JSON format strings or "
+        "${if_eq:...} constructs — those do not exist in curl. "
+        "Capture http_code and time_total as separate output fields; do NOT add an "
+        "is_healthy field (the runbook can derive that from the status code).\n"
+        "- ps / top / ss / netstat: always pipe through grep/awk or wc -l to reduce "
+        "to a single-value output rather than returning a raw table."
     )
 
     user_prompt = f"""Generate a complete tool catalog entry for this request:
@@ -211,6 +231,7 @@ Return a JSON object with exactly these fields:
   "category": "diagnostic | remediation_safe | remediation_intrusive",
   "blast_radius": 1,
   "requires_approval": false,
+  "enabled": false,
   "parameters": [
     {{"name": "param_name", "type": "string|number|boolean", "required": false, "description": "what it is and which adapter needs it", "default": null}}
   ],
