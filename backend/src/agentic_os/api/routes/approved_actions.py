@@ -245,7 +245,14 @@ Rules:
 - requires_approval should be true for blast_radius >= 3
 - infer ALL parameters from {{{{placeholders}}}} used in command_variants — include container_name, namespace, pod_name if those prefixes are used
 - parameter required field: adapter-scoped params (container_name, namespace, pod_name) are ALWAYS required=false because they only apply to one adapter and are injected automatically by the platform from the watcher's registration context; only mark required=true for params the operator must supply explicitly (e.g. a hostname to ping, a process name to kill)
-- output_fields: list every useful individual value the command prints that a downstream runbook step might need — counts, names, statuses, IPs, PIDs, program names; for commands like netstat include both pid AND process_name separately; do NOT leave this empty for diagnostic tools
+- output_fields: ONLY populate this if the command has fixed, predictable output format that
+  you can verify from the research sample. List every useful individual value a downstream
+  runbook step might need — counts, names, statuses, IPs, PIDs, program names.
+  If the command output depends on runtime input (e.g. a user-supplied script path, a filename,
+  a query string) or cannot be predicted without knowing that input, set output_fields to [].
+  An empty output_fields is correct and expected in those cases — generating speculative fields
+  that don't match real output is worse than leaving it empty. The operator will use the Refine
+  section to populate fields from real output after running the tool.
 - IMPORTANT — tabular / multi-row output: if the command produces a table with many rows
   (e.g. ss, netstat, ps, df, docker ps), the platform captures ONE value per field.
   Handle this with ONE of these patterns:
@@ -305,13 +312,17 @@ Rules:
             user_content=f"""Task: {description}
 
 Step 1 — identify the single best bare shell command (or short pipeline) to accomplish this.
-Step 2 — write 8-10 realistic sample output lines the command would produce on a typical system.
-         Use realistic values (real-looking IPs, PIDs, sizes, names) — NOT placeholders.
-         Include a header line if the command normally prints one.
+Step 2 — assess whether the command has FIXED, PREDICTABLE output format:
+         - Fixed format: the output always has the same columns/structure (e.g. free -m, df -h, ps aux)
+         - Variable format: the output depends on a user-supplied parameter such as a script path,
+           filename, query, or other runtime input — you cannot know the format in advance.
+         If fixed: write 8-10 realistic sample output lines the command would produce.
+         If variable: set sample_output to [] — do not invent output.
 
 Return JSON:
 {{
   "command": "bare shell command without docker/kubectl wrappers",
+  "output_predictable": true,
   "sample_output": [
     "line1",
     "line2"
@@ -321,7 +332,8 @@ Return JSON:
 Rules:
 - command must NOT include 'docker exec', 'kubectl exec', or adapter wrappers
 - sample_output must reflect what that exact command would print — format, columns, labels
-- Use realistic values; headers should match real command output""",
+- Use realistic values; headers should match real command output
+- If output_predictable is false, sample_output MUST be [] — never invent sample lines""",
             max_tokens=800,
             temperature=0.2,
         )
@@ -625,20 +637,33 @@ Rules:
     try:
         # ── Call 0: research correct command + realistic sample output ────────
         research_sample: list[str] = []
+        output_predictable: bool = True
         call1_prompt = user_prompt
         try:
             research = await _research(provider, body.description)
             researched_cmd = research.get("command", "")
             research_sample = research.get("sample_output") or []
-            if researched_cmd and research_sample:
-                sample_preview = "\n".join(research_sample[:8])
-                call1_prompt = (
-                    user_prompt
-                    + f"\n\nResearch context — use this to determine the correct command:\n"
-                    f"Correct bare command: {researched_cmd}\n"
-                    f"Sample output ({len(research_sample)} lines):\n{sample_preview}\n\n"
-                    "Base command_variants on the command above; add adapter wrappers as required."
-                )
+            output_predictable = research.get("output_predictable", True)
+            if researched_cmd:
+                if research_sample:
+                    sample_preview = "\n".join(research_sample[:8])
+                    call1_prompt = (
+                        user_prompt
+                        + f"\n\nResearch context — use this to determine the correct command:\n"
+                        f"Correct bare command: {researched_cmd}\n"
+                        f"Sample output ({len(research_sample)} lines):\n{sample_preview}\n\n"
+                        "Base command_variants on the command above; add adapter wrappers as required."
+                    )
+                else:
+                    # Research determined output is not predictable — suppress output_fields
+                    call1_prompt = (
+                        user_prompt
+                        + f"\n\nResearch context — use this to determine the correct command:\n"
+                        f"Correct bare command: {researched_cmd}\n"
+                        "Output format: NOT PREDICTABLE — the command output depends on runtime "
+                        "input and cannot be known in advance. Set output_fields to [].\n\n"
+                        "Base command_variants on the command above; add adapter wrappers as required."
+                    )
         except Exception:
             pass  # graceful fallback: proceed with 2-call flow
 
@@ -652,6 +677,9 @@ Rules:
         tool_def = _sanitize_tool_def(json.loads(result_text.strip()))
 
         # ── Call 2: regex patterns ────────────────────────────────────────────
+        # Skip pattern generation if output is unpredictable (e.g. user-supplied script)
+        if not output_predictable:
+            tool_def["output_fields"] = []
         output_fields = tool_def.get("output_fields") or []
         if output_fields:
             variants = tool_def.get("command_variants") or {}
@@ -758,7 +786,7 @@ Rules:
         result_text = await provider.generate_agent_completion(
             system_prompt=system_prompt,
             user_content=user_prompt,
-            max_tokens=2000,
+            max_tokens=4000,
             temperature=0.1,
         )
         # Strip markdown fences if present

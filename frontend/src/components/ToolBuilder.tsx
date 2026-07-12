@@ -63,6 +63,8 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
   // Step 2 — JSON draft
   const [draftJson, setDraftJson]       = useState('')
   const [jsonError, setJsonError]       = useState<string | null>(null)
+  const [toolName, setToolName]         = useState('')
+  const [toolId, setToolId]             = useState('')
 
   // Step 2 — refine section
   const [sampleOutput, setSampleOutput] = useState('')
@@ -91,6 +93,8 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
       // Pull research sample out before storing in the JSON editor
       const rs: string = data._research_sample ?? ''
       delete data._research_sample
+      setToolName(data.name ?? '')
+      setToolId(data.tool_name ?? '')
       setDraftJson(JSON.stringify(data, null, 2))
       if (rs) {
         setSampleOutput(rs)
@@ -160,12 +164,18 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
           return false
         }
       }
-      const merged = existing.map((f: any) => {
-        if (!parsedMap.has(f.field)) return f
-        const hasPattern = f.pattern && f.pattern !== ''
-        if (!hasPattern || !patternExtractsCleanly(f.pattern)) return parsedMap.get(f.field)
-        return f
-      })
+      const merged = existing
+        .map((f: any) => {
+          const hasPattern = f.pattern && f.pattern !== ''
+          if (!parsedMap.has(f.field)) {
+            // Not found in parsed results — keep only if pattern works against the sample
+            return (hasPattern && patternExtractsCleanly(f.pattern)) ? f : null
+          }
+          // In parsed results — replace if pattern is missing or doesn't extract cleanly
+          if (!hasPattern || !patternExtractsCleanly(f.pattern)) return parsedMap.get(f.field)
+          return f
+        })
+        .filter((f: any) => f !== null)
       const existingNames = new Set(existing.map((f: any) => f.field))
       for (const pf of parsed) {
         if (!existingNames.has(pf.field)) merged.push(pf)
@@ -185,11 +195,15 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
     setRegistering(true)
     setRegError(null)
     try {
-      // Strip any internal fields before POSTing
+      // Strip any internal fields before POSTing; apply user-edited name/id
       const { _research_sample, ...payload } = draft as any
       const data = await apiFetch('/api/approved-actions', {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          name:      toolName.trim() || payload.name,
+          tool_name: toolId.trim()   || payload.tool_name,
+        }),
       })
       setRegisteredName(data.name ?? payload.name ?? 'Tool')
       setStep('done')
@@ -214,6 +228,8 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
     setParseError(null)
     setRegError(null)
     setRegisteredName('')
+    setToolName('')
+    setToolId('')
   }
 
   // ── Step pill helper ──────────────────────────────────────────────────────
@@ -246,7 +262,6 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
         zIndex: 1000,
         padding: '1.25rem',
       }}
-      onClick={onClose}
     >
       <div
         style={{
@@ -262,7 +277,6 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
           overflow: 'hidden',
           boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
         }}
-        onClick={e => e.stopPropagation()}
       >
         {/* ── Modal header ───────────────────────────────────────── */}
         <div style={{
@@ -418,6 +432,32 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
           {/* ── Step 2: Review ──────────────────────────────────────────────── */}
           {!generating && step === 'review' && (
             <div>
+              {/* Editable name fields */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: '1rem' }}>
+                <div style={{ flex: 2 }}>
+                  <label style={{ display: 'block', fontSize: '0.77rem', fontWeight: 600, color: C.txtM, marginBottom: '0.35rem' }}>
+                    Name
+                  </label>
+                  <input
+                    value={toolName}
+                    onChange={e => setToolName(e.target.value)}
+                    placeholder="Human-readable tool name"
+                    style={inputStyle}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '0.77rem', fontWeight: 600, color: C.txtM, marginBottom: '0.35rem' }}>
+                    Tool ID <span style={{ fontWeight: 400, color: C.txtS }}>(locked after register)</span>
+                  </label>
+                  <input
+                    value={toolId}
+                    onChange={e => setToolId(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                    placeholder="snake_case_id"
+                    style={{ ...inputStyle, fontFamily: 'monospace' }}
+                  />
+                </div>
+              </div>
+
               {/* JSON preview (read-only) */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.45rem' }}>
                 <label style={{ fontSize: '0.77rem', fontWeight: 600, color: C.txtM }}>
