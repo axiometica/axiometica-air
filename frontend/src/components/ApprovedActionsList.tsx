@@ -179,9 +179,24 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
             onClick={() => setShowAIBuilder(v => !v)}
             className="btn flex items-center gap-2"
             style={{
-              background: showAIBuilder ? 'rgba(139,92,246,0.15)' : 'transparent',
-              border: `1px solid ${showAIBuilder ? '#8b5cf6' : '#3d4557'}`,
-              color: showAIBuilder ? '#a78bfa' : '#a0aec0',
+              background: 'transparent',
+              border: `1px solid #a855f7`,
+              color: '#a855f7',
+              padding: '7px 14px',
+              borderRadius: 7,
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              opacity: showAIBuilder ? 0.6 : 1,
+            }}
+          >
+            ✦ Generate with AI
+          </button>
+          <button onClick={onNew} className="btn flex items-center gap-2"
+            style={{
+              background: 'transparent',
+              border: '1px solid #4070a0',
+              color: '#6a9fc0',
               padding: '7px 14px',
               borderRadius: 7,
               fontSize: '0.82rem',
@@ -189,9 +204,6 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
               cursor: 'pointer',
             }}
           >
-            ✦ Generate with AI
-          </button>
-          <button onClick={onNew} className="btn btn-primary flex items-center gap-2">
             <IconPlus size={18} />
             New Action
           </button>

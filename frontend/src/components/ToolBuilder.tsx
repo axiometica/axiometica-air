@@ -138,15 +138,34 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
             ?? null,
         }),
       })
-      // Merge: keep fields that already have patterns; fill in blanks; append new fields
+      // Merge: replace blank patterns OR patterns that don't match the sample;
+      // keep patterns that already extract a value; append new fields from parse
       const existing: any[] = (draft as any).output_fields ?? []
       const parsed: any[] = data.output_fields ?? []
       const parsedMap = new Map(parsed.map((f: any) => [f.field, f]))
-      const merged = existing.map((f: any) =>
-        (!f.pattern || f.pattern === '') && parsedMap.has(f.field)
-          ? parsedMap.get(f.field)
-          : f
-      )
+      const sampleLines = sampleOutput.split('\n')
+      const patternExtractsCleanly = (pattern: string): boolean => {
+        try {
+          const rx = new RegExp(pattern)
+          for (const line of sampleLines) {
+            const m = rx.exec(line)
+            if (m && m[1] !== undefined) {
+              // Captured value must not contain '=' — that means the pattern
+              // swallowed the key name along with the value (e.g. "hostname=abc")
+              return !m[1].includes('=')
+            }
+          }
+          return false
+        } catch {
+          return false
+        }
+      }
+      const merged = existing.map((f: any) => {
+        if (!parsedMap.has(f.field)) return f
+        const hasPattern = f.pattern && f.pattern !== ''
+        if (!hasPattern || !patternExtractsCleanly(f.pattern)) return parsedMap.get(f.field)
+        return f
+      })
       const existingNames = new Set(existing.map((f: any) => f.field))
       for (const pf of parsed) {
         if (!existingNames.has(pf.field)) merged.push(pf)
@@ -399,28 +418,28 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
           {/* ── Step 2: Review ──────────────────────────────────────────────── */}
           {!generating && step === 'review' && (
             <div>
-              {/* JSON editor */}
+              {/* JSON preview (read-only) */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.45rem' }}>
                 <label style={{ fontSize: '0.77rem', fontWeight: 600, color: C.txtM }}>
                   Generated Tool Definition
                 </label>
                 <span style={{ fontSize: '0.7rem', color: C.txtS }}>
-                  Editable — changes are saved when you register.
+                  Read-only — edit after registration in the Action Editor.
                 </span>
               </div>
-              <textarea
-                value={draftJson}
-                onChange={e => { setDraftJson(e.target.value); setJsonError(null) }}
-                rows={18}
-                style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '0.77rem', resize: 'vertical' }}
-              />
-              {jsonError && (
-                <div style={{ marginTop: '0.4rem', padding: '0.45rem 0.75rem', borderRadius: 7,
-                  backgroundColor: 'rgba(160,72,72,0.12)', border: `1px solid rgba(160,72,72,0.35)`,
-                  color: '#f87171', fontSize: '0.79rem' }}>
-                  {jsonError}
-                </div>
-              )}
+              <pre style={{
+                ...inputStyle,
+                fontFamily: 'monospace',
+                fontSize: '0.77rem',
+                overflowY: 'auto',
+                maxHeight: 340,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                margin: 0,
+                userSelect: 'text',
+              }}>
+                {draftJson}
+              </pre>
 
               {/* ── Refine section ─────────────────────────────────────────── */}
               <div style={{ marginTop: '1.1rem', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
@@ -507,8 +526,22 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
                 )}
               </div>
 
+              {/* Info notice */}
+              <div style={{
+                marginTop: '1.1rem',
+                padding: '0.55rem 0.85rem',
+                borderRadius: 7,
+                backgroundColor: 'transparent',
+                border: '1px solid rgba(245,158,11,0.4)',
+                fontSize: '0.75rem',
+                color: '#fbbf24',
+                lineHeight: 1.5,
+              }}>
+                AI-generated tools may contain mistakes. The tool will be registered as <strong>disabled</strong> — test it in the Action Editor before enabling.
+              </div>
+
               {/* Register / back */}
-              <div style={{ marginTop: '1.1rem', display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ marginTop: '0.75rem', display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
                 <button
                   onClick={() => setStep('describe')}
                   className="btn"

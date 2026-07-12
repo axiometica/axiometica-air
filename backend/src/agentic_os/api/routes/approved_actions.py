@@ -584,9 +584,18 @@ Rules:
             label = seg.split()[0].split('/')[-1].replace('-', '_')
             return f'echo "{label}=$({seg})"'
 
+        _AWK_SINGLE_Q = re.compile(r"awk\s+'([^']*)'")
+
         def _fix_chain(chain: str) -> str:
             parts = re.split(r'\s*&&\s*', chain)
-            return ' && '.join(_wrap_segment(p) for p in parts)
+            joined = ' && '.join(_wrap_segment(p) for p in parts)
+            # awk 'pattern' inside bash -c '...' terminates the outer single-quote
+            # string early. Convert to awk "pattern" with $N → \$N so awk sees
+            # the right field references while the outer quoting stays valid.
+            def _fix_awk(m: re.Match) -> str:
+                inner = m.group(1).replace('$', r'\$')
+                return f'awk "{inner}"'
+            return _AWK_SINGLE_Q.sub(_fix_awk, joined)
 
         for key, val in list(variants.items()):
             if not val:
