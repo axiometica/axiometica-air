@@ -1394,3 +1394,47 @@ export const updateNotificationTeam = (teamId: string, payload: Partial<Notifica
 export const deleteNotificationTeam = (teamId: string) =>
   axios.delete(`${API_BASE_URL}/notification-teams/${teamId}`)
 
+// ── Synthetic Monitors ────────────────────────────────────────────────────────
+
+import type { SyntheticMonitor } from '../types'
+
+export interface SyntheticMonitorPayload {
+  name: string
+  har_filename?: string
+  script?: string
+  pages?: any[]
+  credentials?: Record<string, string>
+  schedule_mins?: number
+  enabled?: boolean
+}
+
+export const listSyntheticMonitors = () =>
+  axios.get<SyntheticMonitor[]>(`${API_BASE_URL}/synthetics`)
+
+export const getSyntheticMonitor = (id: string) =>
+  axios.get<SyntheticMonitor>(`${API_BASE_URL}/synthetics/${id}`)
+
+export const createSyntheticMonitor = (payload: SyntheticMonitorPayload) =>
+  axios.post<SyntheticMonitor>(`${API_BASE_URL}/synthetics`, payload)
+
+export const updateSyntheticMonitor = (id: string, payload: Partial<SyntheticMonitorPayload>) =>
+  axios.put<SyntheticMonitor>(`${API_BASE_URL}/synthetics/${id}`, payload)
+
+export const deleteSyntheticMonitor = (id: string) =>
+  axios.delete(`${API_BASE_URL}/synthetics/${id}`)
+
+export const runSyntheticMonitor = (id: string) =>
+  axios.post(`${API_BASE_URL}/synthetics/${id}/run`)
+
+export const generateSyntheticScript = (payload: {
+  current_script: string
+  error_output: string
+}) =>
+  axios.post<{ script: string }>(`${API_BASE_URL}/synthetics/generate`, payload)
+
+export const testSyntheticScript = (payload: {
+  script: string
+  credentials?: Record<string, string>
+}) =>
+  axios.post<{ status: string; output: string }>(`${API_BASE_URL}/synthetics/test`, payload)
+

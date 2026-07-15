@@ -2008,4 +2008,91 @@ RUNBOOKS = [
             "positions": {},
         },
     },
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 27. SYNTHETIC TRANSACTION FAILED — diagnose scripted journey/transaction failure
+    # ══════════════════════════════════════════════════════════════════════════
+    {
+        "id": "550e8400-e29b-41d4-a716-446655440114",
+        "name": "Synthetic Transaction Failed — Diagnose",
+        "description": (
+            "A scripted multi-page transaction monitor (HAR-based login/journey replay) "
+            "failed a status check or content assertion. There is no known offending "
+            "process for a scripted external transaction, so this runbook diagnoses "
+            "reachability, DNS, and port-level health first, and only attempts a "
+            "bounded service restart if the endpoint is fully unreachable. Deliberately "
+            "avoids process_kill / force_restart — those assume an in-container resource "
+            "problem, which a failed transaction alone does not establish."
+        ),
+        "event_type": "synthetic.transaction.failed",
+        "service": None,
+        "environment": None,
+        "platform": "any",
+        "enabled": True,
+        "confidence": 0.55,
+        "blast_radius": 2,
+        "diagnostics": [
+            _diag(1, "HTTPS health check",
+                  "Confirm whether the monitored endpoint is reachable and what status code it returns",
+                  "check_health_endpoint",
+                  {"url": "https://{target}/", "timeout_sec": 10}),
+            _diag(2, "Check DNS resolution",
+                  "Ensure the monitored hostname still resolves correctly",
+                  "check_dns",
+                  {"hostname_from_context": "resource_name"}),
+            _diag(3, "Check exposed ports",
+                  "Confirm 80/443 are actually listening on the target",
+                  "check_ports",
+                  {}),
+            _diag(4, "Recent logs",
+                  "Pull recent logs from the target for error context",
+                  "get_logs",
+                  {"lines": 100}),
+        ],
+        "actions": [
+            _action(1, "Restart service (last resort)",
+                    "Only run if the endpoint is fully unreachable (http_code=000) after "
+                    "diagnostics — a bounded restart in case the process is wedged. Does NOT "
+                    "fix on-disk config drift; if the endpoint is reachable but still failing "
+                    "the probe (non-2xx, slow, wrong content), this should be escalated for "
+                    "manual investigation instead of auto-remediated.",
+                    "restart_service", {"timeout_sec": 30}),
+        ],
+        "verification_steps": [
+            _verify(1, "Endpoint reachable again",
+                    "HTTP health check should return a status below 400 after remediation",
+                    "http_code", "less_than", 400),
+        ],
+        "source_steps": {
+            "steps": [
+                {"id": "diag_health", "name": "HTTPS Health Check", "type": "diagnostic", "tool": "check_health_endpoint", "args": {"url": "https://{target}/", "timeout_sec": 10}, "output_capture": {"http_code": "$.http_code", "reachable": "$.reachable"}},
+                {"id": "diag_dns", "name": "Check DNS Resolution", "type": "diagnostic", "tool": "check_dns", "args": {"hostname_from_context": "resource_name"}},
+                {"id": "diag_ports", "name": "Check Exposed Ports", "type": "diagnostic", "tool": "check_ports", "args": {}},
+                {"id": "diag_logs", "name": "Recent Logs", "type": "diagnostic", "tool": "get_logs", "args": {"lines": 100}},
+                {"id": "dec_unreachable", "type": "decision", "condition": "http_code == 000", "on_true": "action_restart_service", "on_false": "notify_manual_review"},
+                {"id": "action_restart_service", "name": "Restart Service", "type": "action", "tool": "restart_service", "args": {"timeout_sec": 30}},
+                {"id": "wait_after_restart", "name": "Wait After Restart", "type": "wait", "duration_seconds": 15},
+                {"id": "verify_endpoint", "name": "Verify Endpoint Reachable", "type": "verification", "tool": "check_health_endpoint", "args": {"url": "https://{target}/", "timeout_sec": 10}, "check": "less_than", "value": 400, "metric": "http_code", "output_capture": {"http_code": "$.http_code"}},
+                {"id": "notify_manual_review", "name": "Notify — Manual Review Needed", "type": "notify", "tool": "send_alert", "args": {"message": "Synthetic probe failed but endpoint is reachable (http_code={{http_code}}) — likely a content/config issue, not a process problem. Needs manual investigation.", "severity": "warning"}},
+                {"id": "notify_done", "name": "Notify Restart Complete", "type": "notify", "tool": "send_alert", "args": {"message": "Service restarted after unreachable probe. Endpoint now returns http_code={{http_code}}.", "severity": "info"}},
+                {"id": "incident_update_resolve", "name": "Mark Resolved", "type": "incident_update", "state": "resolved"},
+            ],
+            "edges": [
+                {"source": "start",                  "target": "diag_health",             "sourceHandle": None},
+                {"source": "diag_health",             "target": "diag_dns",               "sourceHandle": None},
+                {"source": "diag_dns",                "target": "diag_ports",             "sourceHandle": None},
+                {"source": "diag_ports",              "target": "diag_logs",              "sourceHandle": None},
+                {"source": "diag_logs",               "target": "dec_unreachable",        "sourceHandle": None},
+                {"source": "dec_unreachable",         "target": "action_restart_service", "sourceHandle": "true"},
+                {"source": "dec_unreachable",         "target": "notify_manual_review",   "sourceHandle": "false"},
+                {"source": "action_restart_service",  "target": "wait_after_restart",     "sourceHandle": None},
+                {"source": "wait_after_restart",      "target": "verify_endpoint",        "sourceHandle": None},
+                {"source": "verify_endpoint",         "target": "incident_update_resolve","sourceHandle": None},
+                {"source": "incident_update_resolve", "target": "notify_done",            "sourceHandle": None},
+                {"source": "notify_manual_review",    "target": "end",                    "sourceHandle": None},
+                {"source": "notify_done",             "target": "end",                    "sourceHandle": None},
+            ],
+            "positions": {},
+        },
+    },
 ]

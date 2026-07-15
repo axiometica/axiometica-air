@@ -8,6 +8,7 @@ import subprocess
 import json
 import time
 import os
+import re
 import httpx
 import asyncio
 import logging
@@ -68,6 +69,7 @@ class WatcherService:
         connection_threshold: int = 1000,
         cooldown_seconds: int = 60,
         min_consecutive_polls: int = 3,
+        synthetic_min_consecutive_fails: int = 1,
         discovery_interval_polls: int = 15,
         discovery_enabled: bool = True,
         syscall_sample_interval: int = 1,  # Phase 1: Sample syscalls every N polls
@@ -118,6 +120,7 @@ class WatcherService:
         # Sustained-duration gate: require this many consecutive polls showing
         # the same anomaly before opening an incident.  Filters transient spikes.
         self.min_consecutive_polls = min_consecutive_polls
+        self.synthetic_min_consecutive_fails = synthetic_min_consecutive_fails
         # Hysteresis clear thresholds — a counter is reset only when the metric
         # drops THIS far below the alert threshold (prevents oscillation at boundary).
         self.cpu_clear_threshold: float = cpu_threshold * 0.80        # e.g. 64 % when alert=80 %
@@ -227,6 +230,12 @@ class WatcherService:
         # Consecutive-poll counters — key is "container_name:anomaly_type".
         # Incremented each poll the condition is detected; reset when it clears.
         self.consecutive_anomaly_counts: Dict[str, int] = {}
+
+        # Synthetic monitor consecutive failure counters — keyed by monitor name.
+        # Independent from consecutive_anomaly_counts / min_consecutive_polls.
+        self.synthetic_fail_counts: Dict[str, int] = {}
+        # Monitor names that have an active alert open (fired but not yet cleared).
+        self.synthetic_alert_active: set = set()
 
         # Per-resource cooldown timers — prevent re-opening an incident for the
         # same resource immediately after cooldown expires.
@@ -2534,6 +2543,9 @@ class WatcherService:
                         self.write_status("healthy", "normal", "", 0)
                         logger.info(f"✓ [HEALTHY]{status_detail}")
 
+                    # ── Synthetic transaction monitors ────────────────────────────────
+                    await self._check_synthetic_monitors()
+
                     await asyncio.sleep(self.poll_interval)
 
                 except Exception as e:
@@ -2543,6 +2555,178 @@ class WatcherService:
 
         except KeyboardInterrupt:
             logger.info("\n\n🛑 [STOP] Watcher stopped by user")
+
+
+    # ── Synthetic transaction monitoring ──────────────────────────────────────
+
+    @staticmethod
+    def _extract_synthetic_failure_detail(output: str) -> Tuple[Optional[str], str]:
+        """
+        Pull a human-readable (page_name, reason) out of a synthetic monitor's
+        script output, so incidents get a specific title like "Login failed"
+        instead of a generic "Uptime Probe Failed" on every monitor regardless
+        of which step actually broke.
+
+        Matches the structured "Start Page N: <name>" / "End Page N - FAILED --
+        <reason>" lines emitted by generateScriptDeterministically (see
+        SyntheticsPage.tsx). Falls back to the older flat "RESULT : FAIL --
+        <reason>" format for scripts saved before that rewrite, and finally to
+        the last non-empty output line for anything else (timeouts, tracebacks).
+        """
+        page_names: Dict[str, str] = {}
+        for line in output.splitlines():
+            m = re.match(r"\s*Start Page (\d+):\s*(.+)", line)
+            if m:
+                page_names[m.group(1)] = m.group(2).strip()
+
+        for line in output.splitlines():
+            m = re.match(r"\s*End Page (\d+) - FAILED(?:\s*--\s*(.*))?", line)
+            if m:
+                page_num, reason = m.group(1), (m.group(2) or "").strip()
+                return page_names.get(page_num), reason
+
+        for line in output.splitlines():
+            m = re.match(r"\s*RESULT\s*:\s*FAIL\s*--\s*(.*)", line.strip())
+            if m:
+                return None, m.group(1).strip()
+
+        lines = [l.strip() for l in output.splitlines() if l.strip()]
+        return None, (lines[-1] if lines else "no output")
+
+    async def _check_synthetic_monitors(self) -> None:
+        """
+        Fetch enabled synthetic monitors from the backend, run any that are due,
+        post results back, and emit a monitoring event on failure.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{self.api_base_url}/api/synthetics",
+                    headers=self._api_headers,
+                )
+                if resp.status_code != 200:
+                    return
+                monitors = resp.json()
+        except Exception as exc:
+            logger.debug(f"[SYNTHETIC] Could not fetch monitors: {exc}")
+            return
+
+        now = datetime.utcnow()
+        loop = asyncio.get_event_loop()
+
+        for mon in monitors:
+            if not mon.get("enabled") or not mon.get("script"):
+                continue
+
+            monitor_id = mon["id"]
+            schedule_mins = mon.get("schedule_mins", 60)
+            last_run_at_str = mon.get("last_run_at")
+
+            if last_run_at_str:
+                try:
+                    last_run_at = datetime.fromisoformat(last_run_at_str)
+                    elapsed_mins = (now - last_run_at).total_seconds() / 60
+                    if elapsed_mins < schedule_mins:
+                        continue
+                except ValueError:
+                    pass
+
+            logger.info(f"🔬 [SYNTHETIC] Running monitor '{mon['name']}'")
+
+            # Run script in a thread (subprocess, blocking)
+            def _run(m=mon):
+                import sys, tempfile, os as _os, subprocess as _sub
+                creds = m.get("credentials", {}) or {}
+                env = dict(_os.environ)
+                env.update(creds)
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".py", delete=False, encoding="utf-8"
+                ) as tmp:
+                    tmp.write(m["script"])
+                    tmp_path = tmp.name
+                try:
+                    result = _sub.run(
+                        [sys.executable, tmp_path],
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+                    output = (result.stdout or "") + (result.stderr or "")
+                    status = "pass" if result.returncode == 0 else "fail"
+                    return status, output
+                except _sub.TimeoutExpired:
+                    return "error", "Script timed out after 120 seconds."
+                except Exception as exc:
+                    return "error", f"{type(exc).__name__}: {exc}"
+                finally:
+                    try:
+                        _os.unlink(tmp_path)
+                    except OSError:
+                        pass
+
+            try:
+                status, output = await loop.run_in_executor(None, _run)
+            except Exception as exc:
+                status, output = "error", str(exc)
+
+            logger.info(f"🔬 [SYNTHETIC] '{mon['name']}' → {status}")
+            for line in output.strip().splitlines():
+                logger.info(f"🔬 [SYNTHETIC]     {line}")
+
+            # Post result back to backend
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(
+                        f"{self.api_base_url}/api/synthetics/{monitor_id}/result",
+                        json={"status": status, "output": output[-4000:]},
+                        headers=self._api_headers,
+                    )
+            except Exception as exc:
+                logger.warning(f"[SYNTHETIC] Could not post result: {exc}")
+
+            mon_name = mon["name"]
+
+            if status != "pass":
+                # Increment independent consecutive-fail counter for this monitor
+                fail_count = self.synthetic_fail_counts.get(mon_name, 0) + 1
+                self.synthetic_fail_counts[mon_name] = fail_count
+                logger.info(
+                    f"🔬 [SYNTHETIC] '{mon_name}' fail streak: "
+                    f"{fail_count}/{self.synthetic_min_consecutive_fails}"
+                )
+
+                # Fire alert exactly once when the threshold is first reached.
+                # A failed transaction (bad status, failed assertion, rejected
+                # login) is just as urgent as a hard script error/timeout — both
+                # mean the monitored journey is broken for real users right now.
+                if fail_count == self.synthetic_min_consecutive_fails:
+                    criticality = "critical"
+                    page_name, reason = self._extract_synthetic_failure_detail(output)
+                    title = (
+                        f"{mon_name} - Transaction {page_name} failed"
+                        if page_name else f"{mon_name} - Transaction failed"
+                    )
+                    await self.submit_monitoring_event_to_platform(
+                        event_type="synthetic.transaction.failed",
+                        resource_name=mon_name,
+                        raw_criticality=criticality,
+                        alert_payload={
+                            "monitor_id": monitor_id,
+                            "status": status,
+                            "output": output[:2000],
+                            "schedule_mins": mon.get("schedule_mins", 60),
+                            "title": title,
+                            "description": reason,
+                        },
+                    )
+                    self.synthetic_alert_active.add(mon_name)
+            else:
+                # Recovery: send all-clear if an alert was previously fired
+                if mon_name in self.synthetic_alert_active:
+                    await self.submit_condition_cleared(mon_name, "synthetic.transaction.failed")
+                    self.synthetic_alert_active.discard(mon_name)
+                self.synthetic_fail_counts[mon_name] = 0
 
 
 def get_watcher_service() -> WatcherService:
@@ -2558,4 +2742,5 @@ def get_watcher_service() -> WatcherService:
         connection_threshold=int(os.getenv("WATCHER_CONNECTION_THRESHOLD", "1000")),
         cooldown_seconds=int(os.getenv("WATCHER_COOLDOWN_SECONDS", "60")),
         min_consecutive_polls=int(os.getenv("WATCHER_MIN_CONSECUTIVE_POLLS", "3")),
+        synthetic_min_consecutive_fails=int(os.getenv("WATCHER_SYNTHETIC_MIN_CONSECUTIVE_FAILS", "1")),
     )

@@ -595,3 +595,29 @@ export interface ConfigHistoryEntry {
   category: string
   priority: string
 }
+
+export interface SyntheticMonitor {
+  id: string
+  name: string
+  har_filename: string | null
+  script: string | null
+  pages: any[] | null
+  credentials: Record<string, string>
+  schedule_mins: number
+  enabled: boolean
+  last_run_at: string | null
+  last_status: 'pass' | 'fail' | 'error' | null
+  last_output: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface LLMMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
+export interface SyntheticGenerateResponse {
+  script: string
+  messages: LLMMessage[]
+}

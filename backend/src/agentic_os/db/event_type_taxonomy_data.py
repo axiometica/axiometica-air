@@ -836,6 +836,11 @@ LOG: list[TaxonomyEntry] = [
 # ─────────────────────────────────────────────────────────────────────────────
 
 SYNTHETIC: list[TaxonomyEntry] = [
+    _e("synthetic.transaction.failed",
+       "Synthetic Transaction Failed",
+       "A scripted multi-page transaction monitor (HAR-based login/journey replay) "
+       "failed a status check or content assertion.",
+       aliases=["synthetic_monitor_failed"]),
     _e("synthetic.uptime.probe_failed",
        "Uptime Probe Failed",
        "An external uptime check (HTTP, TCP, DNS, ping) has failed for a target URL or host."),

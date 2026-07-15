@@ -516,6 +516,18 @@ A real-time monitoring dashboard shows CPU, memory, and disk across all monitore
 
 The all-clear mechanism is **per-resource and per-condition-type**. When CPU normalizes on `container-A`, only `container-A`'s CPU incidents are closed. A concurrent disk-full incident on the same container remains open until the disk condition independently clears. This granularity prevents premature closure of still-active incidents.
 
+### Synthetic Transaction Monitoring *(v1.6.0)*
+
+Beyond passive resource metrics and single-endpoint health probes, the watcher can replay a scripted, multi-page user journey — login, navigate, submit — against a real target and assert on both HTTP status and page content. This catches the class of failure a plain uptime check misses entirely: a page that returns 200 but renders broken or empty.
+
+- **HAR-based capture:** record the journey once in Chrome DevTools (Network → Export HAR with content) and upload it. The platform parses pages, requests, and likely credential fields automatically — no scripting required to get started.
+- **Deterministic script generation:** the replay script is compiled directly from the parsed HAR — no LLM call on the critical path. An LLM is only invoked on demand, via **Fix with AI**, to patch a script after a failed test run.
+- **Credentials as environment variables:** values are Fernet-encrypted at rest and injected into the replay subprocess at run time — never embedded in the generated script text.
+- **Per-page content assertions:** an optional regex checked against the full combined response body of every request on a page (case-insensitive) — the parsed page/assertion structure is persisted (`pages_json`) so it can be reviewed and edited later without re-uploading the HAR.
+- **Watcher poll-gated scheduling, not Celery:** every enabled monitor is evaluated on each watcher poll cycle, but only actually executes once its own `schedule_mins` (default 15) has elapsed since `last_run_at` — decoupling a monitor's cadence from the watcher's much faster internal poll interval.
+- **Structured per-run output:** each run logs a start/end line per page and a method/path/status/latency line per request, both in the watcher's own logs and via a **Log** button on the monitor row in the UI — no container shell access needed to see why a run failed.
+- **Full incident integration:** consecutive failures (configurable via `WATCHER_SYNTHETIC_MIN_CONSECUTIVE_FAILS`) raise a `synthetic.transaction.failed` event through the same qualification and 7-agent pipeline as every other anomaly type, and auto-clear on the next passing run.
+
 ---
 
 ## 8. Enterprise UI
@@ -658,6 +670,9 @@ Change management reuses policy governance, runbook execution, typed context, an
 | Watcher metrics dashboard (CPU/memory/disk rolling graphs) | Implemented (v1.1.2) |
 | Accurate disk reporting via df -B1 (fixes zero-disk bug) | Implemented (v1.1.2) |
 | Live threshold controls — hot-reload without restart | Implemented (v1.1.2) |
+| Synthetic Transaction Monitoring — HAR-based scripted journey replay | Implemented (v1.6.0) |
+| Per-page content assertions with persisted page/request structure | Implemented (v1.6.0) |
+| Deterministic script generation + on-demand AI script repair | Implemented (v1.6.0) |
 | **Connector Hub** | |
 | Open webhook event ingest (any monitoring tool) | Implemented |
 | ServiceNow certified connector (bidirectional) | Implemented |

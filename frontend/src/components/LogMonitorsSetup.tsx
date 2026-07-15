@@ -15,6 +15,8 @@ import {
   IconCheck,
   IconX,
   IconAlertCircle,
+  IconChevronDown,
+  IconChevronRight,
 } from './icons'
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -123,6 +125,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [expanded, setExpanded] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
 
   // Form state
@@ -274,19 +277,32 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
   return (
     <div style={sectionCard}>
       {/* Header */}
-      <div style={{ padding: '1rem 1.25rem', borderBottom: `1px solid ${DS.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h3 style={{ margin: '0 0 0.2rem 0', fontSize: '1rem', color: DS.txtP }}>Log Monitors</h3>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: DS.txtS }}>Watch log files and trigger runbooks on patterns</p>
+      <div
+        style={{ display: 'flex', alignItems: 'center', padding: '0.8rem 1.25rem', cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setExpanded(x => !x)}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {expanded
+              ? <IconChevronDown size={15} color={DS.txtS} />
+              : <IconChevronRight size={15} color={DS.txtS} />
+            }
+            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: DS.txtP, letterSpacing: '0.01em' }}>Log Monitors</span>
+          </div>
+          <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: DS.txtS, marginLeft: 23 }}>Watch log files and trigger runbooks on patterns</p>
         </div>
         {!showForm && (
-          <button style={primaryBtn} onClick={() => setShowForm(true)}>
-            <IconPlus size={14} /> Add Monitor
+          <button
+            style={{ ...compactBtn, backgroundColor: DS.accent, border: 'none', color: '#fff' }}
+            onClick={e => { e.stopPropagation(); setShowForm(true); setExpanded(true) }}
+          >
+            <IconPlus size={12} /> Add Monitor
           </button>
         )}
       </div>
 
       {/* Body */}
+      {expanded && (
       <div style={sectionBody}>
         {error && (
           <div style={{
@@ -540,6 +556,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
           </table>
         )}
       </div>
+      )}
     </div>
   )
 }

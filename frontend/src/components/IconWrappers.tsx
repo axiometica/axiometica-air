@@ -27,6 +27,7 @@ import {
   IconBolt,
   IconBrain,
   IconTags,
+  IconTestPipe,
 } from './icons'
 
 export interface IconProps {

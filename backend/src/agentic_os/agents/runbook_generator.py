@@ -162,6 +162,34 @@ class RunbookGeneratorAgent(Agent):
         from agentic_os.services.summary_service import get_summary_service
         return get_summary_service().provider
 
+    @staticmethod
+    def _get_diagnostic_tools() -> List[Dict[str, Any]]:
+        """Return the live diagnostic-category tools from the real approved-actions
+        catalog. Used for both the LLM prompt and output validation so the two stay
+        in sync with the execution engine — previously this was a hardcoded list of
+        9 tool names, most of which didn't exist in the catalog at all."""
+        from agentic_os.db.approved_actions_seed import APPROVED_ACTIONS
+        return [a for a in APPROVED_ACTIONS if a.get("category") == "diagnostic"]
+
+    @staticmethod
+    def _format_tool_for_prompt(tool: Dict[str, Any]) -> str:
+        """Render one catalog tool as a single prompt line with its exact parameter
+        names — without this, the LLM guesses plausible-sounding but wrong arg keys
+        (e.g. passing {"url": ...} to a tool that actually takes {"host": ...})."""
+        params = tool.get("parameters") or []
+        param_strs = []
+        for p in params:
+            name = p.get("name", "?")
+            ptype = p.get("type", "string")
+            if p.get("required"):
+                param_strs.append(f"{name}: {ptype} (required)")
+            else:
+                default = p.get("default")
+                suffix = f", default={default!r}" if default is not None else ""
+                param_strs.append(f"{name}: {ptype} (optional{suffix})")
+        params_block = ", ".join(param_strs) if param_strs else "no parameters"
+        return f"- {tool['tool_name']}({params_block}): {tool.get('description', '')}"
+
     async def run(self, workflow_state: WorkflowState) -> WorkflowState:
         """
         Main execution method required by Agent base class.
@@ -553,43 +581,45 @@ Runbook {i}: {runbook.get('name', 'Unknown')}
 - Success Rate: {runbook.get('success_rate', 'unknown')}%
 """
 
-        prompt += """
-AVAILABLE TOOLS:
-- process_kill: Kill or restart processes
-- scale_pods: Scale Kubernetes deployments
-- drain_node: Drain node from cluster (requires approval)
-- force_restart: Force restart service
-- pause_workload: Pause workload execution
-- collect_logs: Collect application logs
-- execute_query: Execute system/database queries
-- get_metrics: Query monitoring system — returns "top_process" and "syscall_count" in output
-- run_script: Execute remediation script
+        diagnostic_tools = self._get_diagnostic_tools()
+        tools_block = "\n".join(
+            self._format_tool_for_prompt(t) for t in diagnostic_tools
+        )
+        prompt += f"""
+AVAILABLE TOOLS (diagnostic / read-only only — this incident type has no matched
+runbook, so you do not have enough grounding to safely propose remediation):
+{tools_block}
 
-STEP OUTPUT CHAINING:
-When a diagnostic step discovers a value (e.g. get_metrics identifies the offending process),
-subsequent steps can reference it using "process_name_from_step": <step_order> in their args.
-This passes the "top_process" output from that diagnostic step as the process_name.
-Example: if diagnostic step 1 uses get_metrics to identify the process, then remediation step 1
-can use: {{ "process_name_from_step": 1, "signal": "SIGKILL" }}
+WHY NO REMEDIATION TOOLS ARE OFFERED:
+This is a novel incident type with no ops-authored runbook. Past experience shows
+that when an LLM guesses at remediation for an unfamiliar event type, it tends to
+propose intrusive actions (restarts, kills) without first establishing whether the
+resource is actually broken or just failing an external check (e.g. DNS, TLS,
+reachability, wrong content) — and those causes are not fixed by a restart. So for
+novel events, your job is ONLY to produce a diagnostic plan a human can run to
+understand the problem. A human decides remediation after reviewing your output.
 
 CONSTRAINTS:
-- Generate 2-3 diagnostic steps (non-destructive, safe to run)
-- Generate 2-4 remediation steps (ordered, each building on previous)
-- When process_kill is used and a prior get_metrics step identifies the process, use "process_name_from_step" NOT a hardcoded name
-- Scale operations require approval if blast_radius > 2
-- Estimated blast radius must be reasonable for incident severity
-- Include rollback procedure (must be automated)
-- Include 2-3 verification steps (check if remediation worked)
-- Do NOT reference tools not in available list
-- Do NOT use unresolvable parameters
+- Generate 3-5 diagnostic steps (non-destructive, safe to run) that would let a
+  human determine the ACTUAL root cause — not just "is it broken" but "why".
+- For anything involving a URL/hostname/endpoint, prefer reachability/DNS/port/
+  health-check style tools before generic log/metric collection.
+- remediation_steps, rollback_steps, and verification_steps MUST be empty arrays
+  — do not populate them, even if you have a strong hypothesis for a fix. Put any
+  hypothesis or recommended next step in "description", not in an executable step.
+- Do NOT reference tools not in the AVAILABLE TOOLS list above.
+- Each tool's "args" MUST use exactly the parameter names shown in parentheses
+  next to that tool above (e.g. ping_service takes "host", not "url" — copy the
+  parameter names verbatim, do not invent or rename them). Omit optional params
+  you don't need; never omit a required one.
 
 GENERATE JSON RUNBOOK with structure:
 {{
   "name": "Human-readable runbook name",
-  "description": "What this runbook does",
-  "estimated_blast_radius": 2,
-  "estimated_duration_seconds": 300,
-  "requires_approval": true/false,
+  "description": "What this diagnostic plan investigates, and any root-cause hypothesis for a human to consider",
+  "estimated_blast_radius": 1,
+  "estimated_duration_seconds": 120,
+  "requires_approval": true,
   "diagnostics_steps": [
     {{
       "order": 1,
@@ -600,25 +630,12 @@ GENERATE JSON RUNBOOK with structure:
       "expected_result": "What we expect to see"
     }}
   ],
-  "remediation_steps": [
-    {{
-      "order": 1,
-      "name": "Step name",
-      "description": "What this step does",
-      "tool": "tool_name",
-      "args": {{"param": "value"}},
-      "expected_result": "What we expect after running"
-    }}
-  ],
-  "rollback_steps": [
-    {{"order": 1, "name": "Rollback step", "tool": "...", "args": {{}}}}
-  ],
-  "verification_steps": [
-    {{"order": 1, "name": "Verification", "tool": "...", "expected_result": "..."}}
-  ],
-  "main_args": {{"key": "value"}},
+  "remediation_steps": [],
+  "rollback_steps": [],
+  "verification_steps": [],
+  "main_args": {{}},
   "resource_type": "pod|service|node|etc",
-  "estimated_time_to_resolution_seconds": 300
+  "estimated_time_to_resolution_seconds": 120
 }}
 
 Generate ONLY the JSON runbook, no additional text.
@@ -695,47 +712,71 @@ Focus on safety and clarity."""
         AI_CONFIDENCE_CAP      = 0.60
         confidence_score = AI_CONFIDENCE_BASELINE
 
+        # Novel-incident runbooks are diagnostics-only by policy (see
+        # _build_generation_prompt) — the LLM is never given remediation tools,
+        # since it has no matched runbook to ground a remediation decision in.
+        # If it produced remediation/rollback/verification steps anyway (either
+        # ignoring instructions, or hallucinating tools not in AVAILABLE TOOLS),
+        # strip them here rather than trusting or executing them — this is a
+        # policy enforcement point, not just a lint check.
+        for stripped_field in ('remediation_steps', 'rollback_steps', 'verification_steps'):
+            if runbook.get(stripped_field):
+                warnings.append(
+                    f"LLM produced '{stripped_field}' for a novel/unmatched incident type — "
+                    f"stripped. Only diagnostics are allowed until an operator authors a "
+                    f"real runbook for this event type."
+                )
+                runbook[stripped_field] = []
+        runbook['estimated_blast_radius'] = 1  # diagnostics-only is always blast_radius 1
+
         # Required fields
-        required_fields = ['name', 'diagnostics_steps', 'remediation_steps', 'verification_steps']
+        required_fields = ['name', 'diagnostics_steps']
         for field in required_fields:
             if field not in runbook or not runbook[field]:
                 issues.append(f"Missing or empty required field: {field}")
                 confidence_score -= 0.05  # smaller deduction from already-low baseline
 
-        # Check all steps use available tools
-        available_tools = {
-            'process_kill', 'scale_pods', 'drain_node', 'force_restart',
-            'pause_workload', 'collect_logs', 'execute_query', 'get_metrics', 'run_script'
-        }
+        # Check all steps use tools that actually exist in the approved-actions
+        # catalog (diagnostic-only) — synced from the same source as the prompt,
+        # not a hardcoded list, so this can't silently drift out of sync again.
+        diagnostic_tools_by_name = {t['tool_name']: t for t in self._get_diagnostic_tools()}
 
-        all_steps = (
-            runbook.get('diagnostics_steps', []) +
-            runbook.get('remediation_steps', []) +
-            runbook.get('rollback_steps', []) +
-            runbook.get('verification_steps', [])
-        )
-
-        for step in all_steps:
+        for step in runbook.get('diagnostics_steps', []):
             tool = step.get('tool', '')
             step_type = step.get('step_type', '') or step.get('type', '')
             # 'wait' is a built-in step type, not a catalog tool — skip tool check
             if step_type == 'wait' or tool == 'wait':
                 continue
-            if tool not in available_tools:
+            tool_def = diagnostic_tools_by_name.get(tool)
+            if tool_def is None:
                 issues.append(f"Step '{step.get('name')}' uses unavailable tool: {tool}")
                 confidence_score -= 0.05
+                continue
 
-        # Check blast radius
-        estimated_radius = runbook.get('estimated_blast_radius', 2)
-        if risk_context and risk_context.risk_score > 8:
-            if estimated_radius > 3:
-                warnings.append("High blast radius for critical incident - requires close monitoring")
+            # Tool exists — also check the args the LLM passed match its real
+            # parameter names, since a right tool with a wrong/invented arg key
+            # (e.g. ping_service called with "url" instead of "host") silently
+            # fails or no-ops at execution just like an unknown tool would.
+            declared_params = {p['name'] for p in (tool_def.get('parameters') or [])}
+            required_params = {
+                p['name'] for p in (tool_def.get('parameters') or []) if p.get('required')
+            }
+            step_args = step.get('args', {}) or {}
+            unknown_args = set(step_args.keys()) - declared_params
+            missing_required = required_params - set(step_args.keys())
+            if unknown_args:
+                warnings.append(
+                    f"Step '{step.get('name')}' ({tool}) passed unrecognized arg(s) "
+                    f"{sorted(unknown_args)} — not in this tool's parameter list, likely "
+                    f"invented by the LLM. Step may fail or ignore the intended value."
+                )
+                confidence_score -= 0.03
+            if missing_required:
+                issues.append(
+                    f"Step '{step.get('name')}' ({tool}) is missing required arg(s): "
+                    f"{sorted(missing_required)}"
+                )
                 confidence_score -= 0.05
-
-        # Check rollback automation
-        if not runbook.get('rollback_steps'):
-            warnings.append("No rollback steps defined - recommend adding")
-            confidence_score -= 0.05
 
         # Clamp: AI-generated runbooks can earn up to AI_CONFIDENCE_CAP (0.60)
         # but never reach operator-authored territory regardless of validation quality.

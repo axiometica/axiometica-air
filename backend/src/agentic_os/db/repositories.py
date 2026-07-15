@@ -1640,3 +1640,106 @@ class DistributedLockRepository:
         deleted = result.rowcount
         self.db.commit()
         return deleted
+
+
+class SyntheticMonitorRepository:
+    """CRUD for synthetic transaction monitors."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def _row_to_dict(self, row) -> dict:
+        from agentic_os.db.models import SyntheticMonitorModel  # avoid circular
+        return {
+            "id":              str(row.id),
+            "name":            row.name,
+            "har_filename":    row.har_filename,
+            "script":          row.script,
+            "pages_json":      row.pages_json,
+            "credentials_enc": row.credentials_enc,
+            "schedule_mins":   row.schedule_mins,
+            "enabled":         row.enabled,
+            "last_run_at":     row.last_run_at.isoformat() if row.last_run_at else None,
+            "last_status":     row.last_status,
+            "last_output":     row.last_output,
+            "created_at":      row.created_at.isoformat() if row.created_at else None,
+            "updated_at":      row.updated_at.isoformat() if row.updated_at else None,
+        }
+
+    def list_all(self) -> list[dict]:
+        from agentic_os.db.models import SyntheticMonitorModel
+        rows = self.db.query(SyntheticMonitorModel).order_by(SyntheticMonitorModel.created_at).all()
+        return [self._row_to_dict(r) for r in rows]
+
+    def list_enabled(self) -> list[dict]:
+        from agentic_os.db.models import SyntheticMonitorModel
+        rows = (
+            self.db.query(SyntheticMonitorModel)
+            .filter(SyntheticMonitorModel.enabled == True)
+            .order_by(SyntheticMonitorModel.created_at)
+            .all()
+        )
+        return [self._row_to_dict(r) for r in rows]
+
+    def get(self, monitor_id: str) -> Optional[dict]:
+        from agentic_os.db.models import SyntheticMonitorModel
+        row = self.db.query(SyntheticMonitorModel).filter(
+            SyntheticMonitorModel.id == monitor_id
+        ).first()
+        return self._row_to_dict(row) if row else None
+
+    def create(self, data: dict) -> dict:
+        from agentic_os.db.models import SyntheticMonitorModel
+        import uuid as _uuid
+        row = SyntheticMonitorModel(
+            id=_uuid.uuid4(),
+            name=data["name"],
+            har_filename=data.get("har_filename"),
+            script=data.get("script"),
+            pages_json=data.get("pages_json"),
+            credentials_enc=data.get("credentials_enc"),
+            schedule_mins=data.get("schedule_mins", 15),
+            enabled=data.get("enabled", True),
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return self._row_to_dict(row)
+
+    def update(self, monitor_id: str, data: dict) -> Optional[dict]:
+        from agentic_os.db.models import SyntheticMonitorModel
+        row = self.db.query(SyntheticMonitorModel).filter(
+            SyntheticMonitorModel.id == monitor_id
+        ).first()
+        if not row:
+            return None
+        for field in ("name", "har_filename", "script", "pages_json", "credentials_enc", "schedule_mins", "enabled"):
+            if field in data:
+                setattr(row, field, data[field])
+        row.updated_at = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(row)
+        return self._row_to_dict(row)
+
+    def update_last_run(self, monitor_id: str, status: str, output: str) -> None:
+        from agentic_os.db.models import SyntheticMonitorModel
+        row = self.db.query(SyntheticMonitorModel).filter(
+            SyntheticMonitorModel.id == monitor_id
+        ).first()
+        if row:
+            row.last_run_at = datetime.utcnow()
+            row.last_status = status
+            row.last_output = output[-4000:] if output else None  # cap at 4KB
+            row.updated_at = datetime.utcnow()
+            self.db.commit()
+
+    def delete(self, monitor_id: str) -> bool:
+        from agentic_os.db.models import SyntheticMonitorModel
+        row = self.db.query(SyntheticMonitorModel).filter(
+            SyntheticMonitorModel.id == monitor_id
+        ).first()
+        if not row:
+            return False
+        self.db.delete(row)
+        self.db.commit()
+        return True

@@ -98,6 +98,7 @@ from agentic_os.api.routes import event_types as event_types_routes
 from agentic_os.api.routes import platform_intelligence
 from agentic_os.api.routes import chat as chat_routes
 from agentic_os.api.routes import slack_webhook
+from agentic_os.api.routes import synthetics as synthetics_routes
 from agentic_os.api.ws import websocket_endpoint, global_events_endpoint
 from agentic_os.services.neo4j_init import seed_neo4j_database
 
@@ -334,6 +335,7 @@ app.include_router(metrics.router,            prefix="/api", tags=["Metrics"],  
 app.include_router(monitoring_events.router,  prefix="/api", tags=["Monitoring Events"],  dependencies=_any)
 app.include_router(monitoring_checks.router,  prefix="/api", tags=["Monitoring Checks"],  dependencies=_any)
 app.include_router(log_monitors.router,       prefix="/api", tags=["Log Monitors"],       dependencies=_any)
+app.include_router(synthetics_routes.router,  prefix="/api", tags=["Synthetics"],          dependencies=_any)
 app.include_router(storms.router,             prefix="/api", tags=["Storms"],              dependencies=_any)
 app.include_router(platform_intelligence.router, prefix="/api", tags=["Platform Intelligence"], dependencies=_itom_up)
 app.include_router(chat_routes.router,            prefix="/api", tags=["Operator Chat"],         dependencies=_any)

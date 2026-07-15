@@ -17,6 +17,9 @@ import {
   getWatcherSettings,
   updateWatcherSettings,
   resetWatcherSettings,
+  listSyntheticMonitors,
+  deleteSyntheticMonitor,
+  updateSyntheticMonitor,
   type WatcherInfo,
   type ExternalCheck,
   type ExternalCheckPayload,
@@ -24,7 +27,9 @@ import {
   type WatcherSetting,
   type WatcherSettingsUpdate,
 } from '../services/api'
+import type { SyntheticMonitor } from '../types'
 import LogMonitorsSetup from './LogMonitorsSetup'
+import { MonitorModal } from './SyntheticsPage'
 import {
   IconPlus,
   IconPencil,
@@ -54,6 +59,7 @@ const DS = {
   txtS:    '#7a8ba3',
   txtM:    '#a0aec0',
   accent:  '#3b82f6',
+  mutedGreen: '#3a7a5a',
 } as const
 
 // ── Shared style helpers ───────────────────────────────────────────────────────
@@ -1599,8 +1605,244 @@ function WatcherMetricsDashboard({ watcher }: { watcher: WatcherInfo }) {
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Synthetic Monitors section ────────────────────────────────────────────────
 
+function SyntheticMonitorsSection() {
+  const [monitors, setMonitors]           = useState<SyntheticMonitor[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [error, setError]                 = useState<string | null>(null)
+  const [expanded, setExpanded]           = useState(true)
+  const [showModal, setShowModal]         = useState(false)
+  const [editingMonitor, setEditingMonitor] = useState<SyntheticMonitor | null>(null)
+  const [outputModal, setOutputModal]     = useState<{ name: string; output: string } | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deletingId, setDeletingId]       = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await listSyntheticMonitors()
+      setMonitors(res.data)
+    } catch {
+      setError('Failed to load synthetic monitors')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleDelete = async (id: string) => {
+    if (confirmDeleteId !== id) { setConfirmDeleteId(id); return }
+    setDeletingId(id)
+    try {
+      await deleteSyntheticMonitor(id)
+      setMonitors(prev => prev.filter(m => m.id !== id))
+      setConfirmDeleteId(null)
+    } catch {
+      setError('Failed to delete monitor')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const handleToggle = async (mon: SyntheticMonitor) => {
+    try {
+      await updateSyntheticMonitor(mon.id, { enabled: !mon.enabled })
+      await load()
+    } catch {
+      setError('Failed to update monitor')
+    }
+  }
+
+  const dotColor = (status: string | null, enabled: boolean) => {
+    if (!enabled) return DS.txtS
+    if (status === 'pass') return '#10b981'
+    if (status === 'fail') return '#ef4444'
+    if (status === 'error') return '#f59e0b'
+    return DS.txtS
+  }
+
+  const headerRight = (
+    <button
+      onClick={() => { setEditingMonitor(null); setShowModal(true) }}
+      style={{ ...compactBtn, backgroundColor: DS.accent, border: 'none', color: '#fff' }}
+    >
+      <IconPlus size={12} />
+      New Monitor
+    </button>
+  )
+
+  return (
+    <>
+      <div style={sectionCard}>
+        <SectionHeader
+          title="Synthetic Transaction Monitoring"
+          subtitle="Synthetic transactions for web applications — upload a HAR file to auto-generate a Python replay script"
+          expanded={expanded}
+          onToggle={() => setExpanded(x => !x)}
+          right={headerRight}
+        />
+        {expanded && (
+          <div style={sectionBody}>
+            {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
+
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[...Array(2)].map((_, i) => <SkeletonRow key={i} height={44} />)}
+              </div>
+            ) : monitors.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+                <p style={{ fontSize: '0.85rem', color: DS.txtS }}>No synthetic monitors configured</p>
+                <p style={{ fontSize: '0.72rem', color: DS.txtS, marginTop: 4, opacity: 0.7 }}>
+                  Upload a HAR file to generate a replay script in seconds
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {monitors.map(mon => {
+                  const isConfirming = confirmDeleteId === mon.id
+                  const isDeleting   = deletingId === mon.id
+
+                  return (
+                    <div
+                      key={mon.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '9px 12px', borderRadius: 7,
+                        backgroundColor: mon.enabled ? DS.raised : 'transparent',
+                        border: `1px solid ${mon.enabled ? DS.border : 'transparent'}`,
+                        opacity: mon.enabled ? 1 : 0.55,
+                      }}
+                    >
+                      {/* Status dot */}
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, backgroundColor: dotColor(mon.last_status, mon.enabled) }} />
+
+                      {/* SYNTH badge */}
+                      <div style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '2px 8px', borderRadius: 4, flexShrink: 0,
+                        fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em',
+                        color: '#a855f7', backgroundColor: 'rgba(168,85,247,0.10)',
+                        border: '1px solid rgba(168,85,247,0.35)',
+                      }}>
+                        <IconChartLine size={11} color="#a855f7" />
+                        SYNTH
+                      </div>
+
+                      {/* Name + HAR filename */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: '0.85rem', color: DS.txtP }}>{mon.name}</span>
+                        {mon.har_filename && (
+                          <span style={{ marginLeft: 10, fontSize: '0.72rem', color: DS.txtS }}>
+                            {mon.har_filename}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Schedule chip */}
+                      <span style={{
+                        flexShrink: 0, fontSize: '0.72rem', color: DS.txtS,
+                        padding: '1px 7px', borderRadius: 4,
+                        backgroundColor: DS.bg, border: `1px solid ${DS.border}`,
+                      }}>
+                        every {mon.schedule_mins}m
+                      </span>
+
+                      {/* Last output */}
+                      {mon.last_output && (
+                        <button
+                          style={compactBtn}
+                          onClick={() => setOutputModal({ name: mon.name, output: mon.last_output! })}
+                        >
+                          Log
+                        </button>
+                      )}
+
+                      {/* Enabled toggle */}
+                      <button
+                        title={mon.enabled ? 'Disable' : 'Enable'}
+                        onClick={() => handleToggle(mon)}
+                        style={{
+                          width: 32, height: 18, borderRadius: 9, border: 'none', cursor: 'pointer', flexShrink: 0,
+                          backgroundColor: mon.enabled ? DS.mutedGreen : DS.border, transition: 'background 0.2s',
+                          position: 'relative',
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute', top: 2, left: mon.enabled ? 14 : 2,
+                          width: 12, height: 12, borderRadius: '50%',
+                          backgroundColor: '#fff', transition: 'left 0.2s',
+                        }} />
+                      </button>
+
+                      {/* Actions */}
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button
+                          onClick={() => { setEditingMonitor(mon); setShowModal(true) }}
+                          title="Edit"
+                          style={{ background: 'none', border: 'none', color: DS.txtS, cursor: 'pointer', padding: 4, borderRadius: 4, display: 'flex' }}
+                        >
+                          <IconPencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(mon.id)}
+                          disabled={isDeleting}
+                          title={isConfirming ? 'Click again to confirm' : 'Delete'}
+                          style={{
+                            background: isConfirming ? 'rgba(239,68,68,0.12)' : 'none',
+                            border: isConfirming ? '1px solid rgba(239,68,68,0.4)' : 'none',
+                            color: isConfirming ? '#ef4444' : DS.txtS,
+                            cursor: isDeleting ? 'wait' : 'pointer',
+                            padding: isConfirming ? '2px 8px' : 4, borderRadius: 4,
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            fontSize: '0.72rem', fontWeight: isConfirming ? 600 : 400,
+                            whiteSpace: 'nowrap' as const,
+                          }}
+                        >
+                          {isDeleting ? '…' : isConfirming ? 'Delete?' : <IconTrash size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {showModal && (
+        <MonitorModal
+          monitor={editingMonitor}
+          onClose={() => { setShowModal(false); load() }}
+        />
+      )}
+
+      {outputModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+          onClick={() => setOutputModal(null)}
+        >
+          <div
+            style={{ backgroundColor: DS.surface, border: `1px solid ${DS.border}`, borderRadius: 12, width: 700, maxWidth: '95vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: '1rem 1.25rem', borderBottom: `1px solid ${DS.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 700, color: DS.txtP }}>{outputModal.name} — Last Output</span>
+              <button style={{ background: 'none', border: 'none', color: DS.txtS, cursor: 'pointer', display: 'flex' }} onClick={() => setOutputModal(null)}>
+                <IconX size={16} />
+              </button>
+            </div>
+            <pre style={{ padding: '1.25rem', margin: 0, overflowY: 'auto', fontSize: '0.78rem', lineHeight: 1.6, color: DS.txtM, backgroundColor: DS.bg, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {outputModal.output}
+            </pre>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -1721,6 +1963,7 @@ export default function MonitoringSetup() {
 
           <ContainerMonitoringSection watcherName={selected.watcher_name} />
           <ExternalChecksSection watcherName={selected.watcher_name} />
+          <SyntheticMonitorsSection />
           <LogMonitorsSetup watcherName={selected.watcher_name} />
         </>
       )}

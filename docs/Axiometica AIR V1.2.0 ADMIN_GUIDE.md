@@ -1,6 +1,6 @@
 # Axiometica AIR (Autonomous Incident Response) — Administrator Guide
 
-**Version:** 1.2.0 · **Last updated:** June 2026  
+**Version:** 1.2.5 · **Last updated:** July 2026  
 **Audience:** Platform administrators, ITOM admins, infrastructure engineers
 
 ---
@@ -187,6 +187,7 @@ Autonomous monitoring and discovery agent, authenticating each report with `WATC
 - Collects syscall rates per container if `sentinel_senses` is available
 - Runs configured External Connectivity Checks (HTTP/TCP probes)
 - Tails configured Log Monitors for pattern matches
+- Runs due Synthetic Transaction Monitors (per-monitor `schedule_mins` gates actual execution frequency independently of the poll interval)
 - Posts qualifying anomalies to the backend qualification endpoint
 
 **Discovery cycle** (every 15 polls ≈ 2.5 minutes):
@@ -1335,7 +1336,32 @@ Log Monitors continuously scan container stdout and stderr for pattern matches. 
 | `agentic_os_backend` | `OperationalError\|pool.*timeout` | `database.connectivity.connection_pool_exhausted` | 300 |
 | `agentic_os_backend` | `50[0-9] Internal Server Error` | `application.availability.service_unresponsive` | 60 |
 
-### 20.4 External Connectivity Checks
+### 20.4 Synthetic Transaction Monitors
+
+Synthetic Transaction Monitors replay a scripted, multi-page user journey (login, navigate, submit) against a real target and validate both HTTP status codes and page content — catching failures that a simple up/down health check cannot (e.g., a 200 response with a broken page body). Navigate to **Synthetic Transaction Monitoring** in the Monitoring Setup page.
+
+**Creating a monitor:**
+
+1. Record the journey in Chrome DevTools: Network tab → perform the flow (login, navigate a few pages) → right-click → **Export HAR with content**.
+2. In **New Monitor**, choose the HAR file. The platform parses it into pages and requests, and auto-detects likely credential fields (base URL, email, password, tokens) as suggested environment variable keys.
+3. Fill in the actual credential values — they are Fernet-encrypted at rest and injected into the replay script as environment variables at run time, never written into the script body itself.
+4. Optionally add a **page assertion** per page: a regex that must match somewhere in that page's combined response text (across every request the page made). Leave blank to only check HTTP status codes.
+5. Click **Generate Script** to deterministically compile the parsed pages into a runnable Python script (no LLM call involved), then **Test Script** to run it once immediately and confirm it passes before saving.
+6. Set **Run every (minutes)** — default 15 — and save.
+
+| Field | Description |
+|---|---|
+| HAR File | Source recording; re-uploading replaces the parsed pages and regenerates credential suggestions |
+| Credentials | Key/value pairs injected as environment variables into the replay subprocess; values are encrypted at rest |
+| Page Assertions | Optional per-page regex checked against every response body captured for that page (case-insensitive) |
+| Run every (minutes) | Minimum interval between runs for this monitor. Default: 15. Range: 1–10080. |
+| Enabled | Toggle to pause/resume without deleting the monitor |
+
+**Execution model:** monitors are **not** Celery-scheduled. `watcher_brain` evaluates every enabled monitor on each poll cycle and only actually executes the script once `schedule_mins` has elapsed since `last_run_at` — so a monitor set to run every 15 minutes will not run more often than that, regardless of the watcher's own (much faster) poll interval. Each run executes the generated script as a subprocess with a 120-second timeout; per-request method, URL, status code, and any assertion result are logged both in the watcher container logs and in the monitor's **Log** output in the UI.
+
+**Failure alerting:** after `WATCHER_SYNTHETIC_MIN_CONSECUTIVE_FAILS` consecutive failing runs (default 1), the watcher raises a `synthetic.transaction.failed` monitoring event at `critical` criticality through the normal qualification and incident pipeline — a failed transaction (bad status, failed assertion, rejected login) is treated the same as a hard script error/timeout, since both mean the monitored journey is broken for real users right now. The condition auto-clears (and the incident closes) the next time the monitor passes.
+
+### 20.5 External Connectivity Checks
 
 Perform scheduled HTTP/HTTPS probes against external URLs. Navigate to **Connectivity Checks** in the left sidebar.
 
@@ -1349,7 +1375,7 @@ Perform scheduled HTTP/HTTPS probes against external URLs. Navigate to **Connect
 | Event Type | Event type to generate on failure. Default: `network.connectivity.packet_loss`. |
 | CI Override | CI to attach the generated incident to |
 
-### 20.5 Scheduled Tasks
+### 20.6 Scheduled Tasks
 
 | Task | Default Schedule | Purpose |
 |---|---|---|
@@ -1358,6 +1384,7 @@ Perform scheduled HTTP/HTTPS probes against external URLs. Navigate to **Connect
 | `incident_timeout_check` | Every 5 minutes | Transition stale `pending_approval` incidents to `timed_out` |
 | `connectivity_probe_cycle` | Configurable | Execute all enabled External Connectivity Checks |
 | `log_monitor_cycle` | Every 30 seconds | Tail container logs and match patterns |
+| `synthetic_monitor_cycle` | Every watcher poll (gated per-monitor by `schedule_mins`) | Execute due Synthetic Transaction Monitors |
 | `backup_cycle` | Configurable cron | Execute database and volume backup if auto-backup is enabled |
 | `audit_log_purge` | Daily at 03:00 UTC | Purge audit log entries older than retention period |
 

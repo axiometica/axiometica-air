@@ -2,7 +2,7 @@
 ## AI-Powered Autonomous IT Operations
 
 **Platform Capabilities — Complete Feature Reference**
-*June 2026 | 1.2.0 | Confidential*
+*July 2026 | 1.2.5 | Confidential*
 
 ---
 
@@ -14,7 +14,7 @@ What distinguishes the platform is not any single capability but how each layer 
 
 | Metric | Value |
 |---|---|
-| Anomaly types detected | 13 |
+| Anomaly types detected | 14 |
 | Agents in the pipeline | 8 |
 | Risk scoring factors | 9 |
 | Tiers of runbook intelligence | 3 |
@@ -23,19 +23,20 @@ What distinguishes the platform is not any single capability but how each layer 
 | ServiceNow CI classes synced | 5 |
 | Storm detection burst threshold | ≥3 incidents / ≥2 resources |
 
-### Eleven Defining Capabilities
+### Twelve Defining Capabilities
 
-1. **Multi-Vector Observability** — 13 anomaly types across kernel, container, application, and external layers
+1. **Multi-Vector Observability** — 14 anomaly types across kernel, container, application, and external layers
 2. **Real-Time Monitoring Dashboard** — live CPU/memory/disk graphs, accurate disk reporting, and hot-reload threshold controls
-3. **Intelligent Signal Qualification** — 3-layer false-positive suppression before events reach the incident queue
-4. **8-Agent Incident Resolution Pipeline** — from detection to verified resolution with full audit trail
-5. **Correlated Storm Detection** — burst grouping, child containment, and AI-generated root-cause hypothesis for multi-resource events
-6. **Self-Improving Runbook Intelligence** — AI generates, validates, and learns from every remediation; platform-aware command variants per deployment target; searchable library with live confidence and trend indicators
-7. **Embedded Governance & Policy Engine** — fail-closed, approval-gated, with diagnostics-only mode
-8. **Operational CMDB** — live force-graph of configuration, health, and relationships driving every AI decision
-9. **Bidirectional ServiceNow Integration** — CMDB pull, incident push, and live state synchronisation
-10. **Multi-Platform Deployment** — watcher runs on Docker, cloud VMs (GCP, AWS, Azure), VMware, bare Linux, and Windows/macOS; multi-host via registered watcher fleet
-11. **External Monitoring Tool Integration** — Connector Hub ingests alerts from Datadog, Dynatrace, Splunk, Prometheus, PagerDuty, Zabbix, and ServiceNow into the full AI pipeline
+3. **Synthetic Transaction Monitoring** — HAR-based scripted user journey replay with per-page content assertions, catching failures a status-code-only check misses
+4. **Intelligent Signal Qualification** — 3-layer false-positive suppression before events reach the incident queue
+5. **8-Agent Incident Resolution Pipeline** — from detection to verified resolution with full audit trail
+6. **Correlated Storm Detection** — burst grouping, child containment, and AI-generated root-cause hypothesis for multi-resource events
+7. **Self-Improving Runbook Intelligence** — AI generates, validates, and learns from every remediation; platform-aware command variants per deployment target; searchable library with live confidence and trend indicators
+8. **Embedded Governance & Policy Engine** — fail-closed, approval-gated, with diagnostics-only mode
+9. **Operational CMDB** — live force-graph of configuration, health, and relationships driving every AI decision
+10. **Bidirectional ServiceNow Integration** — CMDB pull, incident push, and live state synchronisation
+11. **Multi-Platform Deployment** — watcher runs on Docker, cloud VMs (GCP, AWS, Azure), VMware, bare Linux, and Windows/macOS; multi-host via registered watcher fleet
+12. **External Monitoring Tool Integration** — Connector Hub ingests alerts from Datadog, Dynatrace, Splunk, Prometheus, PagerDuty, Zabbix, and ServiceNow into the full AI pipeline
 
 ---
 
@@ -70,6 +71,19 @@ The Watcher runs all external health checks from its own network position — pr
 - DNS resolution verification for monitored domain names
 - Application-level health probes (HTTP and TCP) for platform services
 - Container log scanning for error patterns
+- Synthetic multi-page transaction replay with content assertions — see below
+
+### Synthetic Transaction Monitoring
+
+A status-code check confirms a server responded. It does not confirm the response was *correct*. Synthetic Transaction Monitoring closes that gap by replaying an actual user journey — login, navigate, submit — and validating both the HTTP result and the page content at each step, from outside the application, on a schedule.
+
+- **Record once, replay forever:** capture the journey as a standard HAR file from Chrome DevTools — no scripting language to learn, no framework to install
+- **Deterministic script compilation:** the platform parses the HAR into pages and requests and compiles a runnable Python replay script directly — no LLM call, no non-determinism, on the path that runs every scheduled cycle
+- **Credential-aware:** likely credential fields (base URL, email, password, bearer tokens) are auto-suggested from the recording; values are encrypted at rest and injected as environment variables at run time, never written into the script itself
+- **Content assertions, not just status codes:** an optional per-page regex checks the full response body of every request on that page — catching a "successful" 200 response that renders an empty or broken page
+- **Independent per-monitor scheduling:** each monitor runs on its own interval (default every 15 minutes), decoupled from the watcher's internal poll cadence — no Celery dependency, no extra scheduler to operate
+- **On-demand AI repair:** when a test run fails, an optional AI-assisted fix can patch the generated script — the LLM is invoked only when asked, never on the unattended execution path
+- **Full pipeline integration:** failures raise incidents through the same qualification, governance, and (optionally) automated remediation pipeline as every other anomaly type, and auto-resolve when the journey next passes
 
 ### Full Anomaly Taxonomy
 
@@ -85,6 +99,7 @@ The Watcher runs all external health checks from its own network position — pr
 | External (DNS) | `dns_failed` — DNS resolution failure for monitored domain names |
 | Certificate | `tls_expiry` — TLS/SSL certificate approaching or past expiry (configurable warning window) |
 | Application | `metrics_anomaly` — application-level metric threshold breach |
+| Synthetic Transaction | `synthetic.transaction.failed` — scripted multi-page journey failed a status check or content assertion |
 
 ### Operational Monitoring Dashboard
 
@@ -456,7 +471,8 @@ Axiometica AIR represents a shift from reactive monitoring to truly autonomous o
 
 | Capability | What It Delivers |
 |---|---|
-| **Multi-Vector Observability** | 13 anomaly types across kernel, container, application, and external layers — no blind spots |
+| **Multi-Vector Observability** | 14 anomaly types across kernel, container, application, and external layers — no blind spots |
+| **Synthetic Transaction Monitoring** | HAR-based scripted journey replay with per-page content assertions — catches broken pages that return a healthy status code |
 | **Multi-Platform Deployment** | Watcher runs on Linux, VMware, Cloud VMs (GCP/AWS/Azure), Windows, and macOS; multi-host fleet from a single control plane |
 | **Operational Monitoring Dashboard** | Real-time CPU/memory/disk graphs, accurate disk reporting, live threshold controls, multi-watcher support |
 | **Signal Qualification Engine** | 3-layer false-positive suppression + 7-factor scoring ensures only qualified events become incidents |

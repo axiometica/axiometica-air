@@ -1259,3 +1259,33 @@ class NotificationTeamModel(Base):
     __table_args__ = (
         Index('idx_notification_team_name', 'name'),
     )
+
+
+class SyntheticMonitorModel(Base):
+    """
+    Synthetic transaction monitor — stores a generated Python script that is
+    replayed on a schedule by the watcher to validate end-to-end user journeys.
+
+    credentials_enc stores a Fernet-encrypted JSON blob of key/value pairs
+    that are injected as environment variables when the script is executed.
+    """
+    __tablename__ = "synthetic_monitors"
+
+    id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name            = Column(String(200), nullable=False, unique=True, index=True)
+    har_filename    = Column(String(500), nullable=True)
+    script          = Column(Text, nullable=True)
+    pages_json      = Column(Text, nullable=True)   # JSON-serialized ParsedPage[] — lets the edit UI
+                                                      # re-show/re-edit page assertions without the HAR file
+    credentials_enc = Column(Text, nullable=True)   # Fernet-encrypted JSON {"KEY": "VALUE", ...}
+    schedule_mins   = Column(Integer, nullable=False, default=15)
+    enabled         = Column(Boolean, nullable=False, default=True, server_default='true')
+    last_run_at     = Column(DateTime, nullable=True)
+    last_status     = Column(String(20), nullable=True)   # pass | fail | error
+    last_output     = Column(Text, nullable=True)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index('idx_synthetic_monitors_enabled', 'enabled'),
+    )
