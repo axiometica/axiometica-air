@@ -108,8 +108,8 @@ const modal: CSSProperties = {
 // ── HAR parsing ───────────────────────────────────────────────────────────────
 
 const HAR_ASSET_EXT = /\.(js|mjs|jsx|css|png|jpg|jpeg|gif|webp|avif|svg|ico|woff|woff2|ttf|eot|otf|map)(\?.*)?$/i
-const HAR_TRACKING = /(google-analytics\.com|googletagmanager\.com|analytics\.|\.gtm\.|hotjar\.|clarity\.ms|sentry\.io|bugsnag\.com|logrocket\.com|datadog-browser|segment\.io|mixpanel\.com|amplitude\.com|intercom\.io|crisp\.chat|hs-scripts\.com|hubspot\.com|vercel-analytics\.com|vercel-insights\.com|va\.vercel|fonts\.googleapis\.com|fonts\.gstatic\.com)/i
-const HAR_CRED_FIELD = /^(email|password|passwd|username|user_?name|login|pass|api_?key|client_?id|client_?secret|access_?token|auth_?token|secret_?key?|token)$/i
+const HAR_TRACKING = /(google-analytics\.com|googletagmanager\.com|analytics\.|\.gtm\.|hotjar\.|clarity\.ms|sentry\.io|bugsnag\.com|logrocket\.com|datadog-browser|segment\.io|mixpanel\.com|amplitude\.com|intercom\.io|crisp\.chat|hs-scripts\.com|hubspot\.com|vercel-analytics\.com|vercel-insights\.com|va\.vercel|fonts\.googleapis\.com|fonts\.gstatic\.com|walkme\.com|adobedtm\.com|demdex\.net|omtrdc\.net|trustarc\.com|onetrust\.com|cookielaw\.org|doubleclick\.net|googlesyndication\.com|googleadservices\.com)/i
+const HAR_CRED_FIELD = /^(email|user_?password|password|passwd|passcode|username|user_?name|identifier|login|pass|api_?key|client_?id|client_?secret|access_?token|auth_?token|secret_?key?|token)$/i
 // Custom headers likely to carry session/CSRF state. Deliberately excludes
 // Authorization (handled by the dedicated login/bearer-token flow below) and
 // Cookie/Set-Cookie (httpx.Client()'s cookie jar already replays those for free).
@@ -117,6 +117,46 @@ const HAR_STATE_HEADER = /^x-[a-z0-9-]*(session|csrf|xsrf|token|auth)[a-z0-9-]*$
 // Values shorter than this are too likely to be coincidental (e.g. "1", "true")
 // to treat as a correlated session/token value.
 const MIN_CORR_LEN = 6
+// A POST body containing one of these field names is treated as the login
+// step, regardless of URL path — narrower than HAR_CRED_FIELD (which also
+// matches a lone "email" or "token" field) so it doesn't fire on requests
+// that merely carry a credential-shaped field but aren't the login itself.
+// Includes Okta Identity Engine's "passcode" (nested under a "credentials"
+// object in /idx/challenge/answer, not top-level like a plain password form).
+const HAR_PASSWORD_FIELD = /^(user_?password|user_?passwd|password|passwd|pass|passcode)$/i
+
+// Same nesting depth as redactAndSubstituteBody (top level + 1) so a
+// password/passcode field wrapped in an object (e.g. Okta's
+// {"credentials": {"passcode": "..."}}) is still detected as the login step.
+function hasPasswordField(obj: any, depth = 0): boolean {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false
+  for (const [k, v] of Object.entries(obj)) {
+    if (HAR_PASSWORD_FIELD.test(k)) return true
+    if (depth < 1 && v !== null && typeof v === 'object' && !Array.isArray(v) && hasPasswordField(v, depth + 1)) return true
+  }
+  return false
+}
+
+// Well-known server-rendered CSRF hidden-input / meta-tag field names.
+// Session-based sites embed these in the login page's HTML rather than
+// exposing them via a JSON API, so they need HTML scraping, not resp.json().
+const CSRF_INPUT_NAMES = ['csrf_token', 'csrfmiddlewaretoken', 'authenticity_token', '_token', '__RequestVerificationToken', '_csrf', 'csrf']
+const CSRF_META_NAMES = ['csrf-token', 'csrf_token']
+
+function extractCsrfTokens(html: string): { name: string; value: string; tag: 'input' | 'meta' }[] {
+  const out: { name: string; value: string; tag: 'input' | 'meta' }[] = []
+  for (const name of CSRF_INPUT_NAMES) {
+    const re = new RegExp(`<input\\b(?=[^>]*\\bname=["']${name}["'])(?=[^>]*\\bvalue=["']([^"']*)["'])`, 'i')
+    const m = re.exec(html)
+    if (m && m[1]) out.push({ name, value: m[1], tag: 'input' })
+  }
+  for (const name of CSRF_META_NAMES) {
+    const re = new RegExp(`<meta\\b(?=[^>]*\\bname=["']${name}["'])(?=[^>]*\\bcontent=["']([^"']*)["'])`, 'i')
+    const m = re.exec(html)
+    if (m && m[1]) out.push({ name, value: m[1], tag: 'meta' })
+  }
+  return out
+}
 
 interface CredSuggestion {
   key: string
@@ -130,7 +170,9 @@ interface ParsedRequest {
   displayPath: string    // origin+path+query as recorded, for human-readable logs/summary
   status: number
   queryParams?: { key: string; value: string; varName?: string }[]
-  bodyStr?: string       // JSON body (as a JSON string); leaves may be "<VAR>" placeholders
+  bodyStr?: string       // body fields as a JSON object string; leaves may be "<VAR>" placeholders
+  bodyKind?: 'json' | 'form'  // whether bodyStr should be sent as json= or form-encoded data=
+  isCredentialSubmit?: boolean // POST body carries a password-shaped field — treat as the login step
   captures?: { varName: string; fieldPath: string }[]        // values to extract from THIS response
   headerCaptures?: { headerName: string; varName: string }[] // captured vars to also set as persistent client headers
 }
@@ -189,8 +231,9 @@ function flattenScalars(obj: any, prefix = '', depth = 0): { path: string; value
   return out
 }
 
-// Redacts credential fields (top level only, matching original behavior) and
-// substitutes correlated dynamic values (up to 1 level of nesting) with <varName> sentinels.
+// Redacts credential fields (top level and one level of nesting — e.g. Okta
+// Identity Engine's {"credentials": {"passcode": "..."}}) and substitutes
+// correlated dynamic values (up to 1 level of nesting) with <varName> sentinels.
 function redactAndSubstituteBody(
   body: any,
   credMap: Map<string, string>,
@@ -202,7 +245,7 @@ function redactAndSubstituteBody(
   const out: Record<string, any> = {}
   for (const [k, v] of Object.entries(body)) {
     const path = prefix ? `${prefix}.${k}` : k
-    if (depth === 0 && HAR_CRED_FIELD.test(k)) {
+    if (depth <= 1 && HAR_CRED_FIELD.test(k)) {
       const envKey = toEnvKey(k)
       if (!credMap.has(envKey)) credMap.set(envKey, '')
       out[k] = `<${envKey}>`
@@ -232,6 +275,7 @@ interface CandidateEntry {
   bodyRawFallback?: string
   headers: { name: string; value: string }[]
   responseJson?: any
+  csrfTokens?: { name: string; value: string; tag: 'input' | 'meta' }[]
   displayPath: string
 }
 
@@ -249,6 +293,21 @@ function parseHar(harJson: string): HarParseResult {
     pageNames.set(p.id, p.title || p.id)
   }
 
+  // Some HAR exports contain literal duplicate entries for the same request
+  // — one correctly tagged with a pageref, one with pageref missing/invalid
+  // (observed from real ServiceNow/UI16 recordings). Left alone, the
+  // untagged copy falls into a synthetic "Other" page, producing a bogus
+  // extra page that just re-duplicates a real page's content. Build the set
+  // of requests that already have a properly-paged copy so the orphaned
+  // duplicate can be dropped instead of kept.
+  const pagedSignatures = new Set<string>()
+  for (const entry of entries) {
+    const req = entry?.request
+    if (req && entry.pageref && pageNames.has(entry.pageref)) {
+      pagedSignatures.add(`${req.method}|${req.url}`)
+    }
+  }
+
   // ── Phase A: classify entries and collect everything we might need,
   // without deciding yet what gets kept. Every request keeps its own
   // explicit absolute origin (no BASE_URL) since a session can span domains.
@@ -257,6 +316,9 @@ function parseHar(harJson: string): HarParseResult {
     const req = entry?.request
     const res = entry?.response
     if (!req || !res) continue
+
+    const hasValidPageref = entry.pageref && pageNames.has(entry.pageref)
+    if (!hasValidPageref && pagedSignatures.has(`${req.method}|${req.url}`)) continue
 
     let u: URL
     try { u = new URL(req.url || '') } catch { continue }
@@ -298,6 +360,12 @@ function parseHar(harJson: string): HarParseResult {
       try { responseJson = JSON.parse(res.content?.text ?? '') } catch { /* not JSON */ }
     }
 
+    let csrfTokens: { name: string; value: string; tag: 'input' | 'meta' }[] | undefined
+    if (kind === 'html' && res.content?.text) {
+      const found = extractCsrfTokens(res.content.text)
+      if (found.length) csrfTokens = found
+    }
+
     const fullDisplay = u.origin + pathname + (u.search || '')
     const displayPath = fullDisplay.length > 120 ? fullDisplay.slice(0, 120) + '…' : fullDisplay
 
@@ -312,6 +380,7 @@ function parseHar(harJson: string): HarParseResult {
       bodyObj, formParams, bodyRawFallback,
       headers,
       responseJson,
+      csrfTokens,
       displayPath,
     })
   }
@@ -324,9 +393,20 @@ function parseHar(harJson: string): HarParseResult {
     if (!c.responseJson) continue
     for (const f of flattenScalars(c.responseJson)) sourceFields.push({ entryIdx: c.index, ...f })
   }
+  // HTML-embedded CSRF tokens (hidden <input>/<meta>) — same correlation
+  // pipeline as JSON sources, just a different extraction path at codegen
+  // time (see extractExpr's "__csrf__:" handling). Tag is encoded in the path
+  // (not re-derived from the name) since e.g. "csrf_token" is a plausible
+  // name for either an <input> or a <meta> tag.
+  for (const c of candidates) {
+    if (!c.csrfTokens) continue
+    for (const tok of c.csrfTokens) {
+      if (tok.value.length >= MIN_CORR_LEN) sourceFields.push({ entryIdx: c.index, path: `__csrf__:${tok.tag}:${tok.name}`, value: tok.value })
+    }
+  }
 
   // ── Phase C: collect every place a value gets *used* in a later request —
-  // query params, path segments, JSON body fields, and state-looking headers.
+  // query params, path segments, JSON/form body fields, and state-looking headers.
   interface UsageSite { entryIdx: number; siteType: 'query' | 'path' | 'body' | 'header'; siteKey: string; value: string }
   const usageSites: UsageSite[] = []
   for (const c of candidates) {
@@ -342,6 +422,14 @@ function parseHar(harJson: string): HarParseResult {
         if (topKeys.has(f.path.split('.')[0])) usageSites.push({ entryIdx: c.index, siteType: 'body', siteKey: f.path, value: f.value })
       }
     }
+    if (c.formParams) {
+      for (const p of c.formParams) {
+        const val = String(p.value ?? '')
+        if (val && val.length >= MIN_CORR_LEN && !HAR_CRED_FIELD.test(p.name)) {
+          usageSites.push({ entryIdx: c.index, siteType: 'body', siteKey: p.name, value: val })
+        }
+      }
+    }
     for (const h of c.headers) {
       if (HAR_STATE_HEADER.test(h.name) && h.value && h.value.length >= MIN_CORR_LEN) {
         usageSites.push({ entryIdx: c.index, siteType: 'header', siteKey: h.name, value: h.value })
@@ -351,12 +439,26 @@ function parseHar(harJson: string): HarParseResult {
 
   // ── Phase D: match each usage to the closest *earlier* response that produced
   // the same exact value (exact-string match keeps false positives rare).
+  // Indexed by value first — a large HAR (thousands of entries, heavy
+  // telemetry) can produce tens of thousands of source fields and usage
+  // sites; comparing every pair (the previous approach) is O(n²) and can
+  // freeze the tab for a long time. Grouping by exact value first keeps the
+  // inner scan limited to genuine duplicates of that value, which in
+  // practice is a handful, not the whole dataset.
   interface Match { usage: UsageSite; sourceIdx: number; sourcePath: string }
+  const sourceFieldsByValue = new Map<string, SourceField[]>()
+  for (const sf of sourceFields) {
+    let bucket = sourceFieldsByValue.get(sf.value)
+    if (!bucket) { bucket = []; sourceFieldsByValue.set(sf.value, bucket) }
+    bucket.push(sf)
+  }
   const matches: Match[] = []
   for (const u2 of usageSites) {
+    const candidates = sourceFieldsByValue.get(u2.value)
+    if (!candidates) continue
     let best: SourceField | null = null
-    for (const sf of sourceFields) {
-      if (sf.entryIdx < u2.entryIdx && sf.value === u2.value && (!best || sf.entryIdx > best.entryIdx)) best = sf
+    for (const sf of candidates) {
+      if (sf.entryIdx < u2.entryIdx && (!best || sf.entryIdx > best.entryIdx)) best = sf
     }
     if (best) matches.push({ usage: u2, sourceIdx: best.entryIdx, sourcePath: best.path })
   }
@@ -428,25 +530,43 @@ function parseHar(harJson: string): HarParseResult {
       ? c.queryParams.map(q => ({ key: q.key, value: q.value, varName: queryVarByKey.get(q.key) }))
       : undefined
 
+    const bodyMatches = new Map<string, string>()
+    for (const m of usageHere.filter(m => m.usage.siteType === 'body')) {
+      bodyMatches.set(m.usage.siteKey, varNameByKey.get(`${m.sourceIdx}:${m.sourcePath}`)!)
+    }
+
     let bodyStr: string | undefined
+    let bodyKind: 'json' | 'form' | undefined
     if (c.bodyObj && typeof c.bodyObj === 'object') {
-      const bodyMatches = new Map<string, string>()
-      for (const m of usageHere.filter(m => m.usage.siteType === 'body')) {
-        bodyMatches.set(m.usage.siteKey, varNameByKey.get(`${m.sourceIdx}:${m.sourcePath}`)!)
-      }
       bodyStr = JSON.stringify(redactAndSubstituteBody(c.bodyObj, credMap, bodyMatches))
+      bodyKind = 'json'
     } else if (c.formParams) {
-      bodyStr = c.formParams.map((p: any) => {
+      // Same object shape as the JSON case (flat key -> value/placeholder) so it
+      // flows through the same pyLiteral substitution at codegen time — only the
+      // kwarg (json= vs data=) differs, chosen from bodyKind below.
+      const formObj: Record<string, string> = {}
+      for (const p of c.formParams) {
         if (HAR_CRED_FIELD.test(p.name)) {
           const envKey = toEnvKey(p.name)
           if (!credMap.has(envKey)) credMap.set(envKey, '')
-          return `${p.name}=<${envKey}>`
+          formObj[p.name] = `<${envKey}>`
+        } else if (bodyMatches.has(p.name)) {
+          formObj[p.name] = `<${bodyMatches.get(p.name)}>`
+        } else {
+          formObj[p.name] = String(p.value ?? '').slice(0, 200)
         }
-        return `${p.name}=${String(p.value ?? '').slice(0, 80)}`
-      }).join('&')
+      }
+      bodyStr = JSON.stringify(formObj)
+      bodyKind = 'form'
     } else if (c.bodyRawFallback) {
       bodyStr = JSON.stringify(c.bodyRawFallback)
+      bodyKind = 'json'
     }
+
+    const isCredentialSubmit = c.method === 'POST' && Boolean(
+      hasPasswordField(c.bodyObj)
+      || (c.formParams && c.formParams.some((p: any) => HAR_PASSWORD_FIELD.test(p.name)))
+    )
 
     const sourceMatches = matchesBySourceEntry.get(c.index) ?? []
     const captureVarPaths = new Map<string, string>()
@@ -469,6 +589,8 @@ function parseHar(harJson: string): HarParseResult {
       status: c.status,
       queryParams,
       bodyStr,
+      bodyKind,
+      isCredentialSubmit,
       captures: captures.length ? captures : undefined,
       headerCaptures: headerCaptures.length ? headerCaptures : undefined,
     }
@@ -557,7 +679,12 @@ function pyLiteral(v: any): string {
   if (v === null || v === undefined) return 'None'
   if (typeof v === 'string') {
     if (/^<[A-Za-z_][A-Za-z0-9_]*>$/.test(v)) return v.slice(1, -1)   // bare identifier: env var or captured var
-    return `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+    // JSON.stringify's escaping (\\, \", \n, \r, \t, \uXXXX, ...) is a strict
+    // subset of Python double-quoted string escape syntax, so it's also a
+    // correct Python literal — unlike hand-escaping just backslash/quote,
+    // this is safe for values containing raw newlines or other control
+    // characters (e.g. multi-line/NDJSON bodies captured as raw fallback text).
+    return JSON.stringify(v)
   }
   if (typeof v === 'number' || typeof v === 'boolean') return JSON.stringify(v)
   if (Array.isArray(v)) return `[${v.map(pyLiteral).join(', ')}]`
@@ -584,6 +711,12 @@ function buildUrlExpr(origin: string, pathname: string): string {
 }
 
 function extractExpr(fieldPath: string): string {
+  if (fieldPath.startsWith('__csrf__:')) {
+    const [, tag, fieldName] = fieldPath.split(':')
+    const attr = tag === 'meta' ? 'content' : 'value'
+    const pattern = `<${tag}\\b(?=[^>]*\\bname=["']${fieldName}["'])(?=[^>]*\\b${attr}=["']([^"']*)["'])`
+    return `(m.group(1) if (m := re.search(r"""${pattern}""", resp.text)) else None)`
+  }
   let expr = 'resp.json()'
   for (const part of fieldPath.split('.')) expr = `(${expr} or {}).get("${part}")`
   return expr
@@ -595,9 +728,8 @@ function generateScriptDeterministically(
 ): string {
   const L: string[] = []
   const p = (line: string) => L.push(line)
-  const hasAssertions = pages.some(pg => pg.bodyPattern?.trim())
 
-  p(`import sys, os, time${hasAssertions ? ', re' : ''}`)
+  p('import sys, os, time, re')
   p('')
   p('try:')
   p('    import httpx')
@@ -622,15 +754,15 @@ function generateScriptDeterministically(
 
   p(`    total_pages = ${pages.length}`)
   p('    total_pages_passed = 0')
-  p('    client = httpx.Client(verify=False, timeout=8)')
+  p('    client = httpx.Client(verify=False, timeout=8, follow_redirects=True)')
   p('')
 
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i]
     const assertPattern = page.bodyPattern?.trim() ?? ''
-    const isLoginPage = page.requests.some(
-      r => r.method === 'POST' && r.pathname.includes('/api/auth/login'),
-    )
+    // First password-bearing POST in the page is treated as the login step,
+    // regardless of its URL — not every site's login endpoint is /api/auth/login.
+    const loginReq = page.requests.find(r => r.isCredentialSubmit)
 
     p(`    print(f"Start Page ${i + 1}: ${pyEscape(page.name)}")`)
     p('    try:')
@@ -639,12 +771,11 @@ function generateScriptDeterministically(
     if (assertPattern) p('        page_bodies = []')
     p('')
 
-    let tokenExtracted = false
     for (const req of page.requests) {
       const urlExpr = buildUrlExpr(req.origin, req.pathname)
       const kwargs: string[] = []
       if (req.queryParams?.length) kwargs.push(`params=${queryDictLiteral(req.queryParams)}`)
-      if (req.bodyStr) kwargs.push(`json=${bodyToPythonLiteral(req.bodyStr)}`)
+      if (req.bodyStr) kwargs.push(`${req.bodyKind === 'form' ? 'data' : 'json'}=${bodyToPythonLiteral(req.bodyStr)}`)
       const method = req.method.toLowerCase()
       const callExpr = `client.${method}(${urlExpr}${kwargs.length ? ', ' + kwargs.join(', ') : ''})`
       const methodLabel = req.method.toUpperCase().padEnd(5)
@@ -664,17 +795,23 @@ function generateScriptDeterministically(
         p(`            client.headers["${hc.headerName}"] = str(${hc.varName})`)
       }
 
-      if (isLoginPage && req.method === 'POST' && req.pathname.includes('/api/auth/login') && !tokenExtracted) {
-        tokenExtracted = true
-        p(`        if resp.status_code != 200:`)
+      if (req === loginReq) {
+        // Hard-fail on a bad login status regardless of auth style. A bearer-token
+        // API and a session-cookie site both count "login errored" the same way;
+        // what differs is what happens next, handled below.
+        p(`        if resp.status_code >= 300:`)
         p(`            print(f"End Page ${i + 1} - FAILED -- login returned {resp.status_code}: {resp.text[:300]}")`)
         p(`            sys.exit(1)`)
-        p(`        d = resp.json()`)
-        p(`        token = d.get("access_token") or d.get("token") or (d.get("data") or {}).get("access_token")`)
-        p(`        if not token:`)
-        p(`            print(f"End Page ${i + 1} - FAILED -- no token in login response: {resp.text[:200]}")`)
-        p(`            sys.exit(1)`)
-        p(`        client.headers["Authorization"] = f"Bearer {token}"`)
+        // Bearer-token APIs return JSON with a token to carry forward; session-cookie
+        // sites return HTML/redirect with no token — that's expected, not a failure,
+        // since httpx.Client's cookie jar already carries the session forward.
+        p(`        try:`)
+        p(`            _login_json = resp.json()`)
+        p(`            _token = _login_json.get("access_token") or _login_json.get("token") or (_login_json.get("data") or {}).get("access_token")`)
+        p(`            if _token:`)
+        p(`                client.headers["Authorization"] = f"Bearer {_token}"`)
+        p(`        except Exception:`)
+        p(`            pass  # not a JSON/bearer-token response -- session-cookie auth`)
       }
 
       p('')
@@ -710,6 +847,7 @@ function generateScriptDeterministically(
   p(`        print(f"RESULT : PASS -- {total_pages_passed}/{total_pages} pages passed")`)
   p(`    else:`)
   p(`        print(f"RESULT : FAIL -- {total_pages_passed}/{total_pages} pages passed")`)
+  p(`        sys.exit(1)`)
   p('')
   p('')
   p('if __name__ == "__main__":')

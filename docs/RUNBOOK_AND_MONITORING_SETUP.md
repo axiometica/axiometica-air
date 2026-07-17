@@ -7,7 +7,8 @@ This guide covers:
 2. **Sentinel** - eBPF kernel monitor for system-level telemetry
 3. **Watcher** - Brain container for anomaly detection and orchestration
 4. **Approval Workflow** - New "Allow Diagnostics" partial approval flow
-5. **Synthetic Transaction Monitoring** - HAR-based scripted user journey replay with page-content assertions
+
+> Looking for Synthetic Transaction Monitoring, External Connectivity Checks, or Log Monitors? See the **Monitoring Overview** doc — this guide only covers the eBPF/resource-metric side of the Watcher.
 
 ---
 
@@ -340,49 +341,6 @@ tracepoint:raw_syscalls:sys_enter event stream active
 
 ---
 
-## Part 6: Synthetic Transaction Monitoring
-
-Synthetic Transaction Monitors replay a scripted multi-page user journey against a real target (login, navigate, submit) and validate both HTTP status codes and page content — catching failures a plain up/down health check misses. They run from the same Watcher container as the checks in Part 2, on their own schedule.
-
-### How It Works
-
-1. **Record** the journey in Chrome DevTools: Network tab → perform the flow → right-click → **Export HAR with content**.
-2. **Upload** the HAR in Monitoring Setup → Synthetic Transaction Monitoring → New Monitor. The platform parses it into pages and requests and suggests credential keys (base URL, email, password, tokens) found in the recording.
-3. **Fill in credentials** — stored encrypted, injected into the replay as environment variables at run time.
-4. **Add page assertions** (optional) — a regex checked against every response body captured on that page; leave blank to check status codes only.
-5. **Generate Script** compiles the parsed pages into a runnable Python script deterministically — no LLM call. **Test Script** runs it once immediately.
-6. **Save** with a **Run every (minutes)** interval (default 15).
-
-### Execution Model
-
-Unlike the Yes-service runbook in Part 1, synthetic monitors are **not Celery-scheduled**. `watcher_brain` evaluates every enabled monitor on each of its own poll cycles (`WATCHER_POLL_INTERVAL`, default 10s) but only actually runs a monitor's script once `schedule_mins` has elapsed since its last run — so the watcher's fast internal poll loop doesn't mean the monitor runs that often. Each run executes as a subprocess with a 120-second timeout.
-
-### Failure Alerting
-
-After `WATCHER_SYNTHETIC_MIN_CONSECUTIVE_FAILS` consecutive failing runs (default 1), the watcher raises a `synthetic.transaction.failed` monitoring event at `critical` criticality through the same qualification and incident pipeline used everywhere else in this guide — a failed transaction is treated the same as a hard script error/timeout, since both mean the monitored journey is broken right now. It auto-clears the next time the monitor passes.
-
-### Verifying a Monitor
-
-```bash
-# Tail per-request/per-page detail as the watcher runs a monitor
-docker logs watcher_brain -f | grep "\[SYNTHETIC\]"
-```
-
-**Expected output** (one line per request, one summary line per page):
-```
-🔬 [SYNTHETIC] Running monitor 'Axiometica WebSite'
-🔬 [SYNTHETIC]     Start Page 1: Login
-🔬 [SYNTHETIC]       GET   /                     [200]  143ms
-🔬 [SYNTHETIC]       POST  /api/auth/login        [200]  385ms
-🔬 [SYNTHETIC]     End Page 1 - PASSED (729ms)
-🔬 [SYNTHETIC]     RESULT : PASS -- 1/1 pages passed
-🔬 [SYNTHETIC] 'Axiometica WebSite' → pass
-```
-
-The same output is available in the UI via the **Log** button next to each monitor, without needing container log access.
-
----
-
 ## Troubleshooting
 
 ### Issue: Sentinel container won't start
@@ -414,15 +372,6 @@ docker-compose exec postgres psql -U postgres -d agentic_os -c \
 curl http://localhost:8000/api/health
 # Should return 200 with status info
 ```
-
-### Issue: Synthetic monitor never runs / stays stuck on old "Last Run"
-**Check:**
-```bash
-docker logs watcher_brain -f | grep "\[SYNTHETIC\]"
-```
-- Confirm the monitor is **Enabled** and has a saved script (an unsaved/never-generated script is skipped)
-- The watcher only executes a monitor once `schedule_mins` has elapsed since `last_run_at` — a 15-minute monitor will not run again 2 minutes after its last run, even though the watcher itself polls every ~10 seconds
-- `watcher_brain` bind-mounts backend source in dev but does **not** hot-reload — after a code change under `backend/src`, restart it: `docker restart watcher_brain`
 
 ---
 

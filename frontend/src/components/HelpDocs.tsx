@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { IconX } from './icons'
+import { useState, useMemo } from 'react'
+import { IconX, IconSearch } from './icons'
 import MarkdownDoc from './MarkdownDoc'
 
 // Platform guides (curated)
@@ -14,12 +14,16 @@ import features          from '../docs/FEATURES.md?raw'
 import platformSelection from '../docs/PLATFORM_SELECTION.md?raw'
 
 // Monitoring & watchers
+import monitoringOverview    from '../docs/monitoring-overview.md?raw'
 import watcherSetup          from '../docs/WATCHER_SETUP.md?raw'
 import watcherQuickStart     from '../docs/WATCHER_QUICK_START.md?raw'
 import watcherIntegration    from '../docs/WATCHER_INTEGRATION.md?raw'
 import watcherTroubleshooting from '../docs/WATCHER_TROUBLESHOOTING.md?raw'
 import healthCheck           from '../docs/HEALTH_CHECK_GUIDE.md?raw'
 import stormDetection        from '../docs/storm-detection.md?raw'
+import externalChecks        from '../docs/external-connectivity-checks.md?raw'
+import logMonitors           from '../docs/log-monitors.md?raw'
+import syntheticMonitoring   from '../docs/synthetic-monitoring-guide.md?raw'
 
 // Runbooks & automation
 import runbookMonitoring from '../docs/RUNBOOK_AND_MONITORING_SETUP.md?raw'
@@ -280,6 +284,13 @@ const STAGES: Stage[] = [
   },
 ]
 
+// The Incident Lifecycle page is a hand-built structured view, not markdown —
+// flatten it into plain text once so search can still find it.
+const LIFECYCLE_SEARCH_TEXT = STAGES.map(s => [
+  s.title, s.desc,
+  ...s.gates.flatMap(g => [g.label, g.detail, ...(g.tags ?? [])]),
+].filter(Boolean).join(' ')).join(' ')
+
 interface DocEntry {
   id: string
   icon: string
@@ -314,12 +325,16 @@ const SECTIONS: DocSection[] = [
   {
     label: 'Monitoring & Watchers',
     items: [
+      { id: 'monitoring-overview',     icon: '🧭', label: 'Monitoring Overview',    content: monitoringOverview },
       { id: 'watcher-setup',           icon: '👁️', label: 'Watcher Setup',          content: watcherSetup },
       { id: 'watcher-quickstart',      icon: '⚡', label: 'Watcher Quick Start',    content: watcherQuickStart },
       { id: 'watcher-integration',     icon: '🔗', label: 'Watcher Integration',    content: watcherIntegration },
       { id: 'watcher-troubleshooting', icon: '🔧', label: 'Troubleshooting',        content: watcherTroubleshooting },
       { id: 'health-check',            icon: '💚', label: 'Health Check Guide',     content: healthCheck },
       { id: 'storm-detection',         icon: '⛈️', label: 'Storm Detection',        content: stormDetection },
+      { id: 'external-checks',         icon: '🌐', label: 'External Connectivity Checks', content: externalChecks },
+      { id: 'log-monitors',            icon: '📄', label: 'Log Monitors',          content: logMonitors },
+      { id: 'synthetic-monitoring',    icon: '🔬', label: 'Synthetic Monitoring',   content: syntheticMonitoring },
     ],
   },
   {
@@ -351,6 +366,67 @@ const SECTIONS: DocSection[] = [
 const DOC_MAP = new Map<string, DocEntry>(
   SECTIONS.flatMap(s => s.items).map(d => [d.id, d])
 )
+
+// ── Search ───────────────────────────────────────────────────────────────────
+// Strips the markdown syntax that would otherwise clutter a plain-text snippet
+// (fences, image/link syntax, heading/emphasis punctuation, table pipes).
+function stripMd(s: string): string {
+  return s
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[#*_`>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+interface SearchIndexEntry { id: string; icon: string; label: string; cleanContent: string }
+
+// Pre-stripped once at module load — search itself only does cheap substring
+// lookups against this, not markdown cleanup, so it stays fast on every keystroke.
+const SEARCH_INDEX: SearchIndexEntry[] = [
+  { id: 'lifecycle', icon: '🔄', label: 'Incident Lifecycle', cleanContent: stripMd(LIFECYCLE_SEARCH_TEXT) },
+  ...Array.from(DOC_MAP.values()).map(d => ({
+    id: d.id, icon: d.icon, label: d.label, cleanContent: stripMd(d.content ?? ''),
+  })),
+]
+
+interface SearchResult {
+  id: string
+  icon: string
+  label: string
+  titleMatch: boolean
+  snippet: { before: string; match: string; after: string } | null
+}
+
+function buildSnippet(cleanContent: string, query: string): SearchResult['snippet'] {
+  const idx = cleanContent.toLowerCase().indexOf(query.toLowerCase())
+  if (idx === -1) return null
+  const start = Math.max(0, idx - 40)
+  const end = Math.min(cleanContent.length, idx + query.length + 90)
+  return {
+    before: (start > 0 ? '…' : '') + cleanContent.slice(start, idx),
+    match: cleanContent.slice(idx, idx + query.length),
+    after: cleanContent.slice(idx + query.length, end) + (end < cleanContent.length ? '…' : ''),
+  }
+}
+
+function computeSearchResults(query: string): SearchResult[] {
+  const q = query.toLowerCase()
+  const results: SearchResult[] = []
+  for (const doc of SEARCH_INDEX) {
+    const titleMatch = doc.label.toLowerCase().includes(q)
+    const snippet = buildSnippet(doc.cleanContent, query)
+    if (titleMatch || snippet) {
+      results.push({ id: doc.id, icon: doc.icon, label: doc.label, titleMatch, snippet })
+    }
+  }
+  results.sort((a, b) => {
+    if (a.titleMatch !== b.titleMatch) return a.titleMatch ? -1 : 1
+    return a.label.localeCompare(b.label)
+  })
+  return results
+}
 
 function StageBlock({ stage }: { stage: Stage }) {
   const [open, setOpen] = useState(true)
@@ -414,6 +490,19 @@ function StageBlock({ stage }: { stage: Stage }) {
 
 export default function HelpDocs({ onClose }: HelpDocsProps) {
   const [activeDoc, setActiveDoc] = useState('lifecycle')
+  const [searchQuery, setSearchQuery] = useState('')
+  const trimmedQuery = searchQuery.trim()
+
+  const searchResults = useMemo(
+    () => trimmedQuery.length >= 2 ? computeSearchResults(trimmedQuery) : [],
+    [trimmedQuery]
+  )
+  const isSearching = trimmedQuery.length >= 2
+
+  const selectDoc = (id: string) => {
+    setActiveDoc(id)
+    setSearchQuery('')
+  }
 
   return (
     <div className="hd-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -438,21 +527,65 @@ export default function HelpDocs({ onClose }: HelpDocsProps) {
 
           {/* Sidebar */}
           <nav className="hd-sidebar">
-            {SECTIONS.map(section => (
-              <div key={section.label} className="hd-sidebar-section">
-                <div className="hd-sidebar-section-label">{section.label}</div>
-                {section.items.map(doc => (
+            <div className="hd-search-wrap">
+              <IconSearch size={14} className="hd-search-icon" />
+              <input
+                className="hd-search-input"
+                type="text"
+                placeholder="Search docs…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button
+                  className="hd-search-clear"
+                  onClick={() => setSearchQuery('')}
+                  title="Clear search"
+                >
+                  <IconX size={12} />
+                </button>
+              )}
+            </div>
+
+            {isSearching ? (
+              <div className="hd-search-results">
+                {searchResults.length === 0 ? (
+                  <div className="hd-search-empty">No docs match "{trimmedQuery}"</div>
+                ) : searchResults.map(r => (
                   <button
-                    key={doc.id}
-                    className={`hd-sidebar-item${activeDoc === doc.id ? ' active' : ''}`}
-                    onClick={() => setActiveDoc(doc.id)}
+                    key={r.id}
+                    className={`hd-sidebar-item hd-search-result${activeDoc === r.id ? ' active' : ''}`}
+                    onClick={() => selectDoc(r.id)}
                   >
-                    <span className="hd-sidebar-item-icon">{doc.icon}</span>
-                    {doc.label}
+                    <span className="hd-sidebar-item-icon">{r.icon}</span>
+                    <span className="hd-search-result-body">
+                      <span className="hd-search-result-label">{r.label}</span>
+                      {r.snippet && (
+                        <span className="hd-search-result-snippet">
+                          {r.snippet.before}<mark>{r.snippet.match}</mark>{r.snippet.after}
+                        </span>
+                      )}
+                    </span>
                   </button>
                 ))}
               </div>
-            ))}
+            ) : (
+              SECTIONS.map(section => (
+                <div key={section.label} className="hd-sidebar-section">
+                  <div className="hd-sidebar-section-label">{section.label}</div>
+                  {section.items.map(doc => (
+                    <button
+                      key={doc.id}
+                      className={`hd-sidebar-item${activeDoc === doc.id ? ' active' : ''}`}
+                      onClick={() => setActiveDoc(doc.id)}
+                    >
+                      <span className="hd-sidebar-item-icon">{doc.icon}</span>
+                      {doc.label}
+                    </button>
+                  ))}
+                </div>
+              ))
+            )}
           </nav>
 
           {/* Content */}

@@ -48,6 +48,13 @@ const components: Components = {
   hr: () => (
     <hr style={{ border: 'none', borderTop: '1px solid rgba(148,163,184,0.12)', margin: '1.5rem 0' }} />
   ),
+  img: ({ src, alt }) => (
+    <img src={src} alt={alt} style={{
+      maxWidth: '100%', height: 'auto', display: 'block',
+      margin: '0.75rem 0', borderRadius: '8px',
+      border: '1px solid rgba(148,163,184,0.15)',
+    }} />
+  ),
   ul: ({ children }) => (
     <ul style={{
       margin: '0 0 0.75rem 0', paddingLeft: '1.25rem',
