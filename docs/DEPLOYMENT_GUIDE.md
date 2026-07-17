@@ -733,6 +733,8 @@ kubectl exec -n agentic-platform deploy/backend -- \
 
 ### 16.2 Production — AKS (Azure Kubernetes Service)
 
+> **Full walkthrough:** See [AKS_DEPLOYMENT_WALKTHROUGH.md](AKS_DEPLOYMENT_WALKTHROUGH.md) for a complete end-to-end guide covering cluster creation, nginx-ingress, cert-manager, DNS, verification, and day-2 operations.
+
 The same `deploy-aks.sh` script works for any managed Kubernetes cluster (AKS, EKS, GKE) — use `REGISTRY_PREFIX` instead of `ACR_NAME` for non-Azure registries.
 
 **Prerequisites**
