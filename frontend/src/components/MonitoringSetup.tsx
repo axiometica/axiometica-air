@@ -46,6 +46,7 @@ import {
   IconChevronRight,
   IconRefresh,
   IconChartLine,
+  IconBolt,
 } from './icons'
 
 // ── Design tokens ─────────────────────────────────────────────────────────────

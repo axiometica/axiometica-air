@@ -435,7 +435,8 @@ export default function EventTypesPage() {
                         <span
                           className="text-xs px-2 py-0.5 rounded uppercase tracking-wide flex-shrink-0"
                           style={{
-                            background: SEVERITY_COLORS[et.default_severity] + '22',
+                            background: 'transparent',
+                            border: `1px solid ${SEVERITY_COLORS[et.default_severity]}`,
                             color: SEVERITY_COLORS[et.default_severity],
                             fontWeight: 700, fontSize: 10,
                           }}
