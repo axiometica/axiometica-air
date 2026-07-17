@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flower
+  namespace: agentic-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flower
+  template:
+    metadata:
+      labels:
+        app: flower
+    spec:
+      # Suppress K8s service-link env vars: FLOWER_PORT=tcp://... breaks Flower's int parsing.
+      enableServiceLinks: false
+      containers:
+      - name: flower
+        image: mher/flower:2.0.1
+        env:
+        - name: FLOWER_USER
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: FLOWER_USER
+        - name: FLOWER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: FLOWER_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: REDIS_PASSWORD
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/1"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        # Shell expansion lets us build basic_auth from two separate secret keys.
+        command:
+        - sh
+        - -c
+        - "celery --broker=${CELERY_BROKER_URL} flower --port=5555 --basic_auth=${FLOWER_USER}:${FLOWER_PASSWORD}"
+        ports:
+        - containerPort: 5555
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flower
+  namespace: agentic-platform
+spec:
+  selector:
+    app: flower
+  ports:
+  - port: 5555
+    targetPort: 5555

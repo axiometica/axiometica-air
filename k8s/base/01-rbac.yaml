@@ -1,0 +1,55 @@
+# Watcher service account and cluster-wide RBAC.
+# Grants read access across all namespaces for monitoring, and exec/delete/patch
+# within the target namespace for Kill-API remediation actions.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: watcher
+  namespace: agentic-platform
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+    app.kubernetes.io/component: monitoring
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agentic-watcher
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "services", "endpoints", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agentic-watcher
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: agentic-watcher
+subjects:
+  - kind: ServiceAccount
+    name: watcher
+    namespace: agentic-platform

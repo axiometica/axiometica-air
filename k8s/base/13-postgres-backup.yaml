@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-backup
+  namespace: agentic-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-backup
+  template:
+    metadata:
+      labels:
+        app: postgres-backup
+    spec:
+      containers:
+      - name: postgres-backup
+        image: prodrigestivill/postgres-backup-local:15
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_HOST
+          value: postgres
+        - name: POSTGRES_DB
+          value: agentic_os
+        - name: POSTGRES_USER
+          value: postgres
+        - name: SCHEDULE
+          value: "@daily"
+        - name: BACKUP_KEEP_DAYS
+          value: "7"
+        - name: BACKUP_KEEP_WEEKS
+          value: "4"
+        - name: BACKUP_KEEP_MONTHS
+          value: "6"
+        - name: HEALTHCHECK_PORT
+          value: "8080"
+        volumeMounts:
+        - name: backups
+          mountPath: /backups
+        resources:
+          requests:
+            cpu: 25m
+            memory: 32Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+      volumes:
+      - name: backups
+        persistentVolumeClaim:
+          claimName: postgres-backups

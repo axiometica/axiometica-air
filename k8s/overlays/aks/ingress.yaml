@@ -1,0 +1,48 @@
+# nginx-ingress Ingress — routes external HTTPS traffic to the frontend service.
+# Requires the nginx-ingress controller to be installed in the cluster:
+#   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+#   helm install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace
+#
+# TLS: reference a Secret containing your certificate. Options:
+#   a) cert-manager (recommended):
+#        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+#        Then add a ClusterIssuer and annotate this Ingress with cert-manager.io/cluster-issuer.
+#   b) AKS managed cert (app-routing addon):
+#        az aks addon enable --addon http_application_routing
+#   c) Self-signed (dev/staging only): the nginx pod auto-generates one on first boot.
+#
+# Set PLATFORM_HOST before applying:
+#   PLATFORM_HOST=itsm.example.com envsubst < overlays/aks/ingress.yaml | kubectl apply -f -
+# or edit the host fields below directly.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentic-platform
+  namespace: agentic-platform
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Preserve WebSocket upgrade headers for /ws routes.
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - ${PLATFORM_HOST}
+    secretName: agentic-platform-tls
+  rules:
+  - host: ${PLATFORM_HOST}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 3000

@@ -242,6 +242,20 @@ class KubernetesAdapter(ExecutionAdapter):
                 # Approximate: show as millicores / 1000 * 100 (% of 1 core).
                 m.cpu_percent     = round(total_cpu_n / 1e7, 2)    # % of 1 core
                 m.memory_used_mb  = round(total_mem_ki / 1024, 1)
+                # Derive memory_percent from pod resource limits
+                try:
+                    pod_spec = self._core_v1.read_namespaced_pod(target, self.namespace)
+                    total_limit_ki = 0
+                    for c in pod_spec.spec.containers:
+                        lim = (c.resources.limits or {}) if c.resources else {}
+                        mem_lim = lim.get("memory", "")
+                        if mem_lim:
+                            total_limit_ki += _parse_mem_ki(mem_lim)
+                    if total_limit_ki > 0:
+                        m.memory_percent  = round(total_mem_ki / total_limit_ki * 100, 1)
+                        m.memory_total_mb = round(total_limit_ki / 1024, 1)
+                except Exception as exc:
+                    logger.debug(f"[K8s] limit lookup failed for {target}: {exc}")
                 m.extra = {"source": "metrics-server",
                            "cpu_nanocores": total_cpu_n,
                            "memory_ki": total_mem_ki}

@@ -1,0 +1,271 @@
+# celery-worker: workflows + approvals queues — HORIZONTALLY SCALABLE.
+# Safe to run multiple replicas; workers pull from the shared Redis broker.
+# HPA is wired in overlays/aks/hpa.yaml for cloud deployments.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: agentic-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      containers:
+      - name: celery-worker
+        image: agenticplatform_v2-backend:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - celery
+        - -A
+        - agentic_os.tasks
+        - worker
+        - --loglevel=info
+        - --queues=workflows,approvals
+        - --concurrency=4
+        - --prefetch-multiplier=1
+        - --hostname=workflow-worker@%h
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: POSTGRES_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: REDIS_PASSWORD
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: NEO4J_PASSWORD
+        - name: SECRET_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: SECRET_ENCRYPTION_KEY
+        - name: DATABASE_URL
+          value: "postgresql://postgres:$(POSTGRES_PASSWORD)@postgres:5432/agentic_os"
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379"
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/1"
+        - name: NEO4J_BOLT_URL
+          value: bolt://neo4j:7687
+        - name: NEO4J_USER
+          value: neo4j
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: /app/src
+        volumeMounts:
+        - name: backups
+          mountPath: /app/backups
+        - name: state
+          mountPath: /app/.state
+        readinessProbe:
+          exec:
+            command: ["sh", "-c", "pgrep -f 'celery.*worker' > /dev/null"]
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: "2"
+            memory: 1Gi
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: backups
+        emptyDir: {}
+      - name: state
+        emptyDir: {}
+---
+# celery-default-worker: default (maintenance) queue — safe to scale.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-default-worker
+  namespace: agentic-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-default-worker
+  template:
+    metadata:
+      labels:
+        app: celery-default-worker
+    spec:
+      containers:
+      - name: celery-default-worker
+        image: agenticplatform_v2-backend:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - celery
+        - -A
+        - agentic_os.tasks
+        - worker
+        - --loglevel=info
+        - --queues=default
+        - --concurrency=2
+        - --prefetch-multiplier=1
+        - --hostname=default-worker@%h
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: POSTGRES_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: REDIS_PASSWORD
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: NEO4J_PASSWORD
+        - name: SECRET_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: SECRET_ENCRYPTION_KEY
+        - name: DATABASE_URL
+          value: "postgresql://postgres:$(POSTGRES_PASSWORD)@postgres:5432/agentic_os"
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379"
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/1"
+        - name: NEO4J_BOLT_URL
+          value: bolt://neo4j:7687
+        - name: NEO4J_USER
+          value: neo4j
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: /app/src
+        volumeMounts:
+        - name: backups
+          mountPath: /app/backups
+        - name: state
+          mountPath: /app/.state
+        readinessProbe:
+          exec:
+            command: ["sh", "-c", "pgrep -f 'celery.*worker' > /dev/null"]
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: backups
+        emptyDir: {}
+      - name: state
+        emptyDir: {}
+---
+# celery-beat: periodic task scheduler — SINGLETON. Must always be exactly 1 replica.
+# Running multiple instances duplicates scheduled tasks. strategy: Recreate enforces this
+# during rolling updates by terminating the old pod before starting the new one.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: agentic-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-beat
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      containers:
+      - name: celery-beat
+        image: agenticplatform_v2-backend:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - celery
+        - -A
+        - agentic_os.tasks
+        - beat
+        - -l
+        - info
+        - -s
+        - /app/.beat/celerybeat-schedule
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: POSTGRES_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: REDIS_PASSWORD
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: NEO4J_PASSWORD
+        - name: SECRET_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: SECRET_ENCRYPTION_KEY
+        - name: DATABASE_URL
+          value: "postgresql://postgres:$(POSTGRES_PASSWORD)@postgres:5432/agentic_os"
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379"
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/1"
+        - name: NEO4J_BOLT_URL
+          value: bolt://neo4j:7687
+        - name: NEO4J_USER
+          value: neo4j
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: /app/src
+        volumeMounts:
+        - name: beat-data
+          mountPath: /app/.beat
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+      terminationGracePeriodSeconds: 15
+      volumes:
+      - name: beat-data
+        persistentVolumeClaim:
+          claimName: celery-beat-data

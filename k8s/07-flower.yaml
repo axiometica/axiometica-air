@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flower
+  namespace: agentic-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flower
+  template:
+    metadata:
+      labels:
+        app: flower
+    spec:
+      # K8s injects FLOWER_PORT=tcp://IP:5555 from the flower Service.
+      # Flower reads FLOWER_* env vars as config and expects FLOWER_PORT to be an int.
+      enableServiceLinks: false
+      containers:
+      - name: flower
+        image: mher/flower:2.0.1
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: REDIS_PASSWORD
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/1"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        command:
+        - celery
+        - --broker=$(CELERY_BROKER_URL)
+        - flower
+        - --port=5555
+        - --basic_auth=admin:changeme
+        ports:
+        - containerPort: 5555
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flower
+  namespace: agentic-platform
+spec:
+  selector:
+    app: flower
+  ports:
+  - port: 5555
+    targetPort: 5555

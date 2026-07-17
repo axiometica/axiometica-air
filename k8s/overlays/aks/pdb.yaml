@@ -1,0 +1,39 @@
+# Pod Disruption Budgets — protect critical workloads during node drains and rolling updates.
+# Applied only in cloud (AKS/EKS/GKE) where multi-node clusters make PDBs meaningful.
+# In KinD (single node) PDBs block node drain entirely, so they are not applied there.
+---
+# backend: always keep at least 1 pod serving traffic during upgrades.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend
+  namespace: agentic-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: backend
+---
+# celery-worker: keep at least 1 worker draining the queue; work buffers in Redis.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: celery-worker
+  namespace: agentic-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: celery-worker
+---
+# frontend: always keep at least 1 pod serving the UI.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend
+  namespace: agentic-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: frontend

@@ -1,0 +1,58 @@
+# KinD / Docker Desktop uses the 'hostpath' storage provisioner.
+# Apply with: kubectl apply -f overlays/kind/patch-pvcs-hostpath.yaml
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: agentic-platform
+spec:
+  storageClassName: hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: agentic-platform
+spec:
+  storageClassName: hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neo4j-data
+  namespace: agentic-platform
+spec:
+  storageClassName: hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neo4j-logs
+  namespace: agentic-platform
+spec:
+  storageClassName: hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backups
+  namespace: agentic-platform
+spec:
+  storageClassName: hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: celery-beat-data
+  namespace: agentic-platform
+spec:
+  storageClassName: hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: watcher-state
+  namespace: agentic-platform
+spec:
+  storageClassName: hostpath

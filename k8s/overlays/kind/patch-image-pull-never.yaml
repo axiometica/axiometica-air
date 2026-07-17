@@ -1,0 +1,88 @@
+# KinD does not pull from a registry — images are loaded into containerd manually
+# via 'docker save | ctr images import'. imagePullPolicy: Never prevents K8s from
+# trying to reach Docker Hub and failing with ErrImagePull.
+# Apply after base/ and before rolling out pods.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: agentic-platform
+spec:
+  template:
+    spec:
+      containers:
+      - name: backend
+        imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: agentic-platform
+spec:
+  template:
+    spec:
+      containers:
+      - name: celery-worker
+        imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-default-worker
+  namespace: agentic-platform
+spec:
+  template:
+    spec:
+      containers:
+      - name: celery-default-worker
+        imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: agentic-platform
+spec:
+  template:
+    spec:
+      containers:
+      - name: celery-beat
+        imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: agentic-platform
+spec:
+  template:
+    spec:
+      containers:
+      - name: frontend
+        imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: agentic-platform
+spec:
+  template:
+    spec:
+      containers:
+      - name: nginx
+        imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: watcher
+  namespace: agentic-platform
+spec:
+  template:
+    spec:
+      containers:
+      - name: watcher
+        imagePullPolicy: Never

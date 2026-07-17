@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: agentic-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # Wait for data tier before starting
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: POSTGRES_PASSWORD
+        command: ["sh", "-c", "until pg_isready -h postgres -U postgres; do echo waiting for postgres; sleep 3; done"]
+      - name: wait-for-redis
+        image: redis:7-alpine
+        command: ["sh", "-c", "until redis-cli -h redis ping; do echo waiting for redis; sleep 3; done"]
+      - name: wait-for-neo4j
+        image: curlimages/curl:latest
+        command: ["sh", "-c", "until curl -sf http://neo4j:7474/; do echo waiting for neo4j; sleep 5; done"]
+      containers:
+      - name: backend
+        image: agenticplatform_v2-backend:latest
+        imagePullPolicy: Never
+        command: ["uvicorn", "agentic_os.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: POSTGRES_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: REDIS_PASSWORD
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: NEO4J_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: JWT_SECRET
+        - name: SECRET_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: SECRET_ENCRYPTION_KEY
+        - name: WATCHER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: WATCHER_API_KEY
+        - name: DATABASE_URL
+          value: "postgresql://postgres:$(POSTGRES_PASSWORD)@postgres:5432/agentic_os"
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379"
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/1"
+        - name: NEO4J_URI
+          value: bolt://neo4j:7687
+        - name: NEO4J_BOLT_URL
+          value: bolt://neo4j:7687
+        - name: NEO4J_USER
+          value: neo4j
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: /app/src
+        - name: DEBUG
+          value: "false"
+        - name: ALLOWED_ORIGINS
+          value: "http://localhost:3000,http://localhost:8000,https://localhost"
+        - name: ADMIN_EMAIL
+          value: admin@platform.local
+        - name: ADMIN_INITIAL_PASSWORD
+          value: Admin@1234!
+        - name: ITOM_ADMIN_INITIAL_PASSWORD
+          value: ITOMAdmin@1234!
+        - name: OPERATOR_INITIAL_PASSWORD
+          value: Operator@1234!
+        - name: VIEWER_INITIAL_PASSWORD
+          value: Viewer@1234!
+        - name: DB_POOL_SIZE
+          value: "20"
+        - name: DB_POOL_OVERFLOW
+          value: "10"
+        - name: DB_POOL_TIMEOUT
+          value: "30"
+        - name: ENVIRONMENT
+          value: production
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: backups
+          mountPath: /app/backups
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 15
+          failureThreshold: 5
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: "2"
+            memory: 1Gi
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: backups
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: agentic-platform
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 8000
+    targetPort: 8000

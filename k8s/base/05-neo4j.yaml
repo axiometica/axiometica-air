@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neo4j
+  namespace: agentic-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neo4j
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: neo4j
+    spec:
+      # K8s injects NEO4J_PORT_* env vars from the neo4j Service into every pod.
+      # Neo4j treats all NEO4J_* vars as config keys — unknown ones fail validation.
+      # enableServiceLinks: false suppresses those injected vars.
+      enableServiceLinks: false
+      # ConfigMap mounts are read-only; Neo4j's entrypoint chowns /var/lib/neo4j/import
+      # which fails on a read-only FS. Copy seed to a writable emptyDir via init container.
+      initContainers:
+      - name: copy-seed
+        image: busybox:latest
+        command: ["sh", "-c", "cp /seed-config/seed.cypher /import/seed.cypher && echo copied seed"]
+        volumeMounts:
+        - name: seed-config
+          mountPath: /seed-config
+          readOnly: true
+        - name: import
+          mountPath: /import
+      containers:
+      - name: neo4j
+        image: neo4j:5-community
+        env:
+        # Use N4J_PASSWORD (no NEO4J_ prefix) so Neo4j doesn't treat it as a config key.
+        - name: N4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: NEO4J_PASSWORD
+        - name: NEO4J_AUTH
+          value: neo4j/$(N4J_PASSWORD)
+        - name: NEO4J_server_memory_heap_initial__size
+          value: 256m
+        - name: NEO4J_server_memory_heap_max__size
+          value: 256m
+        - name: NEO4J_server_memory_pagecache_size
+          value: 128m
+        - name: NEO4J_dbms_security_auth__max__failed__attempts
+          value: "100"
+        ports:
+        - containerPort: 7687
+          name: bolt
+        - containerPort: 7474
+          name: http
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: logs
+          mountPath: /logs
+        - name: import
+          mountPath: /var/lib/neo4j/import
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 7474
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          failureThreshold: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 7474
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: neo4j-data
+      - name: logs
+        persistentVolumeClaim:
+          claimName: neo4j-logs
+      - name: seed-config
+        configMap:
+          name: neo4j-seed
+      - name: import
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neo4j
+  namespace: agentic-platform
+spec:
+  selector:
+    app: neo4j
+  ports:
+  - name: bolt
+    port: 7687
+    targetPort: 7687
+  - name: http
+    port: 7474
+    targetPort: 7474

@@ -1,7 +1,7 @@
 # Axiometica AIR v2 — Deployment Guide
 
 **Platform version:** v1.1.2  
-**Last updated:** 2026-06-07
+**Last updated:** 2026-07-17
 
 ---
 
@@ -22,6 +22,7 @@
 13. [Upgrading](#13-upgrading)
 14. [Environment Variable Reference](#14-environment-variable-reference)
 15. [Pre-Production Checklist](#15-pre-production-checklist)
+16. [Kubernetes Deployment](#16-kubernetes-deployment)
 
 ---
 
@@ -630,3 +631,301 @@ Before promoting to production:
 - [ ] Role assignments verified (viewers cannot approve)
 - [ ] Runbook for CAB approval process documented
 - [ ] On-call team knows how to approve/reject from Slack
+
+---
+
+## 16. Kubernetes Deployment
+
+The platform ships a production-ready Kubernetes layout under `k8s/`:
+
+```
+k8s/
+├── base/                   Cloud-neutral manifests (14 files, 00–13)
+├── overlays/
+│   ├── kind/               Patches for Docker Desktop / KinD local dev
+│   └── aks/                Additions for managed cloud clusters (HPA, PDB, Ingress)
+└── scripts/
+    ├── deploy-kind.ps1     Local KinD deploy (Windows PowerShell)
+    └── deploy-aks.sh       AKS / EKS / GKE deploy (bash)
+```
+
+### Horizontal scaling policy
+
+Not all workloads are safe to scale. The manifests and HPAs reflect this explicitly:
+
+| Workload | Scalable? | Reason |
+|----------|-----------|--------|
+| `backend` | **Yes** | Stateless FastAPI; JWT carries no server-side session |
+| `frontend` | **Yes** | Static nginx serving pre-built React assets |
+| `celery-worker` | **Yes** | Workers pull from shared Redis broker queue |
+| `celery-default-worker` | **Yes** | Same — separate queue for maintenance tasks |
+| `celery-beat` | **No — singleton** | Multiple instances submit duplicate scheduled tasks |
+| `watcher` | **No — singleton** | Holds `active_conditions` in memory; two instances produce duplicate incidents |
+| `postgres` / `redis` / `neo4j` | **No** | Stateful; require Patroni/Redis Sentinel/Neo4j Enterprise for HA |
+
+`celery-beat` and `watcher` both use `strategy: Recreate` to ensure the old pod terminates before the new one starts during upgrades.
+
+---
+
+### 16.1 Local development — KinD (Docker Desktop)
+
+**Prerequisites**
+
+| Tool | Version | Notes |
+|------|---------|-------|
+| Docker Desktop | 4.x+ | With Kubernetes enabled |
+| kubectl | 1.28+ | Bundled with Docker Desktop |
+| Git for Windows | Any | Required for binary pipe in image-load step |
+| PowerShell | 5.1+ | Script uses `#Requires -Version 5.1` |
+
+**Install metrics-server** (required for HPA and watcher CPU metrics — not included in KinD by default):
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# Patch to disable TLS verification (KinD uses self-signed certs):
+kubectl patch deployment metrics-server -n kube-system \
+  --type=json \
+  -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+```
+
+**Deploy:**
+
+```powershell
+cd C:\path\to\AgenticPlatform_v2
+.\k8s\scripts\deploy-kind.ps1
+```
+
+The script:
+1. Builds images with `docker compose build`
+2. Loads each image into KinD's containerd via Git Bash binary pipe (`docker save | ctr images import`) — PowerShell pipes corrupt binary streams, so Git Bash is required for this step
+3. Creates the `platform-secrets` K8s Secret from `.env`
+4. Applies base manifests in deployment waves (data → backend → workers → frontend → observability)
+5. Applies KinD overlay patches: `storageClassName: hostpath`, `imagePullPolicy: Never`, nginx `LoadBalancer` service
+6. Runs Alembic migrations and `setup_oob.py` seed data
+
+**Skip flags:**
+
+```powershell
+# Images already loaded, skip build and KinD import (~5 min each):
+.\k8s\scripts\deploy-kind.ps1 -SkipBuild
+
+# Already migrated, just redeploy containers:
+.\k8s\scripts\deploy-kind.ps1 -SkipBuild -SkipMigrations
+```
+
+**Verify:**
+
+```bash
+kubectl get pods -n agentic-platform
+# All pods should reach Running/Ready within ~5 minutes
+
+# Backend health
+kubectl exec -n agentic-platform deploy/backend -- \
+  curl -s http://localhost:8000/api/health
+
+# Platform UI
+# Open https://localhost in your browser (self-signed cert — accept the warning)
+```
+
+**Known KinD constraint — memory:** KinD runs a single node with the memory Docker Desktop allocates (Docker Desktop → Settings → Resources). The full stack at minimal resource requests uses ~3.6 GiB. If a pod shows `Pending` with `Insufficient memory`, either increase Docker Desktop memory or use `Recreate` strategy (already set on backend) to avoid two-pod rollout overhead.
+
+---
+
+### 16.2 Production — AKS (Azure Kubernetes Service)
+
+The same `deploy-aks.sh` script works for any managed Kubernetes cluster (AKS, EKS, GKE) — use `REGISTRY_PREFIX` instead of `ACR_NAME` for non-Azure registries.
+
+**Prerequisites**
+
+| Tool | Notes |
+|------|-------|
+| `az` CLI | For AKS credential fetch and ACR login |
+| `kubectl` | |
+| `docker` | For building and pushing images |
+| `envsubst` | For Ingress hostname substitution (in `gettext` / `gettext-base` package) |
+
+**One-time cluster setup**
+
+```bash
+# 1. Create ACR
+az acr create --resource-group my-rg --name myregistry --sku Basic
+
+# 2. Attach ACR to AKS (so pods can pull without image pull secrets)
+az aks update --resource-group my-rg --name my-aks --attach-acr myregistry
+
+# 3. Install nginx-ingress controller
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace
+
+# 4. (Optional) Install cert-manager for automatic TLS certificates
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+```
+
+metrics-server is pre-installed on AKS — no additional step needed.
+
+**Deploy:**
+
+```bash
+export ACR_NAME=myregistry
+export RESOURCE_GROUP=my-rg
+export CLUSTER_NAME=my-aks
+export PLATFORM_HOST=itsm.example.com   # your DNS hostname
+
+bash k8s/scripts/deploy-aks.sh
+```
+
+The script:
+1. Fetches AKS credentials (`az aks get-credentials`)
+2. Builds images with `docker compose build`
+3. Tags each image as `<acr>.azurecr.io/agenticplatform/<service>:<git-sha>` and pushes to ACR
+4. Applies base manifests in waves (same order as KinD)
+5. Uses `kubectl set image` to point each deployment at the ACR image
+6. Applies AKS overlay: HPA for backend/frontend/celery-worker, PodDisruptionBudgets, nginx-ingress Ingress
+
+**Skip flags:**
+
+```bash
+# Images already in ACR from a prior build:
+SKIP_BUILD=1 bash k8s/scripts/deploy-aks.sh
+
+# Already migrated:
+SKIP_BUILD=1 SKIP_MIGRATIONS=1 bash k8s/scripts/deploy-aks.sh
+```
+
+**Non-Azure registries (EKS / GKE / DOKS):**
+
+```bash
+# EKS (ECR)
+aws ecr get-login-password | docker login --username AWS \
+  --password-stdin 123456789.dkr.ecr.us-east-1.amazonaws.com
+export REGISTRY_PREFIX=123456789.dkr.ecr.us-east-1.amazonaws.com/agenticplatform
+export PLATFORM_HOST=itsm.example.com
+bash k8s/scripts/deploy-aks.sh
+
+# GKE (Artifact Registry)
+gcloud auth configure-docker us-central1-docker.pkg.dev
+export REGISTRY_PREFIX=us-central1-docker.pkg.dev/my-project/agenticplatform
+bash k8s/scripts/deploy-aks.sh
+```
+
+---
+
+### 16.3 Scaling in Kubernetes
+
+**Automatic scaling (AKS overlay)**
+
+The HPA objects in `k8s/overlays/aks/hpa.yaml` handle automatic scaling for the three scalable workloads:
+
+| Deployment | Min replicas | Max replicas | Scale trigger |
+|------------|-------------|-------------|---------------|
+| `backend` | 2 | 5 | CPU > 70% |
+| `frontend` | 2 | 4 | CPU > 70% |
+| `celery-worker` | 1 | 8 | CPU > 80% |
+
+```bash
+# Watch HPA in action
+kubectl get hpa -n agentic-platform -w
+```
+
+**Manual scaling:**
+
+```bash
+# Scale celery workers for a high-incident period
+kubectl scale deployment/celery-worker --replicas=4 -n agentic-platform
+
+# Scale backend replicas
+kubectl scale deployment/backend --replicas=3 -n agentic-platform
+```
+
+**ALLOWED_ORIGINS:** When running behind a real hostname, set this so the backend accepts CORS from your domain:
+
+```bash
+kubectl set env deployment/backend \
+  ALLOWED_ORIGINS="https://itsm.example.com" \
+  -n agentic-platform
+```
+
+---
+
+### 16.4 Upgrading in Kubernetes
+
+**Rolling update (no schema changes):**
+
+```bash
+# 1. Build and push new images
+IMAGE_TAG=$(git rev-parse --short HEAD)
+docker compose build backend frontend watcher
+docker tag agenticplatform_v2-backend:latest \
+  ${ACR_NAME}.azurecr.io/agenticplatform/backend:${IMAGE_TAG}
+docker push ${ACR_NAME}.azurecr.io/agenticplatform/backend:${IMAGE_TAG}
+
+# 2. Update the running deployment
+kubectl set image deployment/backend \
+  backend=${ACR_NAME}.azurecr.io/agenticplatform/backend:${IMAGE_TAG} \
+  -n agentic-platform
+kubectl rollout status deployment/backend -n agentic-platform
+```
+
+**With Alembic migrations:**
+
+```bash
+# 1. Apply new image (triggers rollout)
+kubectl set image deployment/backend backend=<new-image> -n agentic-platform
+kubectl rollout status deployment/backend -n agentic-platform
+
+# 2. Run migrations against the live database
+POD=$(kubectl get pod -l app=backend -n agentic-platform \
+      -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n agentic-platform $POD -- \
+  alembic -c /app/src/agentic_os/alembic.ini upgrade head
+```
+
+**Rollback:**
+
+```bash
+kubectl rollout undo deployment/backend -n agentic-platform
+kubectl rollout status deployment/backend -n agentic-platform
+```
+
+---
+
+### 16.5 TLS in Kubernetes
+
+**Self-signed (local / KinD):** The nginx container auto-generates a self-signed certificate on first boot via its entrypoint. Accept the browser warning.
+
+**cert-manager (recommended for production):** After installing cert-manager, annotate the Ingress:
+
+```bash
+kubectl annotate ingress agentic-platform \
+  cert-manager.io/cluster-issuer=letsencrypt-prod \
+  -n agentic-platform
+```
+
+cert-manager will provision a Let's Encrypt certificate and store it in the `agentic-platform-tls` Secret referenced by the Ingress.
+
+**AKS managed certificate (app-routing addon):**
+
+```bash
+az aks addon enable --addon http_application_routing \
+  --resource-group my-rg --name my-aks
+```
+
+Then add the annotation `kubernetes.azure.com/tls-cert-keyvault-uri` to the Ingress pointing at a Key Vault certificate.
+
+---
+
+### 16.6 Kubernetes pre-production checklist
+
+- [ ] metrics-server installed and returning pod metrics (`kubectl top pods -n agentic-platform`)
+- [ ] All default passwords changed (see §5)
+- [ ] `platform-secrets` Secret created from `.env` (not committed to git)
+- [ ] Images pushed to a private registry — not pulled from a public source
+- [ ] `ALLOWED_ORIGINS` set to the production hostname
+- [ ] TLS certificate provisioned (cert-manager or managed cert)
+- [ ] Ingress hostname DNS A record pointing at the ingress-nginx LoadBalancer IP
+- [ ] PodDisruptionBudgets applied (`k8s/overlays/aks/pdb.yaml`)
+- [ ] HPA verified: `kubectl get hpa -n agentic-platform`
+- [ ] Celery Flower not exposed via Ingress (access via `kubectl port-forward` only)
+- [ ] Neo4j bolt port (7687) not exposed externally
+- [ ] Daily PostgreSQL backup job configured (the `postgres-backup` deployment handles this; verify its PVC is on durable storage)

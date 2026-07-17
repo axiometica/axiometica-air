@@ -1,0 +1,187 @@
+---
+# ServiceAccount — lets the watcher pod authenticate to the K8s API
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: watcher
+  namespace: agentic-platform
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+    app.kubernetes.io/component: monitoring
+
+---
+# ClusterRole — read access across all namespaces for monitoring;
+# exec/delete/patch in target namespace for Kill-API remediation.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agentic-watcher
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "services", "endpoints", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agentic-watcher
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: agentic-watcher
+subjects:
+  - kind: ServiceAccount
+    name: watcher
+    namespace: agentic-platform
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: watcher
+  namespace: agentic-platform
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+    app.kubernetes.io/component: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: watcher
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: watcher
+        app.kubernetes.io/name: agentic-watcher
+    spec:
+      serviceAccountName: watcher
+      automountServiceAccountToken: true
+      volumes:
+        - name: watcher-state
+          persistentVolumeClaim:
+            claimName: watcher-state
+      containers:
+      - name: watcher
+        image: agenticplatform_v2-watcher:latest
+        imagePullPolicy: Never
+        ports:
+        - name: kill-api
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: WATCHER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: WATCHER_API_KEY
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: platform-secrets
+              key: NEO4J_PASSWORD
+        - name: WATCHER_NAME
+          value: watcher_k8s
+        - name: WATCHER_ADAPTER
+          value: kubernetes
+        - name: WATCHER_K8S_NAMESPACE
+          value: agentic-platform
+        - name: WATCHER_K8S_LABEL_SELECTOR
+          value: ""
+        - name: WATCHER_K8S_METRICS_SERVER
+          value: "true"
+        - name: WATCHER_API_URL
+          value: http://backend:8000
+        - name: WATCHER_NGINX_URL
+          value: https://nginx
+        - name: WATCHER_KILL_API_URL
+          value: http://watcher.agentic-platform.svc.cluster.local:8080
+        - name: SENTINEL_CONTAINER
+          value: ""
+        - name: WATCHER_DISCOVERY_ENABLED
+          value: "false"
+        - name: WATCHER_POLL_INTERVAL
+          value: "20"
+        - name: WATCHER_COOLDOWN_SECONDS
+          value: "60"
+        - name: WATCHER_CPU_THRESHOLD
+          value: "80.0"
+        - name: WATCHER_MEMORY_THRESHOLD
+          value: "85.0"
+        - name: WATCHER_DISK_THRESHOLD
+          value: "90.0"
+        - name: WATCHER_CONNECTION_THRESHOLD
+          value: "1000"
+        - name: WATCHER_MIN_CONSECUTIVE_POLLS
+          value: "3"
+        - name: WATCHER_ANOMALY_THRESHOLD
+          value: "5000"
+        - name: NEO4J_BOLT_URL
+          value: bolt://neo4j:7687
+        - name: NEO4J_USER
+          value: neo4j
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: /app/src
+        volumeMounts:
+        - name: watcher-state
+          mountPath: /app/.state
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 15
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: watcher
+  namespace: agentic-platform
+  labels:
+    app.kubernetes.io/name: agentic-watcher
+spec:
+  selector:
+    app: watcher
+  ports:
+  - name: kill-api
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP

@@ -1,0 +1,9 @@
+# KinD exposes the nginx Service as LoadBalancer so Docker Desktop maps it to localhost.
+# Cloud clusters use the Ingress controller instead (overlays/aks/ingress.yaml).
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: agentic-platform
+spec:
+  type: LoadBalancer

@@ -1220,6 +1220,133 @@ class WatcherService:
         resp.raise_for_status()
         return resp.json()
 
+    # Maps K8s 'app' labels to canonical seeded CMDB names so that K8s discovery
+    # enriches existing CI nodes rather than creating parallel duplicates.
+    _K8S_TO_CMDB_NAME: dict = {
+        "backend":       "agentic_os_backend",
+        "celery-worker": "agentic_os_celery_worker",
+        "flower":        "agentic_os_flower",
+        "frontend":      "agentic-frontend",
+        "neo4j":         "agentic_os_neo4j",
+        "postgres":      "agentic_os_postgres",
+        "redis":         "agentic_os_redis",
+        "sentinel":      "sentinel_senses",
+        "watcher":       "watcher_brain",
+    }
+
+    def _run_k8s_discovery_via_api(self, container_stats: dict) -> dict:
+        """
+        K8s-mode CMDB discovery: reads pod specs from the Kubernetes API and
+        posts to /api/cmdb/discovery.  Groups pods by their 'app' label so
+        multiple replicas of the same Deployment converge to one CMDB node.
+        K8s app labels are mapped to canonical seeded CI names via _K8S_TO_CMDB_NAME.
+        """
+        import requests as _requests
+        from datetime import datetime, timezone
+        from agentic_os.services.adapters.k8s_adapter import _parse_cpu_nano, _parse_mem_ki
+
+        core = getattr(self.adapter, '_core_v1', None)
+        ns   = getattr(self.adapter, 'namespace', 'default')
+        if core is None:
+            return {"updated": 0, "new_cis": 0, "errors": 0, "total": 0}
+
+        pod_names = self.adapter.list_targets()
+        if not pod_names:
+            return {"updated": 0, "new_cis": 0, "errors": 0, "total": 0}
+
+        _env_keys = {"ENVIRONMENT", "ENV", "DEPLOY_ENV", "APP_ENV", "NODE_ENV"}
+        seen_apps: set = set()
+        batch: list = []
+
+        for pod_name in pod_names:
+            try:
+                pod = core.read_namespaced_pod(pod_name, ns)
+            except Exception as exc:
+                logger.debug(f"[K8S DISCOVERY] pod read failed {pod_name}: {exc}")
+                continue
+
+            # Derive app name from label, fallback to stripping hash suffix
+            app_name = (pod.metadata.labels or {}).get('app') or pod_name.rsplit('-', 2)[0]
+            # Remap to canonical seeded CMDB name where one exists
+            app_name = self._K8S_TO_CMDB_NAME.get(app_name, app_name)
+            if app_name in seen_apps:
+                continue  # already processed a pod for this Deployment
+            seen_apps.add(app_name)
+
+            containers = pod.spec.containers or []
+            first_c    = containers[0] if containers else None
+
+            # Sum resource limits across all containers in the pod
+            total_cpu_n  = 0
+            total_mem_ki = 0
+            for c in containers:
+                lim = (c.resources.limits or {}) if c.resources else {}
+                if lim.get('cpu'):
+                    total_cpu_n  += _parse_cpu_nano(lim['cpu'])
+                if lim.get('memory'):
+                    total_mem_ki += _parse_mem_ki(lim['memory'])
+
+            cpu_limit_cores = round(total_cpu_n / 1_000_000_000, 2) if total_cpu_n else None
+            memory_limit_mb = round(total_mem_ki / 1024, 1)           if total_mem_ki else None
+
+            # Exposed ports from first container
+            ports = []
+            if first_c and first_c.ports:
+                for p in first_c.ports:
+                    ports.append(f"{p.container_port}/{(p.protocol or 'TCP').upper()}")
+
+            # Readiness from pod conditions
+            health_status = None
+            if pod.status and pod.status.conditions:
+                for cond in pod.status.conditions:
+                    if cond.type == 'Ready':
+                        health_status = 'healthy' if cond.status == 'True' else 'unhealthy'
+                        break
+
+            # Environment from first container's env vars
+            detected_environment = None
+            if first_c and first_c.env:
+                for ev in first_c.env:
+                    if ev.name in _env_keys and ev.value:
+                        detected_environment = ev.value.lower()
+                        break
+
+            # Live metrics from adapter poll (keyed by pod name)
+            tm = (container_stats or {}).get(pod_name)
+
+            batch.append({
+                "container_name": app_name,
+                "props": {
+                    "docker_image":         first_c.image if first_c else None,
+                    "platform":             "linux",
+                    "cpu_limit_cores":      cpu_limit_cores,
+                    "memory_limit_mb":      memory_limit_mb,
+                    "ip_address":           pod.status.pod_ip if pod.status else None,
+                    "exposed_ports":        ', '.join(ports) or None,
+                    "container_status":     (pod.status.phase or 'unknown').lower() if pod.status else 'unknown',
+                    "health_status":        health_status,
+                    "started_at":           pod.status.start_time.isoformat() if (pod.status and pod.status.start_time) else None,
+                    "detected_environment": detected_environment,
+                    "last_discovered_at":   datetime.now(timezone.utc).isoformat(),
+                    "current_cpu_percent":  round(tm.cpu_percent,    1) if tm else None,
+                    "current_memory_mb":    round(tm.memory_used_mb, 1) if tm else None,
+                    "current_memory_pct":   round(tm.memory_percent, 1) if tm else None,
+                    "current_pids":         None,
+                },
+            })
+
+        if not batch:
+            return {"updated": 0, "new_cis": 0, "errors": 0, "total": 0}
+
+        resp = _requests.post(
+            f"{self.api_base_url}/api/cmdb/discovery",
+            json={"source": self.watcher_name, "watcher_id": self._watcher_id or None, "containers": batch},
+            headers=self._api_headers,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def detect_container_anomalies(self, stats: Dict[str, ContainerMetrics]) -> List[Tuple[str, str, str]]:
         """
         Detect container-level anomalies (CPU spike, memory surge).
@@ -2031,7 +2158,7 @@ class WatcherService:
             except Exception as e:
                 logger.debug(f"[RECONCILE] Could not check DB state for '{container_name}': {e}")
 
-    async def _run_adapter_metrics_poll(self) -> list:
+    async def _run_adapter_metrics_poll(self) -> tuple:
         """
         Non-Docker metrics collection pass — used by SSH, K8s, vCenter, and SSM adapters.
 
@@ -2039,23 +2166,26 @@ class WatcherService:
         adapter.list_targets() and applies the configured CPU / memory / disk
         thresholds using the same sustained-anomaly gate as Docker mode.
 
-        Returns a list of (resource_name, event_type, criticality) tuples
-        in the same format expected by the main loop's anomaly pipeline.
+        Returns (anomalies, metrics_by_target) where:
+          anomalies       — list of (resource_name, event_type, criticality) tuples
+          metrics_by_target — dict[target_name, TargetMetrics] for dashboard history
         """
         loop = asyncio.get_event_loop()
         anomalies = []
+        metrics_by_target: dict = {}
 
         try:
             targets = await loop.run_in_executor(None, self.adapter.list_targets)
         except Exception as exc:
             logger.warning(f"[ADAPTER POLL] list_targets failed: {exc}")
-            return []
+            return [], {}
 
         logger.debug(f"[ADAPTER POLL] Checking {len(targets)} target(s) via {self.adapter.adapter_name}")
 
         for target in targets:
             try:
                 metrics = await loop.run_in_executor(None, lambda t=target: self.adapter.get_metrics(t))
+                metrics_by_target[target] = metrics
 
                 # ── CPU ───────────────────────────────────────────────────────
                 if metrics.cpu_percent > 0:
@@ -2117,7 +2247,7 @@ class WatcherService:
             except Exception as exc:
                 logger.warning(f"[ADAPTER POLL] get_metrics({target}) failed: {exc}")
 
-        return anomalies
+        return anomalies, metrics_by_target
 
     async def run(self):
         """
@@ -2202,8 +2332,27 @@ class WatcherService:
                         health_anomalies  = []
                         network_anomalies = []
 
-                        adapter_anomalies = await self._run_adapter_metrics_poll()
+                        adapter_anomalies, container_stats = await self._run_adapter_metrics_poll()
                         container_anomalies = adapter_anomalies   # reuse existing pipeline
+                        # container_stats is now Dict[pod_name, TargetMetrics]; the same
+                        # fields (cpu_percent, memory_percent, disk_percent) are read by
+                        # _record_metrics_snapshot so it populates the dashboard history.
+
+                        # K8s CMDB discovery — same interval gate as the Docker path
+                        if (
+                            self.discovery and self.discovery_enabled
+                            and self.adapter.adapter_name == "kubernetes"
+                            and self.poll_count % self.discovery_interval_polls == 0
+                        ):
+                            try:
+                                summary = self._run_k8s_discovery_via_api(container_stats)
+                                logger.info(
+                                    f"🔍 [DISCOVERY] Poll #{self.poll_count}: "
+                                    f"{summary.get('updated', 0)} updated, "
+                                    f"{summary.get('new_cis', 0)} new"
+                                )
+                            except Exception as disc_err:
+                                logger.warning(f"⚠️  [DISCOVERY] K8s: {disc_err}")
 
                         loop = asyncio.get_event_loop()
                         try:

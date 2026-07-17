@@ -1,0 +1,54 @@
+# Sentinel runs as a DaemonSet (one per node) with eBPF/bpftrace.
+# Requires privileged + hostPID — Docker Desktop permits this on the embedded Linux VM.
+# Note: bpftrace may be restricted by the host kernel's eBPF verifier settings.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: sentinel
+  namespace: agentic-platform
+spec:
+  selector:
+    matchLabels:
+      app: sentinel
+  template:
+    metadata:
+      labels:
+        app: sentinel
+    spec:
+      hostPID: true
+      containers:
+      - name: sentinel
+        image: quay.io/iovisor/bpftrace:latest
+        command:
+        - bpftrace
+        - -f
+        - json
+        - -e
+        - "tracepoint:raw_syscalls:sys_enter { @[comm] = count(); }"
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: sys
+          mountPath: /sys
+        - name: dev
+          mountPath: /dev
+        - name: modules
+          mountPath: /lib/modules
+          readOnly: true
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+      volumes:
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: modules
+        hostPath:
+          path: /lib/modules
