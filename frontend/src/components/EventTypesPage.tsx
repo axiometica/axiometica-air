@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
   IconPlus,
@@ -21,6 +21,13 @@ interface EventType {
   enabled: boolean
   is_system: boolean
   description?: string
+  default_severity?: string | null
+}
+
+const SEVERITY_COLORS: Record<string, string> = {
+  info:     '#4070a0',
+  warning:  '#9a7030',
+  critical: '#a04848',
 }
 
 // ─── Domain badge colours ─────────────────────────────────────────────────────
@@ -67,6 +74,7 @@ function EventTypeModal({ initial, domains, onSave, onClose }: ModalProps) {
   const [category, setCategory] = useState(initial?.category ?? '')
   const [enabled,  setEnabled]  = useState(initial?.enabled  ?? true)
   const [desc,     setDesc]     = useState(initial?.description ?? '')
+  const [severity, setSeverity] = useState(initial?.default_severity ?? '')
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState<string | null>(null)
 
@@ -77,7 +85,11 @@ function EventTypeModal({ initial, domains, onSave, onClose }: ModalProps) {
     setSaving(true)
     setError(null)
     try {
-      await onSave({ code: code.trim(), label: label.trim(), category: category.trim(), enabled, is_system: initial?.is_system ?? false, description: desc.trim() || undefined })
+      await onSave({
+        code: code.trim(), label: label.trim(), category: category.trim(), enabled,
+        is_system: initial?.is_system ?? false, description: desc.trim() || undefined,
+        default_severity: severity,   // '' clears it; the API treats '' the same as unset
+      })
     } catch (err: any) {
       setError(err?.message || 'Save failed')
       setSaving(false)
@@ -161,6 +173,24 @@ function EventTypeModal({ initial, domains, onSave, onClose }: ModalProps) {
                 placeholder="Optional short description"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="field-label">Default Severity</label>
+            <select
+              className="field-input w-full"
+              value={severity}
+              onChange={e => setSeverity(e.target.value)}
+            >
+              <option value="">— not set —</option>
+              <option value="info">Info</option>
+              <option value="warning">Warning</option>
+              <option value="critical">Critical</option>
+            </select>
+            <p className="mt-1 text-xs" style={{ color: '#475569' }}>
+              Base severity for watcher-raised events of this type. Only applies to
+              types the watcher itself emits — has no effect on connector-sourced events.
+            </p>
           </div>
 
           <div className="flex items-center gap-3 pt-1">
@@ -399,6 +429,21 @@ export default function EventTypesPage() {
                       <span className="flex-1 font-mono text-xs" style={{ color: et.enabled ? '#cbd5e1' : '#475569' }}>
                         {et.code}
                       </span>
+
+                      {/* Default severity badge */}
+                      {et.default_severity && (
+                        <span
+                          className="text-xs px-2 py-0.5 rounded uppercase tracking-wide flex-shrink-0"
+                          style={{
+                            background: SEVERITY_COLORS[et.default_severity] + '22',
+                            color: SEVERITY_COLORS[et.default_severity],
+                            fontWeight: 700, fontSize: 10,
+                          }}
+                          title="Default severity for watcher-raised events of this type"
+                        >
+                          {et.default_severity}
+                        </span>
+                      )}
 
                       {/* Label */}
                       <span className="w-48 text-sm truncate" style={{ color: et.enabled ? '#94a3b8' : '#334155' }}>

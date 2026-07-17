@@ -32,6 +32,9 @@ router = APIRouter(prefix="/event-types", tags=["Event Type Taxonomy"])
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
+_SEVERITY_VALUES = ("info", "warning", "critical")
+
+
 class EventTypeOut(BaseModel):
     code: str
     label: str
@@ -40,6 +43,7 @@ class EventTypeOut(BaseModel):
     aliases: list[str]
     is_system: bool
     enabled: bool
+    default_severity: Optional[str] = None
     created_at: Optional[datetime]
 
     class Config:
@@ -52,6 +56,7 @@ class EventTypeCreate(BaseModel):
     label: str = Field(..., max_length=200)
     description: Optional[str] = None
     aliases: list[str] = Field(default_factory=list)
+    default_severity: Optional[str] = Field(None, description=f"One of {_SEVERITY_VALUES}, or omit")
 
 
 class EventTypeUpdate(BaseModel):
@@ -59,6 +64,7 @@ class EventTypeUpdate(BaseModel):
     description: Optional[str] = None
     aliases: Optional[list[str]] = None
     enabled: Optional[bool] = None
+    default_severity: Optional[str] = Field(None, description=f"One of {_SEVERITY_VALUES}, or empty string to clear")
 
 
 class DomainSummary(BaseModel):
@@ -81,8 +87,17 @@ def _row_to_out(row: EventTypeTaxonomyModel) -> EventTypeOut:
         aliases=aliases,
         is_system=row.is_system,
         enabled=row.enabled,
+        default_severity=row.default_severity,
         created_at=row.created_at,
     )
+
+
+def _validate_severity(value: Optional[str]) -> None:
+    if value and value not in _SEVERITY_VALUES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"default_severity must be one of {_SEVERITY_VALUES} or omitted, got '{value}'",
+        )
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -150,6 +165,7 @@ def create_event_type(payload: EventTypeCreate, db: Session = Depends(get_db)):
     ).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Event type '{payload.code}' already exists")
+    _validate_severity(payload.default_severity)
 
     category = payload.code.split(".")[0]
     row = EventTypeTaxonomyModel(
@@ -160,6 +176,7 @@ def create_event_type(payload: EventTypeCreate, db: Session = Depends(get_db)):
         aliases=payload.aliases,
         is_system=False,
         enabled=True,
+        default_severity=payload.default_severity or None,
         created_at=datetime.utcnow(),
     )
     db.add(row)
@@ -175,6 +192,8 @@ def update_event_type(code: str, payload: EventTypeUpdate, db: Session = Depends
     row = db.query(EventTypeTaxonomyModel).filter(EventTypeTaxonomyModel.code == code).first()
     if not row:
         raise HTTPException(status_code=404, detail=f"Event type '{code}' not found")
+    if payload.default_severity:
+        _validate_severity(payload.default_severity)
 
     if payload.label is not None:
         row.label = payload.label
@@ -184,6 +203,9 @@ def update_event_type(code: str, payload: EventTypeUpdate, db: Session = Depends
         row.aliases = payload.aliases
     if payload.enabled is not None:
         row.enabled = payload.enabled
+    if payload.default_severity is not None:
+        # Empty string clears it back to unset — distinct from omitting the field.
+        row.default_severity = payload.default_severity or None
 
     db.commit()
     db.refresh(row)

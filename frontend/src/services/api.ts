@@ -275,6 +275,7 @@ export interface EventTypeTaxonomyEntry {
   aliases: string[]
   is_system: boolean
   enabled: boolean
+  default_severity: string | null   // info | warning | critical | null — watcher-native types only
 }
 
 export const listEventTypeTaxonomy = (params?: { category?: string; enabled_only?: boolean }) =>

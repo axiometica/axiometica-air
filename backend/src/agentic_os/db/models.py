@@ -1191,17 +1191,22 @@ class EventTypeTaxonomyModel(Base):
                     (used by the normalizer for backward compatibility)
       is_system   : True = shipped with the platform, cannot be deleted via API
       enabled     : False = hidden from dropdowns (soft-disable without delete)
+      default_severity : info/warning/critical — base severity for watcher-sourced
+                    events of this type (null for most rows; only watcher-native
+                    types have one). Connector-sourced events never consult this —
+                    each connector does its own tool-specific severity translation.
     """
     __tablename__ = "event_type_taxonomy"
 
-    code        = Column(String(150), primary_key=True)
-    label       = Column(String(200), nullable=False)
-    description = Column(Text,        nullable=True)
-    category    = Column(String(50),  nullable=False, index=True)   # top-level domain
-    aliases     = Column(JSON,        nullable=False, default=list)  # ["high_cpu", ...]
-    is_system   = Column(Boolean,     nullable=False, default=True)
-    enabled     = Column(Boolean,     nullable=False, default=True)
-    created_at  = Column(DateTime,    nullable=False, default=datetime.utcnow)
+    code             = Column(String(150), primary_key=True)
+    label            = Column(String(200), nullable=False)
+    description      = Column(Text,        nullable=True)
+    category         = Column(String(50),  nullable=False, index=True)   # top-level domain
+    aliases          = Column(JSON,        nullable=False, default=list)  # ["high_cpu", ...]
+    is_system        = Column(Boolean,     nullable=False, default=True)
+    enabled          = Column(Boolean,     nullable=False, default=True)
+    default_severity = Column(String(20),  nullable=True)   # info | warning | critical | null
+    created_at       = Column(DateTime,    nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
         Index("idx_taxonomy_category",         "category"),

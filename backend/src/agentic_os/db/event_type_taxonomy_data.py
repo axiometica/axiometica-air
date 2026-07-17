@@ -32,9 +32,14 @@ class TaxonomyEntry(TypedDict):
     category: str
     aliases: list[str]
     is_system: bool
+    default_severity: str | None  # info | warning | critical | None — watcher-native types only
 
 
-def _e(code: str, label: str, description: str, aliases: list[str] | None = None) -> TaxonomyEntry:
+def _e(
+    code: str, label: str, description: str,
+    aliases: list[str] | None = None,
+    default_severity: str | None = None,
+) -> TaxonomyEntry:
     """Helper to build an entry — derives category from the first code segment."""
     return TaxonomyEntry(
         code=code,
@@ -43,6 +48,7 @@ def _e(code: str, label: str, description: str, aliases: list[str] | None = None
         category=code.split(".")[0],
         aliases=aliases or [],
         is_system=True,
+        default_severity=default_severity,
     )
 
 
@@ -55,7 +61,7 @@ INFRASTRUCTURE: list[TaxonomyEntry] = [
     _e("infrastructure.compute.cpu_high",
        "High CPU Utilization",
        "Sustained CPU utilization above threshold (e.g., >85% for >5 min).",
-       aliases=["high_cpu"]),
+       aliases=["high_cpu"], default_severity="warning"),
     _e("infrastructure.compute.cpu_iowait_high",
        "High CPU I/O Wait",
        "CPU is spending excessive time waiting for disk or network I/O."),
@@ -65,7 +71,7 @@ INFRASTRUCTURE: list[TaxonomyEntry] = [
     _e("infrastructure.compute.memory_high",
        "High Memory Utilization",
        "RAM utilization sustained above threshold; risk of OOM or swapping.",
-       aliases=["high_memory"]),
+       aliases=["high_memory"], default_severity="critical"),
     _e("infrastructure.compute.memory_oom_kill",
        "OOM Kill Detected",
        "The Linux kernel OOM killer terminated one or more processes."),
@@ -81,7 +87,7 @@ INFRASTRUCTURE: list[TaxonomyEntry] = [
     _e("infrastructure.compute.syscall_intensity_high",
        "High Syscall Intensity",
        "System call rate is abnormally high (detected by eBPF/Sentinel monitoring).",
-       aliases=["high_syscall_intensity"]),
+       aliases=["high_syscall_intensity"], default_severity="critical"),
     _e("infrastructure.compute.reboot_required",
        "Reboot Required",
        "A kernel update or patch requires a host reboot to take effect."),
@@ -93,7 +99,7 @@ INFRASTRUCTURE: list[TaxonomyEntry] = [
     _e("infrastructure.storage.disk_full",
        "Disk Full",
        "Filesystem usage has reached a critical threshold (e.g., >90%).",
-       aliases=["disk_full"]),
+       aliases=["disk_full"], default_severity="critical"),
     _e("infrastructure.storage.disk_filling_fast",
        "Disk Filling Rapidly",
        "At current write rate, the disk will be full within 4–24 hours."),
@@ -282,11 +288,11 @@ APPLICATION: list[TaxonomyEntry] = [
     _e("application.availability.service_unresponsive",
        "Service Unresponsive",
        "Service is reachable but not responding correctly to health checks.",
-       aliases=["service_unresponsive"]),
+       aliases=["service_unresponsive"], default_severity="critical"),
     _e("application.availability.health_check_failing",
        "Health Check Failing",
        "Service health endpoint is returning errors or unexpected responses.",
-       aliases=["health_check_failed"]),
+       aliases=["health_check_failed"], default_severity="warning"),
     _e("application.availability.dependency_unavailable",
        "Dependency Unavailable",
        "An upstream service or external dependency this service relies on is down."),
@@ -298,7 +304,7 @@ APPLICATION: list[TaxonomyEntry] = [
     _e("application.performance.error_rate_high",
        "High Error Rate",
        "HTTP 5xx or application error rate is sustained above threshold.",
-       aliases=["high_error_rate"]),
+       aliases=["high_error_rate"], default_severity="info"),
     _e("application.performance.error_rate_spike",
        "Error Rate Spike",
        "Sudden, sharp increase in error rate above normal baseline.",
@@ -306,7 +312,7 @@ APPLICATION: list[TaxonomyEntry] = [
     _e("application.performance.latency_high",
        "High Response Latency",
        "p95/p99 response latency is sustained above SLO threshold.",
-       aliases=["high_latency"]),
+       aliases=["high_latency"], default_severity="warning"),
     _e("application.performance.latency_spike",
        "Latency Spike",
        "Sudden spike in response latency above normal operating baseline.",
@@ -652,7 +658,7 @@ NETWORK: list[TaxonomyEntry] = [
     _e("network.tls.certificate_expiring",
        "TLS Certificate Expiring",
        "A TLS certificate will expire within the warning threshold (e.g., 30 days).",
-       aliases=["certificate_expiry"]),
+       aliases=["certificate_expiry"], default_severity="warning"),
     _e("network.tls.certificate_expired",
        "TLS Certificate Expired",
        "A TLS certificate has already expired; connections will fail."),
@@ -840,7 +846,7 @@ SYNTHETIC: list[TaxonomyEntry] = [
        "Synthetic Transaction Failed",
        "A scripted multi-page transaction monitor (HAR-based login/journey replay) "
        "failed a status check or content assertion.",
-       aliases=["synthetic_monitor_failed"]),
+       aliases=["synthetic_monitor_failed"], default_severity="critical"),
     _e("synthetic.uptime.probe_failed",
        "Uptime Probe Failed",
        "An external uptime check (HTTP, TCP, DNS, ping) has failed for a target URL or host."),

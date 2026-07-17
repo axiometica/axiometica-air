@@ -196,6 +196,14 @@ class WatcherService:
         # Map ExternalCheckConfig.name → last ExternalCheckResult for deduplication
         self._external_check_state: Dict[str, str] = {}  # name → last status
 
+        # Event-type → default severity (info/warning/critical), loaded from the
+        # Event Type Taxonomy via load_config_from_api(). Keyed by both a type's
+        # canonical code and each of its aliases, so it can be looked up directly
+        # with whatever short event-type string the watcher already uses (e.g.
+        # "high_cpu"). Empty until the first successful settings fetch — anything
+        # not present here falls back to the hardcoded criticality_map below.
+        self.event_type_severity: Dict[str, str] = {}
+
         if self.external_checks:
             check_summary = ", ".join(
                 f"{c.check_type.upper()} {c.name or c.target}"
@@ -415,6 +423,30 @@ class WatcherService:
                             )
                 except Exception as exc_checks:
                     logger.debug(f"[API CONFIG] Could not load external checks: {exc_checks}")
+
+                # ── Also refresh event-type default severities from the taxonomy ──
+                try:
+                    et_resp = await client.get(
+                        f"{self.api_base_url}/api/event-types",
+                        params={"enabled_only": "true"},
+                    )
+                    if et_resp.status_code == 200:
+                        new_severity_map: Dict[str, str] = {}
+                        for et in et_resp.json():
+                            sev = et.get("default_severity")
+                            if not sev:
+                                continue
+                            new_severity_map[et["code"]] = sev
+                            for alias in et.get("aliases") or []:
+                                new_severity_map[alias] = sev
+                        if new_severity_map != self.event_type_severity:
+                            self.event_type_severity = new_severity_map
+                            logger.info(
+                                f"🎚️ [SEVERITY] Loaded {len(new_severity_map)} event-type "
+                                f"default severity override(s) from taxonomy"
+                            )
+                except Exception as exc_severity:
+                    logger.debug(f"[API CONFIG] Could not load event-type severities: {exc_severity}")
 
                 return bool(changed)
 
@@ -2339,7 +2371,7 @@ class WatcherService:
                             success, event_id, wf_id = await self.submit_monitoring_event_to_platform(
                                 event_type="high_syscall_intensity",
                                 resource_name=anomaly_container,
-                                raw_criticality="critical",
+                                raw_criticality=self.event_type_severity.get("high_syscall_intensity", "critical"),
                                 alert_payload=alert,
                                 signal_value=float(count),
                                 signal_threshold=float(self.anomaly_threshold),
@@ -2379,7 +2411,11 @@ class WatcherService:
                             "cpu_spike":              "high_cpu",
                             "memory_surge":           "high_memory",
                             "disk_full":              "disk_full",
-                            "health_check_failed":    "service_unresponsive",
+                            # health_check_failed intentionally NOT collapsed into
+                            # "service_unresponsive" — it has its own taxonomy entry
+                            # (application.availability.health_check_failing) distinct
+                            # from external-reachability failures, so it can carry its
+                            # own default severity instead of sharing one with them.
                             "connection_spike":       "high_latency",
                             "log_error":              "high_error_rate",
                             # External checks
@@ -2476,19 +2512,27 @@ class WatcherService:
 
                             platform_event_type = event_type_map.get(anomaly_type, anomaly_type)
 
-                            # For external checks, prefer the per-failure criticality
-                            # stored in metadata (DNS failure → critical, timeout → warning,
-                            # etc.).  Falls back to the static criticality_map.
+                            # Priority order: (1) per-failure criticality for external
+                            # checks, stored in metadata at detection time (DNS failure →
+                            # critical, timeout → warning, etc.) — most specific, always
+                            # wins when present; (2) the operator-configurable default from
+                            # the Event Type Taxonomy, keyed by the submitted platform event
+                            # type; (3) the hardcoded map below, unchanged, as a last resort
+                            # for anything the taxonomy hasn't been configured for.
                             _ext_types = {"ping_failed", "external_http_failed",
                                           "external_tcp_failed", "dns_failed", "tls_expiry"}
                             if anomaly_type in _ext_types:
                                 _meta = self._external_check_metadata.get(container_name, {})
-                                raw_crit = _meta.get(
-                                    "raw_criticality",
-                                    criticality_map.get(anomaly_type, "critical"),
+                                raw_crit = (
+                                    _meta.get("raw_criticality")
+                                    or self.event_type_severity.get(platform_event_type)
+                                    or criticality_map.get(anomaly_type, "critical")
                                 )
                             else:
-                                raw_crit = criticality_map.get(anomaly_type, "warning")
+                                raw_crit = (
+                                    self.event_type_severity.get(platform_event_type)
+                                    or criticality_map.get(anomaly_type, "warning")
+                                )
 
                             success, event_id, wf_id = await self.submit_monitoring_event_to_platform(
                                 event_type=platform_event_type,
@@ -2701,7 +2745,7 @@ class WatcherService:
                 # login) is just as urgent as a hard script error/timeout — both
                 # mean the monitored journey is broken for real users right now.
                 if fail_count == self.synthetic_min_consecutive_fails:
-                    criticality = "critical"
+                    criticality = self.event_type_severity.get("synthetic.transaction.failed", "critical")
                     page_name, reason = self._extract_synthetic_failure_detail(output)
                     title = (
                         f"{mon_name} - Transaction {page_name} failed"

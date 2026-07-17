@@ -277,9 +277,9 @@ $func$
         import json as _json
         _seed_sql = __import__("sqlalchemy").text("""
             INSERT INTO event_type_taxonomy
-                (code, label, description, category, aliases, is_system, enabled, created_at)
+                (code, label, description, category, aliases, is_system, enabled, default_severity, created_at)
             VALUES
-                (:code, :label, :description, :category, :aliases, :is_system, TRUE, NOW())
+                (:code, :label, :description, :category, :aliases, :is_system, TRUE, :default_severity, NOW())
             ON CONFLICT (code) DO NOTHING
         """)
         _seeded = 0
@@ -292,6 +292,7 @@ $func$
                     "category":    _entry["category"],
                     "aliases":     _json.dumps(_entry.get("aliases", [])),
                     "is_system":   _entry.get("is_system", True),
+                    "default_severity": _entry.get("default_severity"),
                 })
                 _seeded += result.rowcount
             _conn.commit()
