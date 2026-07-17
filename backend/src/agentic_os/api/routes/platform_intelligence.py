@@ -88,9 +88,9 @@ class SystemHealthResponse(BaseModel):
     resolved_incidents: int
     automated_resolutions: int
     manual_resolutions: int
-    automation_rate: float
+    automation_rate: Optional[float]  # None when resolved_incidents == 0 — no data, not a real 0%
     false_positive_count: int
-    false_positive_rate: float
+    false_positive_rate: Optional[float]  # None when resolved_incidents == 0 — no data, not a real 0%
     avg_mttr_hours: Optional[float]
     p1p2_avg_mttr_hours: Optional[float]
     pending_recommendations: int
@@ -309,13 +309,15 @@ async def get_system_health(
 
     automated = sum(1 for w in resolved if w.resolution_source == "automated_remediation")
     manual    = resolved_count - automated
-    auto_rate = automated / resolved_count if resolved_count else 0.0
+    # None (not 0.0) when there's nothing resolved — a real 0% and "no data yet"
+    # must render differently, or a fresh/reset platform looks like a healthy one.
+    auto_rate = automated / resolved_count if resolved_count else None
 
     fp_count = sum(
         1 for w in resolved
         if (w.resolution_category or "").lower() in ("wont_fix", "noise", "duplicate")
     )
-    fp_rate = fp_count / resolved_count if resolved_count else 0.0
+    fp_rate = fp_count / resolved_count if resolved_count else None
 
     # MTTR
     mttr_vals = [
@@ -360,9 +362,9 @@ async def get_system_health(
         resolved_incidents=resolved_count,
         automated_resolutions=automated,
         manual_resolutions=manual,
-        automation_rate=round(auto_rate, 3),
+        automation_rate=round(auto_rate, 3) if auto_rate is not None else None,
         false_positive_count=fp_count,
-        false_positive_rate=round(fp_rate, 3),
+        false_positive_rate=round(fp_rate, 3) if fp_rate is not None else None,
         avg_mttr_hours=round(avg_mttr, 2) if avg_mttr is not None else None,
         p1p2_avg_mttr_hours=round(p1p2_avg_mttr, 2) if p1p2_avg_mttr is not None else None,
         pending_recommendations=pending,

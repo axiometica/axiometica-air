@@ -103,17 +103,20 @@ async def platform_reset():
       6. snow_incident_map       — no FK, whole table
       7. snow_sync_logs          — no FK, whole table
       8. optimization_recommendations — no FK, whole table (Platform Intel)
-      9. workflow_states         — incidents + changes, now safe
-     10. runbooks                — execution-feedback fields reset to fresh baseline
-     11. Reset incident_seq → 1
-     12. Reset watcher in-memory state
+      9. platform_intel_runs     — no FK, whole table (KPI history/trend + run log —
+                                    decoupled from workflow_states, so it survives
+                                    unless wiped explicitly here)
+     10. workflow_states         — incidents + changes, now safe
+     11. runbooks                — execution-feedback fields reset to fresh baseline
+     12. Reset incident_seq → 1
+     13. Reset watcher in-memory state
 
     WARNING: This is irreversible.
     """
     from agentic_os.db.models import (
         MonitoringEventModel, ApprovalModel, EventModel,
         AgentExecutionModel, SNowIncidentMapModel, SNowSyncLogModel,
-        OptimizationRecommendationModel, RunbookModel,
+        OptimizationRecommendationModel, RunbookModel, PlatformIntelRunModel,
     )
 
     db = SessionLocal()
@@ -161,12 +164,17 @@ async def platform_reset():
             synchronize_session=False
         )
 
-        # ── 9. workflow_states — incidents and changes ────────────────────────
+        # ── 9. platform_intel_runs (whole table — KPI history/trend + run log) ──
+        counts["platform_intel_runs"] = db.query(PlatformIntelRunModel).delete(
+            synchronize_session=False
+        )
+
+        # ── 10. workflow_states — incidents and changes ───────────────────────
         counts["workflows"] = db.query(WorkflowStateModel).filter(
             WorkflowStateModel.workflow_type.in_(["incident", "change"])
         ).delete(synchronize_session=False)
 
-        # ── 10. Runbook execution-feedback fields — 1:1 tied to the incidents
+        # ── 11. Runbook execution-feedback fields — 1:1 tied to the incidents
         #         just deleted above, not configuration to preserve ──────────
         counts["runbook_stats_reset"] = db.query(RunbookModel).update({
             RunbookModel.total_executions: 0,
@@ -181,11 +189,11 @@ async def platform_reset():
 
         db.commit()
 
-        # ── 11. Reset incident enumeration sequence ───────────────────────────
+        # ── 12. Reset incident enumeration sequence ───────────────────────────
         db.execute(text("ALTER SEQUENCE incident_seq RESTART WITH 1"))
         db.commit()
 
-        # ── 12. Reset in-memory state on all approved watchers ───────────────
+        # ── 13. Reset in-memory state on all approved watchers ───────────────
         watcher_reset = False
         import httpx as _httpx
         try:
@@ -215,7 +223,9 @@ async def platform_reset():
                 f"Deleted {counts['workflows']} workflows "
                 f"({counts['monitoring_events']} monitoring events, "
                 f"{counts['approvals']} approvals, "
-                f"{counts['recommendations']} recommendations). "
+                f"{counts['recommendations']} recommendations, "
+                f"{counts['platform_intel_runs']} Platform Intelligence run(s) — "
+                f"KPI history and trend charts are now empty too). "
                 f"Reset execution stats on {counts['runbook_stats_reset']} runbooks. "
                 f"Incident enumeration reset to INC0001."
             ),

@@ -63,28 +63,28 @@ const INNER: CSSProperties = {
 }
 
 // ── severity color palette ───────────────────────────────────────────────────
-// Same 4-color scale used for Incident severity (ApprovalQueue.tsx) — reused
-// here instead of the wider ad-hoc palette KPI status colors used to draw from
-// (green/orange/red/purple/blue/indigo), so "color = status" means one thing
-// across the whole app.
+// Muted enterprise scale — matches EventTypesPage.tsx's SEVERITY_COLORS
+// (info/warning/critical), replacing the brighter red/orange/blue/green mix
+// this page used to draw from. NOTE: ApprovalQueue.tsx still uses the older,
+// more saturated palette (#dc2626/#10b981/...) — not yet migrated to this one.
 const SEVERITY = {
-  critical: '#dc2626', // worst
-  high:     '#f97316',
-  medium:   '#3b82f6', // neutral / informational
-  low:      '#10b981', // best
+  critical: '#a04848', // worst
+  high:     '#9a7030',
+  medium:   '#4070a0', // neutral / informational
+  low:      '#4a8a63', // best
 } as const
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function priorityColor(p: string): string {
-  if (p === 'high')   return '#dc2626'
-  if (p === 'medium') return '#f97316'
+  if (p === 'high')   return '#a04848'
+  if (p === 'medium') return '#9a7030'
   return '#6b7280'
 }
 
 function confidenceBar(c: number) {
   const pct = Math.round(c * 100)
-  const col = pct >= 80 ? '#10b981' : pct >= 60 ? '#3b82f6' : '#f59e0b'
+  const col = pct >= 80 ? '#4a8a63' : pct >= 60 ? '#4070a0' : '#9a7030'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
       <div style={{ flex: 1, height: '4px', backgroundColor: '#252c3c', borderRadius: '999px', overflow: 'hidden' }}>
@@ -95,7 +95,7 @@ function confidenceBar(c: number) {
   )
 }
 
-function fmtPct(n: number) { return `${(n * 100).toFixed(1)}%` }
+function fmtPct(n: number | null | undefined) { return n == null ? '—' : `${(n * 100).toFixed(1)}%` }
 function fmtHours(h: number | null) { return h == null ? '—' : `${h.toFixed(1)}h` }
 
 const categoryLabel: Record<string, string> = {
@@ -129,10 +129,10 @@ function RecommendationCard({
   }
 
   const statusBadge =
-    rec.status === 'accepted'     ? { label: 'Accepted',     color: '#10b981', bg: 'rgba(16,185,129,0.12)' }
+    rec.status === 'accepted'     ? { label: 'Accepted',     color: '#4a8a63', bg: 'rgba(74,138,99,0.12)' }
     : rec.status === 'rejected'   ? { label: 'Rejected',     color: '#6b7280', bg: 'rgba(107,114,128,0.12)' }
     : rec.status === 'expired'    ? { label: 'Expired',      color: '#4b5563', bg: 'rgba(75,85,99,0.12)' }
-    : rec.status === 'auto_applied' ? { label: '⚡ Auto-Applied', color: '#a78bfa', bg: 'rgba(167,139,250,0.14)' }
+    : rec.status === 'auto_applied' ? { label: '⚡ Auto-Applied', color: '#8a6fa8', bg: 'rgba(138,111,168,0.14)' }
     : null
 
   return (
@@ -185,8 +185,8 @@ function RecommendationCard({
                 disabled={loading}
                 style={{
                   fontSize: '11px', fontWeight: 600, padding: '4px 12px',
-                  backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981',
-                  border: '1px solid rgba(16,185,129,0.35)', borderRadius: '6px',
+                  backgroundColor: 'rgba(74,138,99,0.15)', color: '#4a8a63',
+                  border: '1px solid rgba(74,138,99,0.35)', borderRadius: '6px',
                   cursor: loading ? 'not-allowed' : 'pointer',
                   opacity: loading ? 0.6 : 1,
                 }}
@@ -230,9 +230,9 @@ function RecommendationCard({
                   {multiChanges.map((change) => (
                     <div key={change.parameter} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <code style={{
-                        fontSize: '10px', color: '#a78bfa',
-                        backgroundColor: 'rgba(167,139,250,0.1)',
-                        border: '1px solid rgba(167,139,250,0.2)',
+                        fontSize: '10px', color: '#8a6fa8',
+                        backgroundColor: 'rgba(138,111,168,0.1)',
+                        border: '1px solid rgba(138,111,168,0.2)',
                         borderRadius: '4px', padding: '2px 7px',
                         fontFamily: 'ui-monospace, monospace',
                         whiteSpace: 'nowrap', flexShrink: 0, minWidth: '200px',
@@ -245,8 +245,8 @@ function RecommendationCard({
                         </span>
                       </div>
                       <span style={{ color: '#3d4557', fontSize: '14px', flexShrink: 0 }}>→</span>
-                      <div style={{ ...INNER, padding: '4px 10px', borderColor: '#10b981', borderLeftWidth: '2px', flexShrink: 0 }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#10b981' }}>
+                      <div style={{ ...INNER, padding: '4px 10px', borderColor: '#4a8a63', borderLeftWidth: '2px', flexShrink: 0 }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#4a8a63' }}>
                           {JSON.stringify(change.suggested_value)}
                         </span>
                       </div>
@@ -266,9 +266,9 @@ function RecommendationCard({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                     <span style={LABEL}>Parameter</span>
                     <code style={{
-                      fontSize: '11px', color: '#a78bfa',
-                      backgroundColor: 'rgba(167,139,250,0.1)',
-                      border: '1px solid rgba(167,139,250,0.2)',
+                      fontSize: '11px', color: '#8a6fa8',
+                      backgroundColor: 'rgba(138,111,168,0.1)',
+                      border: '1px solid rgba(138,111,168,0.2)',
                       borderRadius: '4px', padding: '2px 7px',
                       fontFamily: 'ui-monospace, monospace',
                     }}>
@@ -283,9 +283,9 @@ function RecommendationCard({
                       </p>
                     </div>
                     <span style={{ color: '#3d4557', fontSize: '18px' }}>→</span>
-                    <div style={{ ...INNER, flex: 1, borderColor: '#10b981', borderLeftWidth: '2px' }}>
+                    <div style={{ ...INNER, flex: 1, borderColor: '#4a8a63', borderLeftWidth: '2px' }}>
                       <p style={LABEL}>Suggested value</p>
-                      <p style={{ fontSize: '15px', fontWeight: 700, color: '#10b981', marginTop: '2px' }}>
+                      <p style={{ fontSize: '15px', fontWeight: 700, color: '#4a8a63', marginTop: '2px' }}>
                         {JSON.stringify(rec.suggested_value)}
                       </p>
                     </div>
@@ -300,9 +300,9 @@ function RecommendationCard({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                   <span style={LABEL}>Parameter</span>
                   <code style={{
-                    fontSize: '11px', color: '#a78bfa',
-                    backgroundColor: 'rgba(167,139,250,0.1)',
-                    border: '1px solid rgba(167,139,250,0.2)',
+                    fontSize: '11px', color: '#8a6fa8',
+                    backgroundColor: 'rgba(138,111,168,0.1)',
+                    border: '1px solid rgba(138,111,168,0.2)',
                     borderRadius: '4px', padding: '2px 7px',
                     fontFamily: 'ui-monospace, monospace',
                   }}>
@@ -388,8 +388,8 @@ function RejectModal({
             Cancel
           </button>
           <button onClick={() => onConfirm(recId, reason)} style={{
-            fontSize: '12px', padding: '6px 14px', backgroundColor: 'rgba(220,38,38,0.15)',
-            color: '#dc2626', border: '1px solid rgba(220,38,38,0.3)', borderRadius: '6px', cursor: 'pointer',
+            fontSize: '12px', padding: '6px 14px', backgroundColor: 'rgba(160,72,72,0.15)',
+            color: '#a04848', border: '1px solid rgba(160,72,72,0.3)', borderRadius: '6px', cursor: 'pointer',
           }}>
             Dismiss
           </button>
@@ -432,8 +432,8 @@ function ConfirmModal({
             Cancel
           </button>
           <button onClick={onConfirm} style={{
-            fontSize: '12px', padding: '6px 14px', backgroundColor: 'rgba(99,102,241,0.15)',
-            color: '#818cf8', border: '1px solid rgba(99,102,241,0.35)', borderRadius: '6px', cursor: 'pointer',
+            fontSize: '12px', padding: '6px 14px', backgroundColor: 'rgba(91,106,160,0.15)',
+            color: '#5b6aa0', border: '1px solid rgba(91,106,160,0.35)', borderRadius: '6px', cursor: 'pointer',
           }}>
             {confirmLabel}
           </button>
@@ -509,7 +509,7 @@ function LoadingOverlay({ message }: { message: string }) {
       <style>{'@keyframes pi-spin { to { transform: rotate(360deg); } }'}</style>
       <div style={{
         width: '44px', height: '44px', borderRadius: '50%',
-        border: '3px solid rgba(129,140,248,0.2)', borderTopColor: '#818cf8',
+        border: '3px solid rgba(91,106,160,0.2)', borderTopColor: '#5b6aa0',
         animation: 'pi-spin 0.8s linear infinite',
       }} />
       <p style={{ color: '#e8eef5', fontSize: '13px', fontWeight: 600 }}>{message}</p>
@@ -520,13 +520,17 @@ function LoadingOverlay({ message }: { message: string }) {
 // ── Metric tile ──────────────────────────────────────────────────────────────
 
 function MetricTile({
-  label, value, sub, accent, trend, tooltip, series,
+  label, value, sub, accent, trend, tooltip, series, sectionColor,
 }: {
   label: string; value: string; sub?: string; accent?: string; trend?: ReactNode
   tooltip?: string; series?: number[]
+  // Left border denotes which theme/section this tile belongs to (constant per
+  // section) — kept separate from `accent`, which still colors the value text
+  // and sparkline by that metric's own health/severity.
+  sectionColor?: string
 }) {
   return (
-    <div style={{ ...INNER, borderLeft: `2px solid ${accent || '#3d4557'}` }}>
+    <div style={{ ...INNER, borderLeft: `3px solid ${sectionColor || accent || '#3d4557'}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ display: 'flex', alignItems: 'center' }}>
           <p style={LABEL}>{label}</p>
@@ -562,13 +566,17 @@ function KpiTrend({
   const delta = current - previous
   const improved = higherIsBetter ? delta > 0 : delta < 0
   const arrow = delta > 0 ? '▲' : '▼'
-  const color = improved ? '#10b981' : '#dc2626'
+  const color = improved ? '#4a8a63' : '#a04848'
   const deltaStr = pct
     ? `${Math.abs(delta * 100).toFixed(1)}pp`
     : Math.abs(delta).toFixed(Math.abs(delta) < 1 ? 2 : 1)
   return (
-    <span style={{ fontSize: '10px', fontWeight: 700, color }} title="vs. previous analysis run">
-      {arrow} {deltaStr}
+    <span
+      style={{ fontSize: '10px', fontWeight: 700, color, display: 'inline-flex', alignItems: 'baseline', gap: '3px' }}
+      title="Change vs. the immediately previous analysis run — may differ from the whole-window trend described below"
+    >
+      <span>{arrow} {deltaStr}</span>
+      <span style={{ fontSize: '9px', fontWeight: 500, color: '#5b6472' }}>last run</span>
     </span>
   )
 }
@@ -785,8 +793,8 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
             disabled={analyzing}
             style={{
               fontSize: '12px', fontWeight: 600, padding: '8px 16px',
-              backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8',
-              border: '1px solid rgba(99,102,241,0.35)', borderRadius: '8px',
+              backgroundColor: 'rgba(91,106,160,0.15)', color: '#5b6aa0',
+              border: '1px solid rgba(91,106,160,0.35)', borderRadius: '8px',
               cursor: analyzing ? 'not-allowed' : 'pointer',
               opacity: analyzing ? 0.7 : 1,
             }}
@@ -813,21 +821,21 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
       {analyzeResult && (() => {
         const isError = analyzeResult.startsWith('Analysis failed')
         const sourceMeta: Record<string, { label: string; color: string; bg: string }> = {
-          llm:               { label: '✦ AI Analysis',    color: '#a78bfa', bg: 'rgba(139,92,246,0.15)' },
-          rules:             { label: '⚙ Rule-based',     color: '#60a5fa', bg: 'rgba(59,130,246,0.12)' },
-          healthy:           { label: '✓ Healthy',        color: '#34d399', bg: 'rgba(16,185,129,0.12)' },
-          suppressed:        { label: '⏸ Cooldown',       color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
-          insufficient_data: { label: '⚠ Low Data',      color: '#f97316', bg: 'rgba(249,115,22,0.12)' },
-          error:             { label: '✕ Error',          color: '#ef4444', bg: 'rgba(220,38,38,0.12)'  },
+          llm:               { label: '✦ AI Analysis',    color: '#8a6fa8', bg: 'rgba(138,111,168,0.15)' },
+          rules:             { label: '⚙ Rule-based',     color: '#4070a0', bg: 'rgba(64,112,160,0.12)' },
+          healthy:           { label: '✓ Healthy',        color: '#4a8a63', bg: 'rgba(74,138,99,0.12)' },
+          suppressed:        { label: '⏸ Cooldown',       color: '#9a7030', bg: 'rgba(154,112,48,0.12)' },
+          insufficient_data: { label: '⚠ Low Data',      color: '#9a7030', bg: 'rgba(154,112,48,0.12)' },
+          error:             { label: '✕ Error',          color: '#a04848', bg: 'rgba(160,72,72,0.12)'  },
         }
         const meta = isError ? sourceMeta.error : (sourceMeta[analyzeSource ?? ''] ?? sourceMeta.rules)
         return (
           <div style={{
-            backgroundColor: isError ? 'rgba(220,38,38,0.1)' : 'rgba(16,185,129,0.1)',
-            border: `1px solid ${isError ? 'rgba(220,38,38,0.3)' : 'rgba(16,185,129,0.3)'}`,
+            backgroundColor: isError ? 'rgba(160,72,72,0.1)' : 'rgba(74,138,99,0.1)',
+            border: `1px solid ${isError ? 'rgba(160,72,72,0.3)' : 'rgba(74,138,99,0.3)'}`,
             borderRadius: '8px', padding: '10px 14px',
             fontSize: '12px', display: 'flex', alignItems: 'center', gap: '10px',
-            color: isError ? '#dc2626' : '#10b981',
+            color: isError ? '#a04848' : '#4a8a63',
           }}>
             <span style={{
               fontSize: '11px', fontWeight: 700, padding: '2px 8px',
@@ -842,8 +850,13 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
         )
       })()}
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid #2a3145', paddingBottom: '0' }}>
+      {/* Tabs — sticky below the app's own sticky header (4rem/64px tall) so
+          switching tabs from partway down a long KPI page doesn't require
+          scrolling back to the top first. */}
+      <div style={{
+        display: 'flex', gap: '4px', borderBottom: '1px solid #2a3145', paddingBottom: '0',
+        position: 'sticky', top: '64px', zIndex: 40, backgroundColor: '#020617',
+      }}>
         {tabs.map(t => (
           <button
             key={t.id}
@@ -851,8 +864,8 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
             style={{
               fontSize: '13px', fontWeight: 600,
               padding: '8px 16px',
-              color: tab === t.id ? '#818cf8' : '#64748b',
-              borderBottom: tab === t.id ? '2px solid #818cf8' : '2px solid transparent',
+              color: tab === t.id ? '#5b6aa0' : '#64748b',
+              borderBottom: tab === t.id ? '2px solid #5b6aa0' : '2px solid transparent',
               backgroundColor: 'transparent',
               cursor: 'pointer',
               transition: 'color 0.15s',
@@ -876,9 +889,9 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                   fontSize: '11px', fontWeight: 600, padding: '4px 12px',
                   borderRadius: '6px', cursor: 'pointer',
                   backgroundColor: filterStatus === s
-                    ? 'rgba(129,140,248,0.2)' : 'rgba(107,114,128,0.1)',
-                  color: filterStatus === s ? '#818cf8' : '#6b7280',
-                  border: filterStatus === s ? '1px solid rgba(129,140,248,0.4)' : '1px solid #2a3145',
+                    ? 'rgba(91,106,160,0.2)' : 'rgba(107,114,128,0.1)',
+                  color: filterStatus === s ? '#5b6aa0' : '#6b7280',
+                  border: filterStatus === s ? '1px solid rgba(91,106,160,0.4)' : '1px solid #2a3145',
                 }}
               >
                 {s === '' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -887,7 +900,7 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
           </div>
 
           {error && (
-            <p style={{ color: '#dc2626', fontSize: '12px' }}>{error}</p>
+            <p style={{ color: '#a04848', fontSize: '12px' }}>{error}</p>
           )}
 
           {loadingRecs ? (
@@ -900,7 +913,7 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                     No pending recommendations.
                   </p>
                   <p style={{ color: '#4b5563', fontSize: '12px', lineHeight: 1.6 }}>
-                    Click <strong style={{ color: '#818cf8' }}>⟳ Run Analysis Now</strong> to scan the last 30 days of incident data.<br />
+                    Click <strong style={{ color: '#5b6aa0' }}>⟳ Run Analysis Now</strong> to scan the last 30 days of incident data.<br />
                     The analysis needs at least <strong style={{ color: '#a0aec0' }}>5 resolved incidents</strong> and detects patterns like
                     high false-positive rates, low automation, or poor CMDB coverage.<br />
                     If all metrics are healthy — or existing pending recs haven't been reviewed yet — 0 recommendations are generated.
@@ -973,7 +986,7 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                     <button
                       onClick={() => { setFilterStatus('pending'); setTab('recommendations') }}
                       style={{
-                        marginLeft: '6px', fontSize: '11px', color: '#818cf8',
+                        marginLeft: '6px', fontSize: '11px', color: '#5b6aa0',
                         background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0,
                       }}
                     >
@@ -1014,19 +1027,72 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                   runbookStep: 'Share of individual runbook steps that failed or timed out, at the step level — pinpoints exactly which step breaks, distinct from remediation failure rate which only sees the whole attempt.',
                 }
 
+                const tileGrid: CSSProperties = { display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(5, 1fr)' }
+                // Dynamic — these track each dimension's *current health* and drive the
+                // tile value-text color and the Interpretation status dots. Intentionally
+                // NOT used for the tile border below: two sections can land in the same
+                // severity tier at the same time (e.g. both "high"), which would make
+                // their borders collide even though they're different sections.
+                const automationColor = automationRate == null ? '#4b5563' : automationRate >= 0.5 ? SEVERITY.low : automationRate >= 0.3 ? SEVERITY.high : SEVERITY.critical
+                const reliabilityColor = (mttrP1P2 == null || mttrP1P2 <= 4) ? SEVERITY.low : SEVERITY.critical
+                const dataQualityColor = (cmdbCoverage == null || cmdbCoverage >= 70) ? SEVERITY.low : SEVERITY.high
+
+                // Fixed — one color per section, constant regardless of current values,
+                // used only for the tile border/legend so section identity never
+                // collides with (or gets confused with) a severity color.
+                const sectionId = {
+                  overview:     '#7a8ba3', // slate
+                  automation:   '#9a7030', // amber
+                  reliability:  '#4070a0', // blue
+                  dataQuality:  '#4a8a63', // green
+                  trust:        '#8a6fa8', // violet
+                  execution:    '#a04848', // red
+                }
+
+                // Legend — since section identity now lives on each tile's left border
+                // rather than a labeled chip taking up a grid slot, this is the only
+                // place the section names are still spelled out.
+                const legendItems: [string, string][] = [
+                  ['Overview', sectionId.overview],
+                  ['Automation & noise', sectionId.automation],
+                  ['Reliability & governance', sectionId.reliability],
+                  ['Data quality', sectionId.dataQuality],
+                  ...(recAcceptanceRate != null || autoApplyTrust != null ? [['Trust & calibration', sectionId.trust]] as [string, string][] : []),
+                  ...(remediationFail != null || runbookStepFail != null ? [['Execution reliability', sectionId.execution]] as [string, string][] : []),
+                ]
+
                 return (
                   <>
-                    <div className="grid grid-cols-2 gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '14px' }}>
+                      {legendItems.map(([label, color]) => (
+                        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                          <span style={{ width: '3px', height: '14px', borderRadius: '1px', background: color, flexShrink: 0 }} />
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#7a8ba3' }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={tileGrid}>
+                      {/* Overview — quick-glance totals, not tied to a single analytical theme */}
                       <MetricTile
                         label="Total Incidents (30d)"
                         value={String(health.total_incidents)}
                         accent={SEVERITY.medium}
+                        sectionColor={sectionId.overview}
                       />
+                      <MetricTile
+                        label="Pending Recommendations"
+                        value={String(health.pending_recommendations)}
+                        accent={health.pending_recommendations > 0 ? SEVERITY.high : SEVERITY.low}
+                        sectionColor={sectionId.overview}
+                      />
+
+                      {/* Automation & noise */}
                       <MetricTile
                         label="Automation Rate"
                         value={fmtPct(automationRate)}
                         sub={`${health.automated_resolutions} automated / ${health.resolved_incidents} resolved`}
-                        accent={automationRate >= 0.5 ? SEVERITY.low : automationRate >= 0.3 ? SEVERITY.high : SEVERITY.critical}
+                        accent={automationColor}
+                        sectionColor={sectionId.automation}
                         trend={<KpiTrend current={num(latest, 'automation_rate')} previous={num(prev, 'automation_rate')} higherIsBetter pct />}
                         tooltip={tip.automation}
                         series={series('automation_rate')}
@@ -1035,15 +1101,31 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                         label="False Positive Rate"
                         value={fmtPct(falsePositive)}
                         sub={`${health.false_positive_count} incidents`}
-                        accent={falsePositive <= 0.1 ? SEVERITY.low : falsePositive <= 0.25 ? SEVERITY.high : SEVERITY.critical}
+                        accent={falsePositive == null ? '#4b5563' : falsePositive <= 0.1 ? SEVERITY.low : falsePositive <= 0.25 ? SEVERITY.high : SEVERITY.critical}
+                        sectionColor={sectionId.automation}
                         trend={<KpiTrend current={num(latest, 'false_positive_rate')} previous={num(prev, 'false_positive_rate')} higherIsBetter={false} pct />}
                         tooltip={tip.falsePositive}
                         series={series('false_positive_rate')}
                       />
+                      {qualificationRate != null && (
+                        <MetricTile
+                          label="Qualification Rate"
+                          value={fmtPct(qualificationRate)}
+                          sub="raw events → tracked incidents"
+                          accent={qualificationRate >= 0.5 ? SEVERITY.low : SEVERITY.high}
+                          sectionColor={sectionId.automation}
+                          trend={<KpiTrend current={qualificationRate} previous={num(prev, 'qualification_rate')} higherIsBetter />}
+                          tooltip={tip.qualification}
+                          series={series('qualification_rate')}
+                        />
+                      )}
+
+                      {/* Reliability & governance */}
                       <MetricTile
                         label="Avg MTTR (all)"
                         value={fmtHours(mttrAll)}
                         accent={SEVERITY.medium}
+                        sectionColor={sectionId.reliability}
                         trend={<KpiTrend current={num(latest, 'mttr_all_hours')} previous={num(prev, 'mttr_all_hours')} higherIsBetter={false} />}
                         tooltip={tip.mttrAll}
                         series={series('mttr_all_hours')}
@@ -1052,39 +1134,17 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                         label="P1/P2 Avg MTTR"
                         value={fmtHours(mttrP1P2)}
                         accent={mttrP1P2 == null ? '#4b5563' : mttrP1P2 <= 4 ? SEVERITY.low : SEVERITY.critical}
+                        sectionColor={sectionId.reliability}
                         trend={<KpiTrend current={num(latest, 'mttr_p1p2_hours')} previous={num(prev, 'mttr_p1p2_hours')} higherIsBetter={false} />}
                         tooltip={tip.mttrP1P2}
                         series={series('mttr_p1p2_hours')}
                       />
-                      <MetricTile
-                        label="CMDB Coverage"
-                        value={cmdbCoverage != null ? `${cmdbCoverage}%` : '—'}
-                        accent={cmdbCoverage == null ? '#4b5563' : cmdbCoverage >= 70 ? SEVERITY.low : SEVERITY.high}
-                        trend={<KpiTrend current={num(latest, 'cmdb_coverage')} previous={num(prev, 'cmdb_coverage')} higherIsBetter />}
-                        tooltip={tip.cmdb}
-                        series={series('cmdb_coverage')}
-                      />
-                      <MetricTile
-                        label="Pending Recommendations"
-                        value={String(health.pending_recommendations)}
-                        accent={health.pending_recommendations > 0 ? SEVERITY.high : SEVERITY.low}
-                      />
-                      {qualificationRate != null && (
-                        <MetricTile
-                          label="Qualification Rate"
-                          value={fmtPct(qualificationRate)}
-                          sub="raw events → tracked incidents"
-                          accent={qualificationRate >= 0.5 ? SEVERITY.low : SEVERITY.high}
-                          trend={<KpiTrend current={qualificationRate} previous={num(prev, 'qualification_rate')} higherIsBetter />}
-                          tooltip={tip.qualification}
-                          series={series('qualification_rate')}
-                        />
-                      )}
                       {meanTimeToApproval != null && (
                         <MetricTile
                           label="Mean Time to Approval"
                           value={`${meanTimeToApproval.toFixed(0)}m`}
                           accent={meanTimeToApproval <= 30 ? SEVERITY.low : meanTimeToApproval <= 120 ? SEVERITY.high : SEVERITY.critical}
+                          sectionColor={sectionId.reliability}
                           trend={<KpiTrend current={meanTimeToApproval} previous={num(prev, 'mean_time_to_approval_minutes')} higherIsBetter={false} />}
                           tooltip={tip.approval}
                           series={series('mean_time_to_approval_minutes')}
@@ -1095,18 +1155,36 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                           label="Governance Bypass Rate"
                           value={fmtPct(govBypassRate)}
                           sub="resolved without a manual gate"
-                          accent={SEVERITY.medium}
+                          // Two-sided metric (a confidence-gate bypass is earned trust, a missing
+                          // policy is a gap) so this stays informational at moderate values — but a
+                          // rate this high across the board is worth a look either way.
+                          accent={govBypassRate <= 0.6 ? SEVERITY.medium : govBypassRate <= 0.8 ? SEVERITY.high : SEVERITY.critical}
+                          sectionColor={sectionId.reliability}
                           trend={<KpiTrend current={govBypassRate} previous={num(prev, 'governance_bypass_rate')} higherIsBetter />}
                           tooltip={tip.govBypass}
                           series={series('governance_bypass_rate')}
                         />
                       )}
+
+                      {/* Data quality */}
+                      <MetricTile
+                        label="CMDB Coverage"
+                        value={cmdbCoverage != null ? `${cmdbCoverage}%` : '—'}
+                        accent={cmdbCoverage == null ? '#4b5563' : cmdbCoverage >= 70 ? SEVERITY.low : SEVERITY.high}
+                        sectionColor={sectionId.dataQuality}
+                        trend={<KpiTrend current={num(latest, 'cmdb_coverage')} previous={num(prev, 'cmdb_coverage')} higherIsBetter />}
+                        tooltip={tip.cmdb}
+                        series={series('cmdb_coverage')}
+                      />
+
+                      {/* Trust & calibration */}
                       {recAcceptanceRate != null && (
                         <MetricTile
                           label="Recommendation Acceptance"
                           value={fmtPct(recAcceptanceRate)}
                           sub="is Platform Intel well-calibrated?"
                           accent={recAcceptanceRate >= 0.6 ? SEVERITY.low : SEVERITY.high}
+                          sectionColor={sectionId.trust}
                           trend={<KpiTrend current={recAcceptanceRate} previous={num(prev, 'recommendation_acceptance_rate')} higherIsBetter />}
                           tooltip={tip.acceptance}
                           series={series('recommendation_acceptance_rate')}
@@ -1117,17 +1195,21 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                           label="Auto-Apply Trust Coverage"
                           value={fmtPct(autoApplyTrust)}
                           accent={SEVERITY.medium}
+                          sectionColor={sectionId.trust}
                           trend={<KpiTrend current={autoApplyTrust} previous={num(prev, 'auto_apply_trust_coverage')} higherIsBetter />}
                           tooltip={tip.autoApply}
                           series={series('auto_apply_trust_coverage')}
                         />
                       )}
+
+                      {/* Execution reliability */}
                       {remediationFail != null && (
                         <MetricTile
                           label="Remediation Failure Rate"
                           value={fmtPct(remediationFail)}
                           sub="whole-attempt level"
                           accent={remediationFail <= 0.1 ? SEVERITY.low : remediationFail <= 0.25 ? SEVERITY.high : SEVERITY.critical}
+                          sectionColor={sectionId.execution}
                           trend={<KpiTrend current={remediationFail} previous={num(prev, 'remediation_failure_rate')} higherIsBetter={false} pct />}
                           tooltip={tip.remediation}
                           series={series('remediation_failure_rate')}
@@ -1139,6 +1221,7 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                           value={fmtPct(runbookStepFail)}
                           sub="step level — where exactly it breaks"
                           accent={runbookStepFail <= 0.1 ? SEVERITY.low : runbookStepFail <= 0.25 ? SEVERITY.high : SEVERITY.critical}
+                          sectionColor={sectionId.execution}
                           trend={<KpiTrend current={runbookStepFail} previous={num(prev, 'runbook_step_failure_rate')} higherIsBetter={false} pct />}
                           tooltip={tip.runbookStep}
                           series={series('runbook_step_failure_rate')}
@@ -1155,13 +1238,17 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
 
                     {/* Interpretation — substantive narrative per dimension, grounded in
                         actual values and the full-window trend, not a one-line threshold
-                        check that just points at a recommendation. */}
+                        check that just points at a recommendation. Two-column card grid
+                        (not a single running column) so the page's full width gets used;
+                        each card's heading stays neutral white with a small colored status
+                        dot instead of coloring the heading text itself, so severity reads
+                        as a status indicator rather than as emphasis on the label. */}
                     <div style={CARD}>
                       <div style={CARD_HEADER}>
                         <span style={LABEL}>Interpretation</span>
                       </div>
-                      <div style={{ padding: '14px 16px' }} className="space-y-3">
-                        <p style={{ fontSize: '12px', color: '#a0aec0', lineHeight: 1.6 }}>
+                      <div style={{ padding: '16px' }}>
+                        <p style={{ fontSize: '13px', color: '#a0aec0', lineHeight: 1.7, margin: '0 0 14px' }}>
                           This analysis covers <strong style={{ color: '#e8eef5' }}>{health.total_incidents} incident{health.total_incidents !== 1 ? 's' : ''}</strong> over
                           the last 30 days, of which <strong style={{ color: '#e8eef5' }}>{health.resolved_incidents}</strong> have resolved.
                           {kpiSeries.length > 1
@@ -1169,76 +1256,110 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                             : <> This is the {kpiSeries.length === 1 ? 'first' : 'only'} analysis run persisted so far — trend lines will appear once a second run lands.</>}
                         </p>
 
-                        {/* Automation & noise */}
-                        <p style={{ fontSize: '12px', color: '#a0aec0', lineHeight: 1.6 }}>
-                          <strong style={{ color: automationRate >= 0.5 ? SEVERITY.low : automationRate >= 0.3 ? SEVERITY.high : SEVERITY.critical }}>Automation & noise — </strong>
-                          {fmtPct(automationRate)} of resolved incidents closed without a human touching them
-                          ({health.automated_resolutions} of {health.resolved_incidents}), while {fmtPct(falsePositive)} turned out to be noise that shouldn't have paged anyone
-                          ({health.false_positive_count} incident{health.false_positive_count !== 1 ? 's' : ''}).
-                          {(() => {
-                            const t = windowTrend('automation_rate', true)
-                            if (!t) return ' Not enough history yet to say whether this is trending up or down.'
-                            if (t.direction === 'flat') return ' This has held essentially flat across the trend window.'
-                            return ` Across the trend window automation has moved from ${fmtPct(t.first)} to ${fmtPct(t.last)} — ${t.direction === 'improving' ? 'a real improvement' : 'a regression worth investigating'}.`
-                          })()}
-                          {automationRate < 0.3 && ' A rate this low usually means runbook coverage is thin for the event types actually showing up — most incidents are still falling through to a human.'}
-                          {falsePositive > 0.25 && ' A false-positive rate this high is expensive twice over: it burns on-call attention and it dilutes confidence in every other automation metric on this page, since "automated" and "actually needed automating" are not the same thing.'}
-                          {recLink('automation_rate')}
-                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                          {/* Automation & noise */}
+                          <div style={{ ...INNER, padding: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                              <span style={{ width: '9px', height: '9px', borderRadius: '50%', flexShrink: 0, background: automationColor }} />
+                              <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#e8eef5', margin: 0 }}>Automation & noise</h4>
+                            </div>
+                            <p style={{ fontSize: '13px', color: '#a0aec0', lineHeight: 1.7, margin: 0 }}>
+                              {automationRate == null || falsePositive == null ? (
+                                'No incidents have resolved in this window yet — automation and false-positive rates will appear once some have.'
+                              ) : (
+                                <>
+                                  {fmtPct(automationRate)} of resolved incidents closed without a human touching them
+                                  ({health.automated_resolutions} of {health.resolved_incidents}), while {fmtPct(falsePositive)} turned out to be noise that shouldn't have paged anyone
+                                  ({health.false_positive_count} incident{health.false_positive_count !== 1 ? 's' : ''}).
+                                  {(() => {
+                                    const t = windowTrend('automation_rate', true)
+                                    if (!t) return ' Not enough history yet to say whether this is trending up or down.'
+                                    if (t.direction === 'flat') return ' This has held essentially flat across the trend window.'
+                                    return ` Across the trend window automation has moved from ${fmtPct(t.first)} to ${fmtPct(t.last)} — ${t.direction === 'improving' ? 'a real improvement' : 'a regression worth investigating'}.`
+                                  })()}
+                                  {automationRate < 0.3 && ' A rate this low usually means runbook coverage is thin for the event types actually showing up — most incidents are still falling through to a human.'}
+                                  {falsePositive > 0.25 && ' A false-positive rate this high is expensive twice over: it burns on-call attention and it dilutes confidence in every other automation metric on this page, since "automated" and "actually needed automating" are not the same thing.'}
+                                </>
+                              )}
+                              {recLink('automation_rate')}
+                            </p>
+                          </div>
 
-                        {/* Reliability & governance */}
-                        <p style={{ fontSize: '12px', color: '#a0aec0', lineHeight: 1.6 }}>
-                          <strong style={{ color: (mttrP1P2 == null || mttrP1P2 <= 4) ? SEVERITY.low : SEVERITY.critical }}>Reliability & governance — </strong>
-                          {mttrP1P2 != null
-                            ? <>High-priority incidents (P1/P2) take <strong style={{ color: '#e8eef5' }}>{fmtHours(mttrP1P2)}</strong> on average to resolve, against an overall average of {fmtHours(mttrAll)} across every priority.</>
-                            : <>No P1/P2 incidents resolved in this window, so there's no high-priority MTTR signal yet — the overall average sits at {fmtHours(mttrAll)}.</>}
-                          {meanTimeToApproval != null && <> Approvals that do require a human sign-off spend an average of <strong style={{ color: '#e8eef5' }}>{meanTimeToApproval.toFixed(0)} minutes</strong> in the queue before being decided.</>}
-                          {govBypassRate != null && <> {fmtPct(govBypassRate)} of resolved incidents never reached a manual governance gate at all — either a confidence-gate bypass earned the right to skip review, or no policy matched.</>}
-                          {mttrP1P2 != null && mttrP1P2 > 4 && ' That exceeds the 4-hour target for high-priority work; if mean time to approval is also elevated, the bottleneck is more likely the review queue than the remediation itself — worth checking which one is actually driving the number before tightening either.'}
-                          {recLink('mttr_p1p2')}
-                        </p>
+                          {/* Reliability & governance */}
+                          <div style={{ ...INNER, padding: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                              <span style={{ width: '9px', height: '9px', borderRadius: '50%', flexShrink: 0, background: reliabilityColor }} />
+                              <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#e8eef5', margin: 0 }}>Reliability & governance</h4>
+                            </div>
+                            <p style={{ fontSize: '13px', color: '#a0aec0', lineHeight: 1.7, margin: 0 }}>
+                              {mttrP1P2 != null
+                                ? <>High-priority incidents (P1/P2) take <strong style={{ color: '#e8eef5' }}>{fmtHours(mttrP1P2)}</strong> on average to resolve, against an overall average of {fmtHours(mttrAll)} across every priority.</>
+                                : <>No P1/P2 incidents resolved in this window, so there's no high-priority MTTR signal yet — the overall average sits at {fmtHours(mttrAll)}.</>}
+                              {meanTimeToApproval != null && <> Approvals that do require a human sign-off spend an average of <strong style={{ color: '#e8eef5' }}>{meanTimeToApproval.toFixed(0)} minutes</strong> in the queue before being decided.</>}
+                              {govBypassRate != null && <> {fmtPct(govBypassRate)} of resolved incidents never reached a manual governance gate at all — either a confidence-gate bypass earned the right to skip review, or no policy matched.</>}
+                              {mttrP1P2 != null && mttrP1P2 > 4 && ' That exceeds the 4-hour target for high-priority work; if mean time to approval is also elevated, the bottleneck is more likely the review queue than the remediation itself — worth checking which one is actually driving the number before tightening either.'}
+                              {recLink('mttr_p1p2')}
+                            </p>
+                          </div>
 
-                        {/* Data quality */}
-                        <p style={{ fontSize: '12px', color: '#a0aec0', lineHeight: 1.6 }}>
-                          <strong style={{ color: (cmdbCoverage == null || cmdbCoverage >= 70) ? SEVERITY.low : SEVERITY.high }}>Data quality — </strong>
-                          {cmdbCoverage != null
-                            ? <>Risk scoring is backed by an average CMDB confidence of <strong style={{ color: '#e8eef5' }}>{cmdbCoverage}%</strong> across resolved incidents.</>
-                            : <>No CMDB confidence data is available for this window yet.</>}
-                          {qualificationRate != null && <> Upstream of that, <strong style={{ color: '#e8eef5' }}>{fmtPct(qualificationRate)}</strong> of raw monitoring events were promoted to a tracked incident at all — the rest were filtered before ever reaching a workflow.</>}
-                          {cmdbCoverage != null && cmdbCoverage < 70 && ' Coverage below 70% means a meaningful share of risk scores are leaning on pessimistic factor defaults rather than real configuration-item data, which tends to push more incidents into manual review than the underlying risk actually warrants.'}
-                          {qualificationRate != null && qualificationRate < 0.3 && ' A qualification rate this low is worth a second look — either upstream monitoring is very noisy, or the qualification threshold is filtering out events that should have become incidents.'}
-                          {recLink('cmdb_coverage')}
-                        </p>
+                          {/* Data quality */}
+                          <div style={{ ...INNER, padding: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                              <span style={{ width: '9px', height: '9px', borderRadius: '50%', flexShrink: 0, background: dataQualityColor }} />
+                              <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#e8eef5', margin: 0 }}>Data quality</h4>
+                            </div>
+                            <p style={{ fontSize: '13px', color: '#a0aec0', lineHeight: 1.7, margin: 0 }}>
+                              {cmdbCoverage != null
+                                ? <>Risk scoring is backed by an average CMDB confidence of <strong style={{ color: '#e8eef5' }}>{cmdbCoverage}%</strong> across resolved incidents.</>
+                                : <>No CMDB confidence data is available for this window yet.</>}
+                              {qualificationRate != null && <> Upstream of that, <strong style={{ color: '#e8eef5' }}>{fmtPct(qualificationRate)}</strong> of raw monitoring events were promoted to a tracked incident at all — the rest were filtered before ever reaching a workflow.</>}
+                              {cmdbCoverage != null && cmdbCoverage < 70 && ' Coverage below 70% means a meaningful share of risk scores are leaning on pessimistic factor defaults rather than real configuration-item data, which tends to push more incidents into manual review than the underlying risk actually warrants.'}
+                              {qualificationRate != null && qualificationRate < 0.3 && ' A qualification rate this low is worth a second look — either upstream monitoring is very noisy, or the qualification threshold is filtering out events that should have become incidents.'}
+                              {recLink('cmdb_coverage')}
+                            </p>
+                          </div>
 
-                        {/* Trust & calibration */}
-                        {(recAcceptanceRate != null || autoApplyTrust != null) && (
-                          <p style={{ fontSize: '12px', color: '#a0aec0', lineHeight: 1.6 }}>
-                            <strong style={{ color: SEVERITY.medium }}>Trust & calibration — </strong>
-                            {recAcceptanceRate != null && <>Operators have accepted <strong style={{ color: '#e8eef5' }}>{fmtPct(recAcceptanceRate)}</strong> of decided Platform Intelligence recommendations in this window{recAcceptanceRate >= 0.6 ? ', a strong sign the tuning engine’s suggestions are well-calibrated to what this environment actually needs' : ', which is on the low side — worth checking whether rejected recommendations share a common pattern (wrong domain, too aggressive a change) the engine should be learning from'}.</>}
-                            {autoApplyTrust != null && <> <strong style={{ color: '#e8eef5' }}>{fmtPct(autoApplyTrust)}</strong> of tunable parameters have earned enough consecutive verified-good cycles to qualify for auto-apply, meaning the rest still require a human to review every single cycle.</>}
-                          </p>
-                        )}
+                          {/* Trust & calibration */}
+                          {(recAcceptanceRate != null || autoApplyTrust != null) && (
+                            <div style={{ ...INNER, padding: '14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                <span style={{ width: '9px', height: '9px', borderRadius: '50%', flexShrink: 0, background: SEVERITY.medium }} />
+                                <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#e8eef5', margin: 0 }}>Trust & calibration</h4>
+                              </div>
+                              <p style={{ fontSize: '13px', color: '#a0aec0', lineHeight: 1.7, margin: 0 }}>
+                                {recAcceptanceRate != null && <>Operators have accepted <strong style={{ color: '#e8eef5' }}>{fmtPct(recAcceptanceRate)}</strong> of decided Platform Intelligence recommendations in this window{recAcceptanceRate >= 0.6 ? ', a strong sign the tuning engine’s suggestions are well-calibrated to what this environment actually needs' : ', which is on the low side — worth checking whether rejected recommendations share a common pattern (wrong domain, too aggressive a change) the engine should be learning from'}.</>}
+                                {autoApplyTrust != null && <> <strong style={{ color: '#e8eef5' }}>{fmtPct(autoApplyTrust)}</strong> of tunable parameters have earned enough consecutive verified-good cycles to qualify for auto-apply, meaning the rest still require a human to review every single cycle.</>}
+                              </p>
+                            </div>
+                          )}
 
-                        {/* Execution reliability */}
-                        {(remediationFail != null || runbookStepFail != null) && (
-                          <p style={{ fontSize: '12px', color: '#a0aec0', lineHeight: 1.6 }}>
-                            <strong style={{ color: SEVERITY.high }}>Execution reliability — </strong>
-                            {remediationFail != null && <><strong style={{ color: '#e8eef5' }}>{fmtPct(remediationFail)}</strong> of whole remediation attempts did not succeed.</>}
-                            {runbookStepFail != null && <> At the step level, <strong style={{ color: '#e8eef5' }}>{fmtPct(runbookStepFail)}</strong> of individual runbook steps failed or timed out — this is the more actionable number since it points at which step broke rather than just that the attempt as a whole did.</>}
-                            {Object.keys(runbookStepCats).length > 0 && (
-                              <> The most common failure categor{Object.keys(runbookStepCats).length === 1 ? 'y is' : 'ies are'}: {Object.entries(runbookStepCats).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([cat, n]) => `${cat} (${n})`).join(', ')} — check Run History for the specific runbook and step.</>
-                            )}
-                            {runbookStepFail != null && runbookStepFail > 0.25 && ' A step failure rate above 25% usually means one specific step in one specific runbook is doing most of the damage, not that automation broadly is unreliable — worth isolating before tuning anything else.'}
-                          </p>
-                        )}
+                          {/* Execution reliability */}
+                          {(remediationFail != null || runbookStepFail != null) && (
+                            <div style={{ ...INNER, padding: '14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                <span style={{ width: '9px', height: '9px', borderRadius: '50%', flexShrink: 0, background: SEVERITY.high }} />
+                                <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#e8eef5', margin: 0 }}>Execution reliability</h4>
+                              </div>
+                              <p style={{ fontSize: '13px', color: '#a0aec0', lineHeight: 1.7, margin: 0 }}>
+                                {remediationFail != null && <><strong style={{ color: '#e8eef5' }}>{fmtPct(remediationFail)}</strong> of whole remediation attempts did not succeed.</>}
+                                {runbookStepFail != null && <> At the step level, <strong style={{ color: '#e8eef5' }}>{fmtPct(runbookStepFail)}</strong> of individual runbook steps failed or timed out — this is the more actionable number since it points at which step broke rather than just that the attempt as a whole did.</>}
+                                {Object.keys(runbookStepCats).length > 0 && (
+                                  <> The most common failure categor{Object.keys(runbookStepCats).length === 1 ? 'y is' : 'ies are'}: {Object.entries(runbookStepCats).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([cat, n]) => `${cat} (${n})`).join(', ')} — check Run History for the specific runbook and step.</>
+                                )}
+                                {runbookStepFail != null && runbookStepFail > 0.25 && ' A step failure rate above 25% usually means one specific step in one specific runbook is doing most of the damage, not that automation broadly is unreliable — worth isolating before tuning anything else.'}
+                              </p>
+                            </div>
+                          )}
+                        </div>
 
-                        {automationRate >= 0.3
+                        {automationRate != null && falsePositive != null
+                          && automationRate >= 0.3
                           && falsePositive <= 0.2
                           && (mttrP1P2 == null || mttrP1P2 <= 4)
                           && (cmdbCoverage == null || cmdbCoverage >= 70)
                           && (remediationFail == null || remediationFail <= 0.1)
                           && (runbookStepFail == null || runbookStepFail <= 0.1) && (
-                          <p style={{ fontSize: '12px', color: SEVERITY.low, lineHeight: 1.6 }}>
+                          <p style={{ fontSize: '13px', color: SEVERITY.low, lineHeight: 1.7, margin: '14px 0 0' }}>
                             ✓ Every dimension above is within its healthy range for this window — no tuning action is currently indicated.
                           </p>
                         )}
@@ -1269,7 +1390,7 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
             runs.map(run => {
               const isExpanded = expandedRunId === run.id
               const sourceColor: Record<string, string> = {
-                llm: '#818cf8', rules: '#3b82f6', healthy: '#10b981',
+                llm: '#5b6aa0', rules: '#4070a0', healthy: '#4a8a63',
                 suppressed: '#6b7280', insufficient_data: '#6b7280',
               }
               return (
@@ -1360,7 +1481,7 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
               }}>
                 <div style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>
+                    <span style={{ fontSize: '10px', color: '#4a8a63', fontWeight: 600 }}>
                       ✓ Applied
                     </span>
                     <span style={{ fontSize: '10px', color: '#4b5563' }}>
@@ -1379,7 +1500,7 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
                       <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>
                         <span style={{ color: '#6b7280' }}>{JSON.stringify(entry.previous_value)}</span>
                         {' → '}
-                        <span style={{ color: '#10b981', fontWeight: 600 }}>{JSON.stringify(entry.new_value)}</span>
+                        <span style={{ color: '#4a8a63', fontWeight: 600 }}>{JSON.stringify(entry.new_value)}</span>
                       </p>
                     </div>
                   </div>

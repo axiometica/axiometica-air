@@ -574,9 +574,9 @@ export interface PlatformHealthMetrics {
   resolved_incidents: number
   automated_resolutions: number
   manual_resolutions: number
-  automation_rate: number
+  automation_rate: number | null
   false_positive_count: number
-  false_positive_rate: number
+  false_positive_rate: number | null
   avg_mttr_hours: number | null
   p1p2_avg_mttr_hours: number | null
   pending_recommendations: number
