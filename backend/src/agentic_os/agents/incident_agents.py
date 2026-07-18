@@ -3173,14 +3173,21 @@ class ToolRegistryAgent(Agent):
             try:
                 from agentic_os.db.database import SessionLocal
                 from agentic_os.db.models import WatcherRegistrationModel
-                _watcher_name = watcher_base.rstrip("/").split("/")[-1].split(":")[0]
                 _db = SessionLocal()
                 try:
-                    _row = _db.query(WatcherRegistrationModel).filter_by(
-                        watcher_name=_watcher_name
+                    # Primary: match by kill_api_url hostname (K8s watcher URL differs from name).
+                    # The watcher registers kill_api_url like "http://watcher.ns.svc...:8080"
+                    # which the backend can match directly, avoiding fragile URL-to-name parsing.
+                    _row = _db.query(WatcherRegistrationModel).filter(
+                        WatcherRegistrationModel.kill_api_url.like(f"%{watcher_base.split('//')[1].split('/')[0]}%")
+                        if "//" in watcher_base else False
                     ).first()
+                    # Fallback: any registered kubernetes adapter — there should only be one.
+                    if not _row:
+                        _row = _db.query(WatcherRegistrationModel).filter_by(
+                            adapter_mode="kubernetes"
+                        ).first()
                     if _row and getattr(_row, "targets", None):
-                        # targets JSON may carry a k8s_namespace key
                         _targets = _row.targets if isinstance(_row.targets, dict) else {}
                         _ns = _targets.get("k8s_namespace", "default")
                 finally:

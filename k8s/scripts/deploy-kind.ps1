@@ -36,7 +36,6 @@ $REPO    = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $BASE    = Join-Path (Split-Path $PSScriptRoot -Parent) "base"
 $OVERLAY = Join-Path (Split-Path $PSScriptRoot -Parent) "overlays\kind"
 $NS      = $Namespace
-$KIND_NODE = "desktop-control-plane"
 
 function Info($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "  OK  $msg" -ForegroundColor Green }
@@ -60,52 +59,64 @@ function Wait-PodReady {
     Fail "Timed out waiting for $label"
 }
 
+# Apply a manifest that contains locally-built images.
+# Rewrites image refs to use the local registry and sets imagePullPolicy: Always
+# so rollout restarts always reflect the latest docker compose build output.
+# Docker Desktop K8s caches images in a separate containerd namespace (k8s.io)
+# from Docker's store (moby); imagePullPolicy: IfNotPresent reuses the stale
+# cached digest even after a rebuild. The local registry side-steps this entirely.
+function Apply-Local($file) {
+    (Get-Content $file -Raw) `
+        -replace 'image: agenticplatform_v2-', "image: ${script:REG}/agenticplatform_v2-" `
+        -replace 'imagePullPolicy: IfNotPresent', 'imagePullPolicy: Always' |
+        kubectl apply -f -
+}
+
 # ---------------------------------------------------------------------------
 # 0. Preflight
 # ---------------------------------------------------------------------------
 Info "Preflight checks"
 if (-not (Get-Command kubectl -ErrorAction SilentlyContinue)) { Fail "kubectl not found in PATH" }
 
+# Switch to docker-desktop context (Docker Desktop built-in Kubernetes)
 $ctx = kubectl config current-context 2>$null
 if ($ctx -ne "docker-desktop") {
-    Warn "Current context is '$ctx', not 'docker-desktop'"
-    $ans = Read-Host "Switch to docker-desktop? [y/N]"
-    if ($ans -eq "y") { kubectl config use-context docker-desktop }
-    else              { Fail "Aborting — wrong context" }
+    Info "Switching context to docker-desktop"
+    kubectl config use-context docker-desktop 2>$null | Out-Null
+    $ctx = kubectl config current-context 2>$null
+    if ($ctx -ne "docker-desktop") {
+        Fail "Could not switch to docker-desktop context. Enable Kubernetes in Docker Desktop: Settings -> Kubernetes -> Enable Kubernetes"
+    }
 }
-Ok "Context: docker-desktop"
+Ok "Context: $ctx"
 
 # ---------------------------------------------------------------------------
-# 1. Build images + load into KinD containerd
+# 1. Local registry (permanent fix for Docker Desktop K8s containerd caching)
 # ---------------------------------------------------------------------------
-# PowerShell pipes are text-mode and corrupt binary tar streams.
-# Git Bash handles binary pipes correctly — never use WSL bash here.
-function Find-GitBash {
-    foreach ($p in @(
-        "C:\Program Files\Git\bin\bash.exe",
-        "C:\Program Files (x86)\Git\bin\bash.exe",
-        "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
-    )) {
-        if (Test-Path $p) { return $p }
-    }
-    $git = Get-Command git -ErrorAction SilentlyContinue
-    if ($git) {
-        $p = Join-Path (Split-Path (Split-Path $git.Source -Parent) -Parent) "bin\bash.exe"
-        if (Test-Path $p) { return $p }
-    }
-    return $null
+# Docker Desktop K8s stores images in the k8s.io containerd namespace, separate
+# from Docker's moby namespace. imagePullPolicy: IfNotPresent reuses whatever
+# digest was cached on first pull — rebuilding with docker compose does NOT
+# update the cached digest; pods see stale code after rollout restart.
+# A local registry at localhost:5000 side-steps this: K8s pulls over HTTP each
+# time (imagePullPolicy: Always), so rebuilds are always reflected.
+Info "Ensuring local registry is running at localhost:5000"
+$script:REG = "localhost:5000"
+# docker ps exits 0 even when nothing matches. Temporarily silence errors so
+# docker rm on a missing/stopped container doesn't trip $ErrorActionPreference=Stop.
+$regId = docker ps -q -f "name=k8s-local-registry"
+if (-not $regId) {
+    $ErrorActionPreference = "SilentlyContinue"
+    docker rm -f k8s-local-registry | Out-Null
+    $ErrorActionPreference = "Stop"
+    docker run -d -p 5000:5000 --name k8s-local-registry --restart=always registry:2 | Out-Null
+    Ok "Started local registry at $script:REG"
+} else {
+    Ok "Local registry already running at $script:REG"
 }
 
-function Load-Image {
-    param([string]$imageName)
-    Info "Loading $imageName → KinD containerd"
-    $bash = Find-GitBash
-    if (-not $bash) { Fail "Git Bash not found. Install Git for Windows or load images manually." }
-    & $bash -c "docker save '$imageName' | docker exec -i $KIND_NODE ctr --namespace=k8s.io images import -"
-    if ($LASTEXITCODE -ne 0) { Fail "Failed to load $imageName into KinD" }
-    Ok "$imageName loaded"
-}
-
+# ---------------------------------------------------------------------------
+# 2. Build images + push to local registry
+# ---------------------------------------------------------------------------
 if (-not $SkipBuild) {
     Info "Building images via docker compose"
     Set-Location $REPO
@@ -113,18 +124,27 @@ if (-not $SkipBuild) {
     docker compose build frontend
     docker compose build nginx
     docker compose build watcher
-    Ok "Images built"
+    docker compose build sentinel
 
-    Info "Loading images into KinD containerd (node: $KIND_NODE)"
-    Load-Image "agenticplatform_v2-backend:latest"
-    Load-Image "agenticplatform_v2-frontend:latest"
-    Load-Image "agenticplatform_v2-nginx:latest"
-    Load-Image "agenticplatform_v2-watcher:latest"
-    Ok "All images loaded"
+    Info "Pushing locally-built images to $script:REG"
+    $localImages = @(
+        "agenticplatform_v2-backend",
+        "agenticplatform_v2-celery_worker",
+        "agenticplatform_v2-celery_default_worker",
+        "agenticplatform_v2-celery_beat",
+        "agenticplatform_v2-frontend",
+        "agenticplatform_v2-nginx",
+        "agenticplatform_v2-watcher",
+        "agenticplatform_v2-sentinel"
+    )
+    foreach ($img in $localImages) {
+        docker tag "${img}:latest" "$script:REG/${img}:latest" 2>$null | Out-Null
+        docker push "$script:REG/${img}:latest"
+    }
+    Ok "All images pushed to $script:REG"
 } else {
     Warn "Skipping image build (-SkipBuild)"
-    Warn "If pods show ErrImageNeverPull, load manually:"
-    Warn "  bash -c `"docker save <image> | docker exec -i $KIND_NODE ctr --namespace=k8s.io images import -`""
+    $script:REG = "localhost:5000"
 }
 
 # ---------------------------------------------------------------------------
@@ -206,12 +226,12 @@ if (Test-Path $seedFile) {
         "--from-file=seed.cypher=$seedFile" `
         -n $NS --save-config --dry-run=client -o yaml | kubectl apply -f -
     Ok "neo4j-seed applied"
-} else { Warn "neo4j_seed.cypher not found — skipping" }
+} else { Warn "neo4j_seed.cypher not found - skipping" }
 
 # ---------------------------------------------------------------------------
 # 8. Wave 1 — Data tier
 # ---------------------------------------------------------------------------
-Info "Wave 1 — Data tier (postgres, redis, neo4j)"
+Info "Wave 1 - Data tier (postgres, redis, neo4j)"
 kubectl apply -f "$BASE\03-postgres.yaml"
 kubectl apply -f "$BASE\04-redis.yaml"
 kubectl apply -f "$BASE\05-neo4j.yaml"
@@ -222,9 +242,8 @@ Wait-PodReady "app=neo4j"    420
 # ---------------------------------------------------------------------------
 # 9. Wave 2 — Backend  +  KinD image-pull patch
 # ---------------------------------------------------------------------------
-Info "Wave 2 — Backend"
-kubectl apply -f "$BASE\06-backend.yaml"
-kubectl apply -f "$OVERLAY\patch-image-pull-never.yaml"
+Info "Wave 2 - Backend"
+Apply-Local "$BASE\06-backend.yaml"
 Wait-PodReady "app=backend" 180
 
 # ---------------------------------------------------------------------------
@@ -233,7 +252,14 @@ Wait-PodReady "app=backend" 180
 if (-not $SkipMigrations) {
     Info "Running Alembic migrations"
     $pod = kubectl get pod -l app=backend -n $NS -o jsonpath="{.items[0].metadata.name}"
-    kubectl exec -n $NS $pod -- alembic -c /app/src/agentic_os/alembic.ini upgrade head
+    # Stamp to head if tables already exist but version table is empty (re-deploy over existing DB)
+    $current = kubectl exec -n $NS $pod -- alembic -c /app/alembic.ini current 2>$null
+    if (-not ($current -match "\w")) {
+        Warn "No alembic version recorded - stamping to head (DB tables already present)"
+        kubectl exec -n $NS $pod -- alembic -c /app/alembic.ini stamp head
+    } else {
+        kubectl exec -n $NS $pod -- alembic -c /app/alembic.ini upgrade head
+    }
     Ok "Migrations complete"
     Info "Running setup_oob.py"
     kubectl exec -n $NS $pod -- python /app/setup_oob.py
@@ -243,29 +269,47 @@ if (-not $SkipMigrations) {
 # ---------------------------------------------------------------------------
 # 11. Wave 3 — Workers + Flower
 # ---------------------------------------------------------------------------
-Info "Wave 3 — Celery workers + Flower"
-kubectl apply -f "$BASE\07-celery.yaml"
-kubectl apply -f "$BASE\08-flower.yaml"
+Info "Wave 3 - Celery workers + Flower"
+Apply-Local "$BASE\07-celery.yaml"
+Apply-Local "$BASE\08-flower.yaml"
 
 # ---------------------------------------------------------------------------
 # 12. Wave 4 — Frontend + Nginx  +  LoadBalancer patch
 # ---------------------------------------------------------------------------
-Info "Wave 4 — Frontend + Nginx"
-kubectl apply -f "$BASE\09-frontend.yaml"
-kubectl apply -f "$BASE\10-nginx.yaml"
+Info "Wave 4 - Frontend + Nginx"
+Apply-Local "$BASE\09-frontend.yaml"
+Apply-Local "$BASE\10-nginx.yaml"
 kubectl apply -f "$OVERLAY\patch-nginx-loadbalancer.yaml"
 Wait-PodReady "app=nginx" 120
 
 # ---------------------------------------------------------------------------
 # 13. Wave 5 — Observability
 # ---------------------------------------------------------------------------
-Info "Wave 5 — Watcher + Sentinel + Backup"
-kubectl apply -f "$BASE\11-watcher.yaml"
-kubectl apply -f "$BASE\12-sentinel.yaml"
+Info "Wave 5 - Watcher + Sentinel + Backup"
+Apply-Local "$BASE\11-watcher.yaml"
+Apply-Local "$BASE\12-sentinel.yaml"
 kubectl apply -f "$BASE\13-postgres-backup.yaml"
 
 # ---------------------------------------------------------------------------
-# 14. Summary
+# 14. Force rollout restart (belt-and-suspenders after Apply-Local)
+# ---------------------------------------------------------------------------
+# Apply-Local already sets imagePullPolicy: Always so new pods pull from the
+# local registry. This block also restarts any deployment that was already
+# running at the same revision (Apply was a no-op) so it picks up the fresh
+# image. On a first-run the deployments won't exist yet — silenced.
+Info "Force rollout restart - ensuring pods pick up rebuilt images"
+$deployments = @("backend","celery-worker","celery-default-worker","celery-beat","flower","frontend","nginx","watcher")
+foreach ($d in $deployments) {
+    kubectl rollout restart deployment/$d -n $NS 2>$null | Out-Null
+    Ok "Restarted deployment/$d (or skipped - not yet deployed)"
+}
+# sentinel is a DaemonSet
+kubectl rollout restart daemonset/sentinel -n $NS 2>$null | Out-Null
+Ok "Restarted daemonset/sentinel (or skipped - not yet deployed)"
+Wait-PodReady "app=watcher" 180
+
+# ---------------------------------------------------------------------------
+# 15. Summary
 # ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Cyan

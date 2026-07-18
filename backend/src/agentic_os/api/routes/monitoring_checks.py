@@ -58,6 +58,7 @@ class WatcherRegistration(BaseModel):
     adapter_mode: str = "docker"   # Execution adapter in use
     watcher_version: Optional[str] = None  # Watcher agent version string
     metrics_history: Optional[list] = None  # Rolling [{ts,cpu,mem,disk,alerts}] buffer
+    targets: Optional[dict] = None  # Adapter-specific target metadata (e.g. k8s_namespace)
 
 
 class ExternalCheckCreate(BaseModel):
@@ -207,6 +208,8 @@ def register_watcher(
             row.environment = payload.environment
         if payload.adapter_mode:
             row.adapter_mode = payload.adapter_mode
+        if payload.targets is not None:
+            row.targets = payload.targets
         if payload.watcher_version:
             row.watcher_version = payload.watcher_version
         if payload.metrics_history is not None:
@@ -238,6 +241,7 @@ def register_watcher(
             adapter_mode=payload.adapter_mode,
             watcher_version=payload.watcher_version,
             metrics_history=payload.metrics_history or [],
+            targets=payload.targets,
             registered_at=now,
             last_seen=now,
             approved_at=now if initial_status == "approved" else None,

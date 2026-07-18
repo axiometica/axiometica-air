@@ -35,7 +35,7 @@ spec:
       - name: backend
         image: agenticplatform_v2-backend:latest
         imagePullPolicy: IfNotPresent
-        command: ["uvicorn", "agentic_os.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+        command: ["uvicorn", "agentic_os.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
         env:
         - name: POSTGRES_PASSWORD
           valueFrom:
@@ -125,13 +125,15 @@ spec:
             port: 8000
           initialDelaySeconds: 60
           periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
         resources:
           requests:
             cpu: 250m
-            memory: 256Mi
+            memory: 512Mi
           limits:
             cpu: "2"
-            memory: 1Gi
+            memory: 2Gi
       terminationGracePeriodSeconds: 30
       volumes:
       - name: backups

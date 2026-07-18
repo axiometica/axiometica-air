@@ -2,6 +2,12 @@
 # Requires privileged + hostPID for eBPF kernel tracing.
 # Note: some managed K8s flavours (EKS, GKE Autopilot) restrict privileged pods;
 # check cluster policy before deploying.
+#
+# The sentinel image wraps bpftrace in a Python HTTP server (sentinel_http.py).
+# It exposes port 9090 so the watcher can query syscall counts without docker exec:
+#   GET  /metrics  — latest 5-second syscall counts {process: count}
+#   GET  /health   — readiness probe
+#   POST /kill?process=<name>  — pkill on the host (hostPID enables this)
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -19,13 +25,15 @@ spec:
       hostPID: true
       containers:
       - name: sentinel
-        image: quay.io/iovisor/bpftrace:latest
-        command:
-        - bpftrace
-        - -f
-        - json
-        - -e
-        - "tracepoint:raw_syscalls:sys_enter { @[comm] = count(); }"
+        image: agenticplatform_v2-sentinel:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: SENTINEL_PORT
+          value: "9090"
         securityContext:
           privileged: true
         volumeMounts:
@@ -36,6 +44,24 @@ spec:
         - name: modules
           mountPath: /lib/modules
           readOnly: true
+        readinessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - "import urllib.request; urllib.request.urlopen('http://localhost:9090/health', timeout=3)"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - "import urllib.request; urllib.request.urlopen('http://localhost:9090/health', timeout=3)"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          failureThreshold: 3
         resources:
           requests:
             cpu: 50m
@@ -53,3 +79,25 @@ spec:
       - name: modules
         hostPath:
           path: /lib/modules
+---
+# ClusterIP Service — lets the watcher reach the sentinel via DNS
+# (sentinel-metrics.agentic-platform.svc.cluster.local:9090).
+# On single-node clusters this always routes to the one sentinel pod.
+# Multi-node: pin watcher and sentinel to the same node with nodeAffinity
+# if per-node isolation is required.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-metrics
+  namespace: agentic-platform
+  labels:
+    app: sentinel
+spec:
+  selector:
+    app: sentinel
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  type: ClusterIP

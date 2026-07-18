@@ -214,14 +214,17 @@ class KubernetesAdapter(ExecutionAdapter):
 
     def get_metrics(self, target: str) -> TargetMetrics:
         """
-        Collect Pod CPU and memory from the metrics-server API.
-        Falls back to kubectl exec top if the metrics API is unavailable.
+        Collect Pod CPU, memory, and disk metrics.
+
+        CPU + memory: metrics-server API first, kubectl exec top/free as fallback.
+        Disk: always via kubectl exec df (metrics-server does not report disk usage).
         """
         m = TargetMetrics(target=target)
 
+        # ── CPU + Memory ──────────────────────────────────────────────────────
+        got_cpu_mem = False
         if self.use_metrics_server:
             try:
-                # metrics-server exposes: /apis/metrics.k8s.io/v1beta1/namespaces/<ns>/pods/<pod>
                 raw = self._custom_objects.get_namespaced_custom_object(
                     group="metrics.k8s.io", version="v1beta1",
                     namespace=self.namespace,
@@ -232,17 +235,11 @@ class KubernetesAdapter(ExecutionAdapter):
                 total_mem_ki = 0  # kibibytes
                 for c in containers:
                     usage = c.get("usage", {})
-                    cpu_str = usage.get("cpu", "0n")
-                    mem_str = usage.get("memory", "0Ki")
-                    total_cpu_n  += _parse_cpu_nano(cpu_str)
-                    total_mem_ki += _parse_mem_ki(mem_str)
+                    total_cpu_n  += _parse_cpu_nano(usage.get("cpu",    "0n"))
+                    total_mem_ki += _parse_mem_ki(  usage.get("memory", "0Ki"))
 
-                # CPU: convert nanocores to % assuming 1 core = 1e9 nanocores
-                # Request-relative % requires knowing the pod's requested CPU.
-                # Approximate: show as millicores / 1000 * 100 (% of 1 core).
-                m.cpu_percent     = round(total_cpu_n / 1e7, 2)    # % of 1 core
-                m.memory_used_mb  = round(total_mem_ki / 1024, 1)
-                # Derive memory_percent from pod resource limits
+                m.cpu_percent    = round(total_cpu_n / 1e7, 2)   # % of 1 core
+                m.memory_used_mb = round(total_mem_ki / 1024, 1)
                 try:
                     pod_spec = self._core_v1.read_namespaced_pod(target, self.namespace)
                     total_limit_ki = 0
@@ -257,27 +254,45 @@ class KubernetesAdapter(ExecutionAdapter):
                 except Exception as exc:
                     logger.debug(f"[K8s] limit lookup failed for {target}: {exc}")
                 m.extra = {"source": "metrics-server",
-                           "cpu_nanocores": total_cpu_n,
-                           "memory_ki": total_mem_ki}
-                return m
+                           "cpu_nanocores": total_cpu_n, "memory_ki": total_mem_ki}
+                got_cpu_mem = True
             except Exception as exc:
                 logger.debug(f"[K8s] metrics-server unavailable for {target}: {exc}")
 
-        # Fallback: kubectl exec top
-        result = self.exec(target,
-            "top -bn1 2>/dev/null | awk '/Cpu/{print $2}'; "
-            "free -m 2>/dev/null | awk 'NR==2{printf \"%.1f %.0f %.0f\",$3/$2*100,$3,$2}'",
-            timeout=12)
-        if result.success:
-            lines = result.stdout.splitlines()
-            try: m.cpu_percent = float(lines[0].replace("%", ""))
-            except Exception: pass
+        if not got_cpu_mem:
+            # Fallback: exec top + free inside the pod
+            result = self.exec(target,
+                "top -bn1 2>/dev/null | awk '/Cpu/{print $2}'; "
+                "free -m 2>/dev/null | awk 'NR==2{printf \"%.1f %.0f %.0f\",$3/$2*100,$3,$2}'",
+                timeout=12)
+            if result.success:
+                lines = result.stdout.splitlines()
+                try: m.cpu_percent = float(lines[0].replace("%", ""))
+                except Exception: pass
+                try:
+                    parts = lines[1].split()
+                    m.memory_percent  = float(parts[0])
+                    m.memory_used_mb  = float(parts[1])
+                    m.memory_total_mb = float(parts[2])
+                except Exception: pass
+
+        # ── Disk ─────────────────────────────────────────────────────────────
+        # metrics-server has no disk data; read the container root fs via df.
+        disk_result = self.exec(
+            target,
+            "df / 2>/dev/null | awk 'NR==2{gsub(/%/,\"\",$5); print $5, $3, $2}'",
+            timeout=8,
+        )
+        if disk_result.success and disk_result.stdout:
             try:
-                parts = lines[1].split()
-                m.memory_percent  = float(parts[0])
-                m.memory_used_mb  = float(parts[1])
-                m.memory_total_mb = float(parts[2])
-            except Exception: pass
+                parts = disk_result.stdout.split()
+                m.disk_percent = float(parts[0])
+                if len(parts) >= 3:
+                    m.disk_used_gb  = round(int(parts[1]) / 1024 / 1024, 2)
+                    m.disk_total_gb = round(int(parts[2]) / 1024 / 1024, 2)
+            except Exception as exc:
+                logger.debug(f"[K8s] disk parse failed for {target}: {exc}")
+
         return m
 
     # ── Health ────────────────────────────────────────────────────────────────

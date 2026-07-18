@@ -60,6 +60,7 @@ declare -A IMAGES=(
     [frontend]="${REGISTRY_PREFIX}/frontend:${IMAGE_TAG}"
     [nginx]="${REGISTRY_PREFIX}/nginx:${IMAGE_TAG}"
     [watcher]="${REGISTRY_PREFIX}/watcher:${IMAGE_TAG}"
+    [sentinel]="${REGISTRY_PREFIX}/sentinel:${IMAGE_TAG}"
 )
 # The backend image is also used for celery workers
 CELERY_IMAGE="${REGISTRY_PREFIX}/backend:${IMAGE_TAG}"
@@ -122,6 +123,7 @@ else
     docker compose build frontend
     docker compose build nginx
     docker compose build watcher
+    docker compose build sentinel
     ok "Images built"
 
     if [[ -n "${ACR_NAME:-}" ]]; then
@@ -135,8 +137,9 @@ else
         [frontend]="agenticplatform_v2-frontend:latest"
         [nginx]="agenticplatform_v2-nginx:latest"
         [watcher]="agenticplatform_v2-watcher:latest"
+        [sentinel]="agenticplatform_v2-sentinel:latest"
     )
-    for svc in backend frontend nginx watcher; do
+    for svc in backend frontend nginx watcher sentinel; do
         local_image="${COMPOSE_NAMES[$svc]}"
         remote_image="${IMAGES[$svc]}"
         docker tag "$local_image" "$remote_image"
@@ -261,7 +264,7 @@ else
     POD=$(kubectl get pod -l app=backend -n "$NAMESPACE" \
           -o jsonpath='{.items[0].metadata.name}')
     kubectl exec -n "$NAMESPACE" "$POD" -- \
-        alembic -c /app/src/agentic_os/alembic.ini upgrade head
+        alembic -c /app/alembic.ini upgrade head
     ok "Migrations complete"
 
     info "Running setup_oob.py"
@@ -305,6 +308,8 @@ info "Wave 5 — Watcher + Sentinel + Backup"
 kubectl apply -f "$BASE_DIR/11-watcher.yaml"
 kubectl set image deployment/watcher watcher="${IMAGES[watcher]}" -n "$NAMESPACE"
 kubectl apply -f "$BASE_DIR/12-sentinel.yaml"
+# sentinel is a DaemonSet — use rollout restart to pick up the new registry image
+kubectl rollout restart daemonset/sentinel -n "$NAMESPACE" 2>/dev/null || true
 kubectl apply -f "$BASE_DIR/13-postgres-backup.yaml"
 
 # ---------------------------------------------------------------------------

@@ -65,7 +65,11 @@ spec:
         - name: WATCHER_KILL_API_URL
           value: http://watcher.agentic-platform.svc.cluster.local:8080
         - name: SENTINEL_CONTAINER
-          value: ""
+          value: "sentinel_senses"
+        - name: SENTINEL_METRICS_URL
+          value: http://sentinel-metrics.agentic-platform.svc.cluster.local:9090/metrics
+        - name: SENTINEL_KILL_URL
+          value: http://sentinel-metrics.agentic-platform.svc.cluster.local:9090/kill
         - name: WATCHER_DISCOVERY_ENABLED
           value: "true"
         - name: WATCHER_POLL_INTERVAL

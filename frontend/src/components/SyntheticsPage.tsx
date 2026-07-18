@@ -729,7 +729,7 @@ function generateScriptDeterministically(
   const L: string[] = []
   const p = (line: string) => L.push(line)
 
-  p('import sys, os, time, re')
+  p('import sys, os, time, re, datetime')
   p('')
   p('try:')
   p('    import httpx')
@@ -754,6 +754,8 @@ function generateScriptDeterministically(
 
   p(`    total_pages = ${pages.length}`)
   p('    total_pages_passed = 0')
+  p('    _script_start = time.time()')
+  p(`    print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Synthetic check started  (${pages.length} page${pages.length === 1 ? '' : 's'})")`)
   p('    client = httpx.Client(verify=False, timeout=8, follow_redirects=True)')
   p('')
 
@@ -764,7 +766,7 @@ function generateScriptDeterministically(
     // regardless of its URL — not every site's login endpoint is /api/auth/login.
     const loginReq = page.requests.find(r => r.isCredentialSubmit)
 
-    p(`    print(f"Start Page ${i + 1}: ${pyEscape(page.name)}")`)
+    p(`    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Start Page ${i + 1}: ${pyEscape(page.name)}")`)
     p('    try:')
     p('        page_start = time.time()')
     p('        page_responses = []')
@@ -842,11 +844,12 @@ function generateScriptDeterministically(
     p('')
   }
 
+  p(`    _total_ms = int((time.time() - _script_start) * 1000)`)
   p(`    print("-" * 40)`)
   p(`    if total_pages_passed == total_pages:`)
-  p(`        print(f"RESULT : PASS -- {total_pages_passed}/{total_pages} pages passed")`)
+  p(`        print(f"RESULT : PASS -- {total_pages_passed}/{total_pages} pages passed  (total {_total_ms}ms)")`)
   p(`    else:`)
-  p(`        print(f"RESULT : FAIL -- {total_pages_passed}/{total_pages} pages passed")`)
+  p(`        print(f"RESULT : FAIL -- {total_pages_passed}/{total_pages} pages passed  (total {_total_ms}ms)")`)
   p(`        sys.exit(1)`)
   p('')
   p('')

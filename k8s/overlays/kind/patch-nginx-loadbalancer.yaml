@@ -1,5 +1,5 @@
-# KinD exposes the nginx Service as LoadBalancer so Docker Desktop maps it to localhost.
-# Cloud clusters use the Ingress controller instead (overlays/aks/ingress.yaml).
+# Docker Desktop Kubernetes maps LoadBalancer services to localhost automatically.
+# No nodePort or MetalLB needed — https://localhost reaches the cluster directly.
 apiVersion: v1
 kind: Service
 metadata:
@@ -7,3 +7,14 @@ metadata:
   namespace: agentic-platform
 spec:
   type: LoadBalancer
+  selector:
+    app: nginx
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 443
+    protocol: TCP

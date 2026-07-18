@@ -512,6 +512,12 @@ class WatcherService:
             "watcher_version": WATCHER_VERSION,
             "metrics_history": self._metrics_buffer,
         }
+        # For K8s adapters, include the namespace so the backend can substitute
+        # {namespace} correctly in command templates (e.g. kubectl exec {pod} -n {namespace}).
+        if self.adapter.adapter_name == "kubernetes":
+            payload["targets"] = {
+                "k8s_namespace": getattr(self.adapter, "namespace", "agentic-platform")
+            }
         # Include stable UUID on heartbeats so the platform can look us up by id,
         # not by name — prevents a name collision from stealing our registration.
         if self._watcher_id:
@@ -628,19 +634,24 @@ class WatcherService:
 
     def get_all_containers(self) -> List[str]:
         """
-        Get list of all running Docker containers for cluster-wide monitoring.
-        Excludes monitoring and system containers (sentinel_senses, watcher_brain).
-
-        Returns:
-            List of container names
+        Return workload names for cluster-wide monitoring.
+        Docker: docker ps (excludes sentinel/watcher).
+        K8s:    adapter.list_targets() (pod names from the K8s API).
         """
+        if self.adapter.adapter_name == "kubernetes":
+            try:
+                targets = self.adapter.list_targets()
+                return targets if targets else []
+            except Exception as exc:
+                logger.warning(f"⚠️  [CLUSTER] K8s list_targets failed: {exc}")
+                return []
+
         try:
             result = subprocess.run(
                 ["docker", "ps", "--format", "{{.Names}}"],
                 capture_output=True, text=True, timeout=10
             )
             containers = [c.strip() for c in result.stdout.splitlines() if c.strip()]
-            # CRITICAL FIX: Exclude monitoring containers from anomaly detection
             excluded = {'sentinel_senses', 'watcher_brain'}
             monitored = [c for c in containers if c not in excluded]
             return monitored if monitored else []
@@ -650,14 +661,27 @@ class WatcherService:
 
     def get_kernel_telemetry(self, container: str = None) -> Optional[Dict[str, int]]:
         """
-        Get syscall telemetry from any container via docker exec.
+        Get syscall telemetry from the sentinel.
 
-        Args:
-            container: Container name to monitor. If None, uses sentinel_container
-
-        Returns:
-            Dict mapping process names to syscall counts, or None on error
+        Docker mode: docker exec into the sentinel container and run bpftrace for 5 s.
+        K8s mode:    GET /metrics from the sentinel HTTP service (sentinel_http.py keeps
+                     bpftrace running continuously and serves the latest 5-second snapshot).
         """
+        if self.adapter.adapter_name == "kubernetes":
+            sentinel_url = os.getenv(
+                "SENTINEL_METRICS_URL",
+                "http://sentinel-metrics.agentic-platform.svc.cluster.local:9090/metrics",
+            )
+            try:
+                import requests as _req
+                resp = _req.get(sentinel_url, timeout=6)
+                resp.raise_for_status()
+                return resp.json()
+            except Exception as exc:
+                logger.debug(f"⚠️  [TELEMETRY] Sentinel HTTP unreachable: {exc}")
+                return None
+
+        # Docker path — run bpftrace on demand for a fresh 5-second window
         target = container or self.sentinel_container
         cmd = [
             "docker", "exec", target, "bpftrace", "-f", "json", "-e",
@@ -890,30 +914,45 @@ class WatcherService:
         best_count: int = 0
         fallback_container: Optional[str] = None  # first container with returncode 0
 
+        use_adapter = self.adapter.adapter_name != "docker"
+
         for container in containers:
             try:
-                # First try procps-style pgrep -c (count mode, not supported by busybox/Alpine)
-                result = subprocess.run(
-                    ["docker", "exec", container, "pgrep", "-c", "-x", process_name],
-                    capture_output=True, text=True, timeout=5
-                )
-                if result.returncode == 0:
-                    # procps pgrep -c succeeded — parse the count directly
-                    try:
-                        count = int(result.stdout.strip())
-                    except ValueError:
-                        count = 1
+                if use_adapter:
+                    # K8s / SSH / vCenter — route through the execution adapter so
+                    # the right transport (kubectl exec, ssh, etc.) is used instead
+                    # of Docker CLI, which is not available / irrelevant in these modes.
+                    r1 = self.adapter.exec(container, f"pgrep -c -x {process_name}", timeout=5)
+                    if r1.success and r1.stdout.strip().isdigit():
+                        count = int(r1.stdout.strip())
+                    else:
+                        r2 = self.adapter.exec(container, f"pgrep -x {process_name}", timeout=5)
+                        if not r2.success:
+                            continue
+                        pids = [p for p in r2.stdout.strip().splitlines() if p.strip()]
+                        count = len(pids) if pids else 1
                 else:
-                    # Either "not found" (exit 1) or busybox/Alpine (no -c flag, also exit 1).
-                    # Fall back to plain pgrep -x which busybox DOES support; count output lines.
-                    result2 = subprocess.run(
-                        ["docker", "exec", container, "pgrep", "-x", process_name],
+                    # Docker mode — use docker exec directly (fastest path)
+                    # First try procps-style pgrep -c (count mode, not supported by busybox/Alpine)
+                    result = subprocess.run(
+                        ["docker", "exec", container, "pgrep", "-c", "-x", process_name],
                         capture_output=True, text=True, timeout=5
                     )
-                    if result2.returncode != 0:
-                        continue  # genuinely not found in this container
-                    pids = [p for p in result2.stdout.strip().splitlines() if p.strip()]
-                    count = len(pids) if pids else 1
+                    if result.returncode == 0:
+                        try:
+                            count = int(result.stdout.strip())
+                        except ValueError:
+                            count = 1
+                    else:
+                        # Either "not found" or busybox/Alpine (no -c flag).
+                        result2 = subprocess.run(
+                            ["docker", "exec", container, "pgrep", "-x", process_name],
+                            capture_output=True, text=True, timeout=5
+                        )
+                        if result2.returncode != 0:
+                            continue
+                        pids = [p for p in result2.stdout.strip().splitlines() if p.strip()]
+                        count = len(pids) if pids else 1
 
                 logger.debug(
                     f"[PROCESS HUNT] '{process_name}' in '{container}': {count} PIDs"
@@ -2044,6 +2083,20 @@ class WatcherService:
         """
         logger.info(f"🔧 [REMEDIATION] Terminating process '{process}'")
         try:
+            if self.adapter.adapter_name == "kubernetes":
+                import requests as _req
+                kill_url = os.getenv(
+                    "SENTINEL_KILL_URL",
+                    "http://sentinel-metrics.agentic-platform.svc.cluster.local:9090/kill",
+                )
+                resp = _req.post(f"{kill_url}?process={process}", timeout=10)
+                if resp.status_code == 200:
+                    logger.info(f"✓ [REMEDIATION SUCCESS] Process '{process}' terminated via sentinel HTTP")
+                    return True
+                else:
+                    logger.error(f"❌ [REMEDIATION FAILED] sentinel /kill returned {resp.status_code}: {resp.text}")
+                    return False
+
             cmd = ["docker", "exec", self.sentinel_container, "pkill", "-9", process]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:

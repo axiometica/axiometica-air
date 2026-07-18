@@ -117,12 +117,13 @@ services:
           cpus: '1.0'
           memory: 1g
     healthcheck:
-      # Without APOC, Neo4j 5 typically finishes startup in well under 30s;
-      # start_period kept generous to absorb slower hosts.
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7474/"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
+      # Probe the Bolt port (7687) — it opens ~11s before the HTTP interface (7474)
+      # so the backend's depends_on gate clears sooner. bash+/dev/tcp is available
+      # in the neo4j:5 image without needing netcat.
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/7687' 2>/dev/null && echo ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
       start_period: 30s
     networks:
       - agentic_os_network
@@ -430,23 +431,28 @@ services:
 
   # Sentinel - eBPF Kernel Monitor (Senses)
   sentinel:
-    image: quay.io/iovisor/bpftrace:latest
+    build:
+      context: ./sentinel
+      dockerfile: Dockerfile
+    image: agenticplatform_v2-sentinel:latest
     container_name: sentinel_senses
-    restart: unless-stopped                                          # Fix 1
+    restart: unless-stopped
     privileged: true
     pid: "host"          # Share host PID namespace so pkill can reach any process
+    ports:
+      - "9090:9090"      # Sentinel metrics HTTP — useful for local debugging
     volumes:
       - /sys:/sys
       - /dev:/dev
       - /lib/modules:/lib/modules:ro
-    command: bpftrace -f json -e 'tracepoint:raw_syscalls:sys_enter { @[comm] = count(); }'
     networks:
       - agentic_os_network
     healthcheck:
-      test: ["CMD", "echo", "alive"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9090/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   # Watcher - Brain (AI-driven incident orchestration with Docker stats)
   watcher:
