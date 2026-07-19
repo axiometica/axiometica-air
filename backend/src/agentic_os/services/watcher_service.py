@@ -93,6 +93,9 @@ class WatcherService:
         self.watcher_name = watcher_name
         self.poll_interval = poll_interval
         self.anomaly_threshold = anomaly_threshold
+        # Cache last known container per process — handles short-lived bursting
+        # processes that exit before _find_process_container can run pgrep.
+        self._process_container_cache: dict = {}
 
         # ── Environment detection ─────────────────────────────────────────────
         from agentic_os.services.environment_detector import detect_environment, ENV_LABELS
@@ -831,6 +834,9 @@ class WatcherService:
         "MuninnPageCache", "neo4j",
         # Redis / Postgres internal
         "redis-server", "postgres",
+        # Kubernetes infrastructure — high baseline syscall rate is normal
+        "kubelet", "kube-apiserver", "kube-controller", "kube-scheduler",
+        "kube-proxy", "etcd", "coredns",
     })
 
     # Prefix-based exclusions for processes with dynamic suffixes like runc:[2:INIT]
@@ -839,6 +845,7 @@ class WatcherService:
         "containerd-shim-", # containerd-shim-runc-v2 etc.
         "Relay(",           # Docker Relay(N) port-forwarding workers
         "docker-entrypoi",  # docker-entrypoint.sh (15-char comm truncation)
+        "kube-",            # any kube-* K8s infrastructure process
     )
 
     def detect_anomaly(self) -> Tuple[bool, Optional[str], int, Optional[str]]:
@@ -887,8 +894,23 @@ class WatcherService:
         logger.info(f"📍 [SYSCALL] Top user process: {top_proc} ({count} syscalls/5s), threshold={self.anomaly_threshold}")
 
         if count > self.anomaly_threshold:
-            # Identify which container the process belongs to
-            container = self._find_process_container(top_proc) or self.sentinel_container
+            # Identify which container the process belongs to.
+            # Bursting processes (e.g. dd with sleep intervals) may have already exited
+            # by the time bpftrace returns. Retry pgrep every 300ms for up to 3s to
+            # catch the process during its next burst, then fall back to the cache,
+            # then sentinel_container as last resort.
+            import time as _time
+            container = None
+            for _attempt in range(10):
+                container = self._find_process_container(top_proc)
+                if container:
+                    self._process_container_cache[top_proc] = container
+                    break
+                _time.sleep(0.3)
+            if not container:
+                container = self._process_container_cache.get(top_proc) or self.sentinel_container
+                if top_proc in self._process_container_cache:
+                    logger.info(f"[PROCESS HUNT] '{top_proc}' not found live — using cached container '{container}'")
             logger.warning(
                 f"🚨 [SYSCALL ANOMALY] '{top_proc}' in '{container}': "
                 f"{count} syscalls/5s (threshold: {self.anomaly_threshold})"
@@ -917,6 +939,10 @@ class WatcherService:
         use_adapter = self.adapter.adapter_name != "docker"
 
         for container in containers:
+            # Sentinel uses hostPID=true and sees all node processes — skip it
+            # so it never gets falsely attributed as the source container.
+            if container.startswith("sentinel"):
+                continue
             try:
                 if use_adapter:
                     # K8s / SSH / vCenter — route through the execution adapter so
