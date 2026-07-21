@@ -1080,7 +1080,7 @@ function Toggle({
           checked ? 'translate-x-4' : 'translate-x-0'
         }`} />
       </div>
-      <span className="text-xs" style={{ color: '#a0aec0' }}>{label}</span>
+      <span className="text-xs" style={{ color: checked ? '#e8eef5' : '#4b5563' }}>{label}</span>
     </label>
   )
 }
