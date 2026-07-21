@@ -281,11 +281,12 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
               {CATEGORY_OPTIONS.map(opt => (
                 <label
                   key={opt.value}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all ${
-                    category === opt.value
-                      ? 'bg-slate-700 border-slate-500 text-gray-100'
-                      : 'bg-slate-800/50 border-slate-700 text-gray-400 hover:border-slate-600'
-                  }`}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all"
+                  style={{
+                    backgroundColor: category === opt.value ? '#252c3c' : '#1a1f2e',
+                    borderColor: category === opt.value ? '#5b6aa0' : '#3d4557',
+                    color: category === opt.value ? '#e8eef5' : '#94a3b8',
+                  }}
                 >
                   <input
                     type="radio"
@@ -314,8 +315,9 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
                         ? n === 1 ? 'bg-success-900/40 border-success-600 text-success-400'
                           : n === 2 ? 'bg-warning-900/40 border-warning-600 text-warning-400'
                           : 'bg-critical-900/40 border-critical-600 text-critical-400'
-                        : 'bg-slate-800 border-slate-700 text-gray-500 hover:border-slate-600'
+                        : 'border-slate-700 text-gray-500 hover:border-slate-600'
                     }`}
+                    style={{ backgroundColor: blastRadius !== n ? '#1a1f2e' : undefined }}
                   >
                     {n === 1 ? 'Low' : n === 2 ? 'Med' : 'High'}
                   </button>
@@ -355,7 +357,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
           />
         </Field>
         {command && /\{[\w]+\}/.test(command) && (
-          <div className="mt-1 text-xs px-3 py-2 rounded-lg" style={{ background: '#0d1117', border: '1px solid #21262d', color: '#6e7681' }}>
+          <div className="mt-1 text-xs px-3 py-2 rounded-lg" style={{ background: '#1a1f2e', border: '1px solid #3d4557', color: '#6e7681' }}>
             <span style={{ color: '#7a8ba3' }}>Preview: </span>
             <code style={{ color: '#7ee787' }}>{command}</code>
             <span className="ml-2 opacity-60">— placeholders resolved at execution</span>
@@ -458,8 +460,8 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
                       className="flex items-start gap-2 px-3 py-1.5 rounded-md text-xs"
                       style={{
                         marginLeft: '148px',
-                        background: '#0d1117',
-                        border: '1px solid #21262d',
+                        background: '#1a1f2e',
+                        border: '1px solid #3d4557',
                       }}
                     >
                       <span style={{ color: '#4a5568', flexShrink: 0, marginTop: '1px' }}>↳</span>
@@ -548,7 +550,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
           {parameters.map((param, idx) => (
             <div
               key={idx}
-              className="grid gap-2 items-center p-2 rounded-lg bg-slate-800/50 border border-slate-700/60"
+              className="grid gap-2 items-center p-2 rounded-lg" style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557' }}
               style={{ gridTemplateColumns: '1.4fr 90px 60px 120px 1.2fr 32px' }}
             >
               {/* Name */}
@@ -683,7 +685,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
               {outputFields.map((f, idx) => (
                 <div
                   key={idx}
-                  className="grid gap-2 items-center p-2 rounded-lg bg-slate-800/50 border border-slate-700/60"
+                  className="grid gap-2 items-center p-2 rounded-lg" style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557' }}
                   style={{ gridTemplateColumns: '1.2fr 90px 1.6fr 100px 32px' }}
                 >
                   <input
@@ -878,7 +880,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
 
             {/* ── Test panel ──────────────────────────────────────────────── */}
             {!isNew && (
-              <div className="mt-5 p-4 rounded-lg bg-slate-800/60 border border-slate-700">
+              <div className="mt-5 p-4 rounded-lg" style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557' }}>
                 <div className="flex items-center gap-2 mb-3">
                   <IconTestPipe size={14} className="text-info-400" />
                   <span className="text-xs font-semibold text-gray-300">Test Process Name</span>
@@ -963,7 +965,7 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <div className="mb-6 p-5 rounded-xl bg-slate-800/40 border border-slate-700/60">
+    <div className="mb-6 p-5 rounded-xl" style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557' }}>
       <div className="flex items-center gap-3 mb-4">
         <div className="flex-1">
           <h3 className="text-sm font-semibold" style={{ color: '#e8eef5' }}>{title}</h3>
