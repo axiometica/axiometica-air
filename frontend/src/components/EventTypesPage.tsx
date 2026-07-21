@@ -98,7 +98,7 @@ function EventTypeModal({ initial, domains, onSave, onClose }: ModalProps) {
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
-      <div className="w-full max-w-lg rounded-xl" style={{ background: '#111827', border: '1px solid #1e2a3a' }}>
+      <div className="w-full max-w-lg rounded-xl" style={{ background: '#1a1f2e', border: '1px solid #3d4557' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid #1e2a3a' }}>
           <div className="flex items-center gap-2">
@@ -226,7 +226,7 @@ function EventTypeModal({ initial, domains, onSave, onClose }: ModalProps) {
 function DeleteConfirm({ code, onConfirm, onCancel }: { code: string; onConfirm: () => void; onCancel: () => void }) {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
-      <div className="w-full max-w-sm rounded-xl p-6 space-y-4" style={{ background: '#111827', border: '1px solid #3d1010' }}>
+      <div className="w-full max-w-sm rounded-xl p-6 space-y-4" style={{ background: '#1a1f2e', border: '1px solid rgba(239,68,68,0.4)' }}>
         <div className="flex items-center gap-3">
           <IconAlertTriangle size={20} style={{ color: '#f43f5e' }} />
           <span className="font-semibold" style={{ color: '#e2e8f0' }}>Delete event type?</span>
@@ -392,10 +392,10 @@ export default function EventTypesPage() {
           {sortedGroups.map(([cat, types]) => {
             const accent = domainColor(cat)
             return (
-              <div key={cat} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e2a3a' }}>
+              <div key={cat} className="rounded-xl overflow-hidden" style={{ border: '1px solid #3d4557' }}>
                 {/* Category header */}
                 <div className="flex items-center gap-3 px-4 py-2.5"
-                  style={{ background: '#0d1018', borderBottom: '1px solid #1e2a3a' }}>
+                  style={{ background: '#252c3c', borderBottom: '1px solid #3d4557' }}>
                   <span style={{
                     fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase',
                     padding: '2px 8px', borderRadius: 4, background: accent + '22', color: accent,
@@ -406,11 +406,11 @@ export default function EventTypesPage() {
                 </div>
 
                 {/* Rows */}
-                <div style={{ background: '#111827' }}>
+                <div style={{ background: '#1a1f2e' }}>
                   {types.map((et, idx) => (
                     <div key={et.code}
-                      className="flex items-center gap-4 px-4 py-3 hover:bg-slate-800/50 transition-colors"
-                      style={{ borderTop: idx > 0 ? '1px solid #1a2030' : undefined }}
+                      className="flex items-center gap-4 px-4 py-3 hover:bg-slate-700/30 transition-colors"
+                      style={{ borderTop: idx > 0 ? '1px solid #3d4557' : undefined }}
                     >
                       {/* Enabled toggle */}
                       <button
@@ -453,7 +453,7 @@ export default function EventTypesPage() {
 
                       {/* Status badge */}
                       {!et.enabled && (
-                        <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#1e2a3a', color: '#475569' }}>
+                        <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#252c3c', color: '#475569' }}>
                           disabled
                         </span>
                       )}

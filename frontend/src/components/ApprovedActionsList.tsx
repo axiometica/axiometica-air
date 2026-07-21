@@ -294,7 +294,7 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
                   <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#7a8ba3' }}>
                     {meta.label}
                   </h3>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-gray-400 font-medium">
+                  <span className="text-xs px-2 py-0.5 rounded-full text-gray-400 font-medium" style={{ backgroundColor: '#252c3c' }}>
                     {grouped[cat].length}
                   </span>
                   <div className="flex-1 border-t border-slate-700/50 ml-2" />
@@ -311,18 +311,19 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
                       <div
                         key={action.action_id}
                         className={`group relative flex items-center gap-4 px-4 py-3 rounded-lg border-l-2 transition-all
-                          bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600
                           ${meta.border}
                           ${!action.enabled ? 'opacity-50' : ''}
                         `}
                         style={{
+                          backgroundColor: '#1a1f2e',
+                          border: '1px solid #3d4557',
                           animation: 'staggerFadeIn 0.3s ease-out forwards',
                           animationDelay: `${idx * 30}ms`,
                           opacity: 0,
                         }}
                       >
                         {/* Tool name pill */}
-                        <code className="text-xs font-mono px-2 py-0.5 rounded bg-slate-700 text-gray-300 flex-shrink-0 w-48 truncate">
+                        <code className="text-xs font-mono px-2 py-0.5 rounded text-gray-300 flex-shrink-0 w-48 truncate" style={{ backgroundColor: '#252c3c' }}>
                           {action.tool_name}
                         </code>
 
@@ -338,7 +339,7 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
                               </span>
                             )}
                             {action.process_rules && (
-                              <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-slate-700 border border-slate-600 text-gray-400">
+                              <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded text-gray-400" style={{ backgroundColor: '#252c3c', border: '1px solid #3d4557' }}>
                                 <IconShield size={10} />
                                 {action.process_rules.filter(r => r.allow).length} allow /&nbsp;
                                 {action.process_rules.filter(r => !r.allow).length} deny rules
@@ -349,7 +350,7 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
                             {action.description}
                           </p>
                           {action.command && (
-                            <p className="text-xs font-mono mt-1 truncate px-1.5 py-0.5 rounded" style={{ background: '#0d1117', color: '#7ee787', border: '1px solid #21262d' }}>
+                            <p className="text-xs font-mono mt-1 truncate px-1.5 py-0.5 rounded" style={{ background: '#252c3c', color: '#7ee787', border: '1px solid #3d4557' }}>
                               $ {action.command}
                             </p>
                           )}
