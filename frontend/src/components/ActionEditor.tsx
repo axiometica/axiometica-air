@@ -550,8 +550,8 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
           {parameters.map((param, idx) => (
             <div
               key={idx}
-              className="grid gap-2 items-center p-2 rounded-lg" style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557' }}
-              style={{ gridTemplateColumns: '1.4fr 90px 60px 120px 1.2fr 32px' }}
+              className="grid gap-2 items-center p-2 rounded-lg"
+              style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557', gridTemplateColumns: '1.4fr 90px 60px 120px 1.2fr 32px' }}
             >
               {/* Name */}
               <input
@@ -685,8 +685,8 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
               {outputFields.map((f, idx) => (
                 <div
                   key={idx}
-                  className="grid gap-2 items-center p-2 rounded-lg" style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557' }}
-                  style={{ gridTemplateColumns: '1.2fr 90px 1.6fr 100px 32px' }}
+                  className="grid gap-2 items-center p-2 rounded-lg"
+                  style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557', gridTemplateColumns: '1.2fr 90px 1.6fr 100px 32px' }}
                 >
                   <input
                     value={f.field}
