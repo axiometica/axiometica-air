@@ -855,7 +855,7 @@ export default function PlatformIntelligencePage({ darkMode: _darkMode }: Props)
           scrolling back to the top first. */}
       <div style={{
         display: 'flex', gap: '4px', borderBottom: '1px solid #2a3145', paddingBottom: '0',
-        position: 'sticky', top: '64px', zIndex: 40, backgroundColor: '#020617',
+        position: 'sticky', top: '64px', zIndex: 40, backgroundColor: '#1a1f2e',
       }}>
         {tabs.map(t => (
           <button
