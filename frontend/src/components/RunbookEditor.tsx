@@ -686,8 +686,8 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <div className="metric-card">
-      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-700/50">
+    <div className="rounded-xl p-5" style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557' }}>
+      <div className="flex items-center gap-3 mb-4 pb-3" style={{ borderBottom: '1px solid #3d4557' }}>
         <span className="text-info-500">{icon}</span>
         <div className="flex-1">
           <h3 className="text-sm font-semibold" style={{ color: '#e8eef5' }}>{title}</h3>
