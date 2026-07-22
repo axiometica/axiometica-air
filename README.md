@@ -87,22 +87,22 @@ Watch your entire infrastructure with **Sentinel** (kernel-level eBPF monitoring
 
 | | | |
 |---|---|---|
-| ![Incident Detail](./docs/screenshots/Screenshot%20%284%29.png) | ![Timeline View](./docs/screenshots/Screenshot%20%285%29.png) | ![CMDB Relations](./docs/screenshots/Screenshot%20%286%29.png) |
-| Incident Details | Timeline & History | CMDB Graph |
+| ![Incident Overview](./docs/screenshots/Screenshot%20%285%29.png) | ![AI Insights](./docs/screenshots/Screenshot%20%284%29.png) | ![CMDB Topology](./docs/screenshots/Screenshot%20%2820%29.png) |
+| Incident Overview | AI Insights & Root Cause | CMDB Topology |
 
 ### Runbook Management & Automation
 
 | | | |
 |---|---|---|
-| ![Runbook Library](./docs/screenshots/Screenshot%20%289%29.png) | ![Execution Flow](./docs/screenshots/Screenshot%20%2810%29.png) | ![Approval Queue](./docs/screenshots/Screenshot%20%2811%29.png) |
-| Runbook Library | Execution Flow | Approval Gates |
+| ![Runbook Editor](./docs/screenshots/runbookEditor.png) | ![Live Execution](./docs/screenshots/AI%20Generated%20Runbook2.png) | ![Approval Queue](./docs/screenshots/Screenshot%20%289%29.png) |
+| Visual Runbook Editor | Live Test Execution | Approval Queue |
 
 ### Administrative Controls
 
 | | | |
 |---|---|---|
-| ![Admin Settings](./docs/screenshots/Screenshot%20%2820%29.png) | ![User Management](./docs/screenshots/Screenshot%20%2821%29.png) | ![Policy Config](./docs/screenshots/Screenshot%20%2822%29.png) |
-| Settings Panel | User Management | Governance Policies |
+| ![System Admin](./docs/screenshots/Screenshot%20%2828%29.png) | ![User Management](./docs/screenshots/Screenshot%20%2830%29.png) | ![Governance Policies](./docs/screenshots/Screenshot%20%2813%29.png) |
+| System Administration | User Management | Governance Policies |
 
 **Full screenshot gallery:** [`docs/screenshots/`](./docs/screenshots/) (42 images)
 
