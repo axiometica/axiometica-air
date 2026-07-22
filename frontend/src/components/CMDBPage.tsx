@@ -1069,7 +1069,16 @@ const CMDBPage: React.FC<CMDBPageProps> = ({ darkMode }) => {
             <input
               list="cmdb-service-list"
               value={serviceInput}
-              onChange={e => setServiceInput(e.target.value)}
+              onChange={e => {
+                const v = e.target.value
+                setServiceInput(v)
+                // Datalist selection fires onChange with the exact name — commit
+                // the filter immediately so the graph refreshes without a blur.
+                if (serviceNamesRef.current.includes(v.trim())) {
+                  setServiceFilter(v.trim())
+                  setSelectedNode(null)
+                }
+              }}
               onKeyDown={e => {
                 if (e.key === 'Enter') { setServiceFilter(serviceInput.trim()); setSelectedNode(null) }
                 if (e.key === 'Escape') { setServiceInput(''); setServiceFilter(''); setSelectedNode(null) }
