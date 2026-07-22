@@ -112,17 +112,17 @@
 .cmdb-create-btn {
   height: 26px;
   padding: 0 10px;
-  background: var(--accent);
-  border: none;
+  background: #252c3c;
+  border: 1px solid rgba(64, 112, 160, 0.40);
   border-radius: 6px;
-  color: #fff;
+  color: #a0c4e8;
   font-size: 0.74rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
 }
-.cmdb-create-btn:hover { opacity: 0.9; }
+.cmdb-create-btn:hover { background: #2d3748; border-color: rgba(64, 112, 160, 0.65); color: #c0d8f0; }
 
 .cmdb-list-meta {
   padding: 4px 12px;
@@ -354,15 +354,15 @@
 .cmdb-btn-edit {
   height: 30px;
   padding: 0 14px;
-  background: var(--accent);
-  border: none;
+  background: #252c3c;
+  border: 1px solid rgba(64, 112, 160, 0.40);
   border-radius: 6px;
-  color: #fff;
+  color: #a0c4e8;
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
 }
-.cmdb-btn-edit:hover { opacity: 0.9; }
+.cmdb-btn-edit:hover { background: #2d3748; border-color: rgba(64, 112, 160, 0.65); color: #c0d8f0; }
 
 .cmdb-btn-save {
   height: 30px;

@@ -301,9 +301,9 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
               <button onClick={handleSaveConfig} disabled={loading || !testPassed}
                 title={!testPassed ? 'Test the connection first' : ''}
                 style={{ flex: 1, padding: '8px 12px', borderRadius: 8, fontWeight: 600, fontSize: '0.85rem',
-                  backgroundColor: testPassed ? '#2563eb' : '#1a1f2e',
-                  color: testPassed ? '#ffffff' : '#4a5568',
-                  border: testPassed ? 'none' : '1px solid #3d4557',
+                  backgroundColor: testPassed ? '#252c3c' : '#1a1f2e',
+                  color: testPassed ? '#a0c4e8' : '#4a5568',
+                  border: testPassed ? '1px solid rgba(64, 112, 160, 0.40)' : '1px solid #3d4557',
                   opacity: loading ? 0.7 : 1, cursor: loading || !testPassed ? 'not-allowed' : 'pointer' }}>
                 {loading ? 'Saving…' : 'Save Configuration'}
               </button>

@@ -194,18 +194,20 @@
   margin-top: 0.5rem;
   padding: 0.65rem 1.5rem;
   width: 100%;
-  background: #2563eb;
-  border: none;
+  background: #252c3c;
+  border: 1px solid rgba(64, 112, 160, 0.40);
   border-radius: 8px;
-  color: #fff;
+  color: #a0c4e8;
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 150ms, opacity 150ms, transform 100ms;
+  transition: background 150ms, border-color 150ms, color 150ms, opacity 150ms, transform 100ms;
 }
 
 .cf-submit:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: #2d3748;
+  border-color: rgba(64, 112, 160, 0.65);
+  color: #c0d8f0;
 }
 
 .cf-submit:active:not(:disabled) {

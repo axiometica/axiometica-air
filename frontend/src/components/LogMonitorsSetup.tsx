@@ -293,7 +293,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
         </div>
         {!showForm && (
           <button
-            style={{ ...compactBtn, backgroundColor: DS.accent, border: 'none', color: '#fff' }}
+            style={{ ...compactBtn, backgroundColor: '#252c3c', border: '1px solid rgba(64, 112, 160, 0.40)', color: '#a0c4e8' }}
             onClick={e => { e.stopPropagation(); setShowForm(true); setExpanded(true) }}
           >
             <IconPlus size={12} /> Add Monitor

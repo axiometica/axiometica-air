@@ -154,8 +154,8 @@ function ChangePasswordModal({ darkMode, onClose }: ChangePasswordModalProps) {
               <button onClick={handleSubmit} disabled={saving || !currentPw || !newPw || !confirmPw} style={{
                 padding: '0.5rem 1.1rem', borderRadius: '8px', cursor: saving ? 'not-allowed' : 'pointer',
                 fontWeight: 600, fontSize: '0.85rem',
-                background: saving ? '#4f46e5aa' : '#6366f1',
-                border: 'none', color: '#fff', opacity: (!currentPw || !newPw || !confirmPw) ? 0.5 : 1,
+                background: '#252c3c',
+                border: '1px solid rgba(64, 112, 160, 0.40)', color: '#a0c4e8', opacity: (saving || !currentPw || !newPw || !confirmPw) ? 0.5 : 1,
               }}>
                 {saving ? 'Saving…' : 'Update Password'}
               </button>

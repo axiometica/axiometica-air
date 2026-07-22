@@ -549,10 +549,12 @@ export default function AdminPanel({ darkMode = true }: AdminPanelProps) {
             <button
               onClick={handleRunBackup}
               disabled={backupLoading || backupStatus?.last_backup_status === 'in_progress'}
-              className="px-6 py-2 rounded-lg transition-colors text-white flex items-center gap-2"
+              className="px-6 py-2 rounded-lg transition-colors flex items-center gap-2"
               style={{
-                backgroundColor: (backupLoading || backupStatus?.last_backup_status === 'in_progress')
-                  ? '#4a5568' : '#3b82f6',
+                backgroundColor: '#252c3c',
+                border: '1px solid rgba(64, 112, 160, 0.40)',
+                color: '#a0c4e8',
+                opacity: (backupLoading || backupStatus?.last_backup_status === 'in_progress') ? 0.5 : 1,
                 cursor: (backupLoading || backupStatus?.last_backup_status === 'in_progress')
                   ? 'not-allowed' : 'pointer',
               }}

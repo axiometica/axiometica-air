@@ -96,7 +96,7 @@ function ModalActions({ onClose, onSubmit, saving, submitLabel }: { onClose: () 
     <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
       <button type="button" onClick={onClose} style={{ background: 'transparent', border: '1px solid #2d3748', borderRadius: '6px', color: '#94a3b8', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.875rem' }}>Cancel</button>
       <button type={onSubmit ? 'button' : 'submit'} onClick={onSubmit} disabled={saving}
-        style={{ background: '#6366f1', border: 'none', borderRadius: '6px', color: '#fff', padding: '0.5rem 1.25rem', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontWeight: 600, opacity: saving ? 0.7 : 1 }}>
+        style={{ background: '#252c3c', border: '1px solid rgba(64, 112, 160, 0.40)', borderRadius: '6px', color: '#a0c4e8', padding: '0.5rem 1.25rem', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontWeight: 600, opacity: saving ? 0.7 : 1 }}>
         {saving ? 'Saving…' : submitLabel}
       </button>
     </div>
@@ -307,7 +307,7 @@ function ApiKeyModal({ principal, onClose, onGenerated }: { principal: Principal
             <button onClick={copy} style={{ background: copied ? '#10b981' : '#2d3748', border: 'none', borderRadius: '6px', color: '#e2e8f0', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.875rem', transition: 'background 0.15s' }}>
               {copied ? 'Copied!' : 'Copy Key'}
             </button>
-            <button onClick={onClose} style={{ background: '#6366f1', border: 'none', borderRadius: '6px', color: '#fff', padding: '0.5rem 1.25rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600 }}>Done</button>
+            <button onClick={onClose} style={{ background: '#252c3c', border: '1px solid rgba(64, 112, 160, 0.40)', borderRadius: '6px', color: '#a0c4e8', padding: '0.5rem 1.25rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600 }}>Done</button>
           </div>
         </>}
       </div>

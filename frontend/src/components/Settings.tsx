@@ -42,9 +42,9 @@ const inputStyle: React.CSSProperties = {
 const primaryBtn: React.CSSProperties = {
   padding: '7px 18px',
   borderRadius: 7,
-  border: 'none',
-  backgroundColor: DS.accent,
-  color: '#fff',
+  border: '1px solid rgba(64, 112, 160, 0.40)',
+  backgroundColor: '#252c3c',
+  color: '#a0c4e8',
   fontSize: '0.82rem',
   fontWeight: 600,
   cursor: 'pointer',
@@ -1409,8 +1409,8 @@ export default function Settings() {
                               }}
                               title="Add override"
                               style={{
-                                background: DS.accent, border: 'none', cursor: 'pointer',
-                                color: '#fff', fontSize: '16px', borderRadius: 5,
+                                background: '#252c3c', border: '1px solid rgba(64, 112, 160, 0.40)', cursor: 'pointer',
+                                color: '#a0c4e8', fontSize: '16px', borderRadius: 5,
                                 padding: '2px', lineHeight: 1, width: 28, height: 28,
                               }}>+</button>
                           </div>
