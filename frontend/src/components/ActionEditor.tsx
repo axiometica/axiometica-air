@@ -215,7 +215,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
   const isIntrusive = category === 'remediation_intrusive'
 
   return (
-    <div className="page-transition-enter max-w-3xl">
+    <div className="page-transition-enter max-w-4xl mx-auto">
 
       {/* Back + header */}
       <div className="flex items-center gap-3 mb-8">
