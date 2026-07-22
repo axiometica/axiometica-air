@@ -194,9 +194,9 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
           </button>
           <button onClick={onNew} className="btn flex items-center gap-2"
             style={{
-              background: 'transparent',
-              border: '1px solid #4070a0',
-              color: '#6a9fc0',
+              background: '#252c3c',
+              border: '1px solid rgba(64, 112, 160, 0.40)',
+              color: '#a0c4e8',
               padding: '7px 14px',
               borderRadius: 7,
               fontSize: '0.82rem',

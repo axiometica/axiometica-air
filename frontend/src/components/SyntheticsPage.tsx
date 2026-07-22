@@ -952,7 +952,10 @@ export default function SyntheticsPage() {
             Scripted user journey replay — detect failures before users do
           </p>
         </div>
-        <button style={btn()} onClick={() => { setEditing(null); setShowModal(true) }}>
+        <button
+          onClick={() => { setEditing(null); setShowModal(true) }}
+          style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid rgba(64, 112, 160, 0.40)', backgroundColor: '#252c3c', color: '#a0c4e8', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}
+        >
           + New Monitor
         </button>
       </div>

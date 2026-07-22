@@ -80,9 +80,9 @@ const sectionBody: CSSProperties = {
 const primaryBtn: CSSProperties = {
   padding: '7px 18px',
   borderRadius: 7,
-  border: 'none',
-  backgroundColor: DS.accent,
-  color: '#fff',
+  border: '1px solid rgba(64, 112, 160, 0.40)',
+  backgroundColor: '#252c3c',
+  color: '#a0c4e8',
   fontSize: '0.82rem',
   fontWeight: 600,
   cursor: 'pointer',
@@ -923,7 +923,7 @@ function ExternalChecksSection({ watcherName }: { watcherName: string }) {
       )}
       <button
         onClick={() => { setEditingCheck(null); setShowModal(true) }}
-        style={{ ...compactBtn, backgroundColor: DS.accent, border: 'none', color: '#fff' }}
+        style={{ ...compactBtn, backgroundColor: '#252c3c', border: '1px solid rgba(64, 112, 160, 0.40)', color: '#a0c4e8' }}
       >
         <IconPlus size={12} />
         Add Check
@@ -1667,7 +1667,7 @@ function SyntheticMonitorsSection() {
   const headerRight = (
     <button
       onClick={() => { setEditingMonitor(null); setShowModal(true) }}
-      style={{ ...compactBtn, backgroundColor: DS.accent, border: 'none', color: '#fff' }}
+      style={{ ...compactBtn, backgroundColor: '#252c3c', border: '1px solid rgba(64, 112, 160, 0.40)', color: '#a0c4e8' }}
     >
       <IconPlus size={12} />
       New Monitor

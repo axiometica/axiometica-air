@@ -114,8 +114,16 @@
   }
 
   .btn-primary {
-    @apply btn bg-info-500 text-white hover:bg-info-700
-           focus:ring-info-500 shadow-md-dark hover:shadow-lg-dark;
+    @apply btn focus:ring-info-500/40;
+    background-color: #252c3c;
+    color: #a0c4e8;
+    border: 1px solid rgba(64, 112, 160, 0.40);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background-color: #2d3748;
+    border-color: rgba(64, 112, 160, 0.65);
+    color: #c0d8f0;
   }
 
   .btn-secondary {

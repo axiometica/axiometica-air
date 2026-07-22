@@ -103,10 +103,10 @@
 .cc-actions { display: flex; gap: .6rem; flex-wrap: wrap; }
 .cc-btn-primary {
   padding: .5rem 1.25rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600;
-  cursor: pointer; background: #2563eb; color: #fff; border: none;
-  transition: background 150ms;
+  cursor: pointer; background: #252c3c; color: #a0c4e8; border: 1px solid rgba(64, 112, 160, 0.40);
+  transition: background 150ms, border-color 150ms, color 150ms;
 }
-.cc-btn-primary:hover:not(:disabled)  { background: #1d4ed8; }
+.cc-btn-primary:hover:not(:disabled) { background: #2d3748; border-color: rgba(64, 112, 160, 0.65); color: #c0d8f0; }
 .cc-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .cc-btn-secondary {
   padding: .5rem 1.25rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600;

@@ -349,7 +349,7 @@ function PrincipalsTab({ principals, onRefresh }: { principals: Principal[]; onR
     <>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
         <button onClick={() => setShowCreate(true)}
-          style={{ background: '#6366f1', border: 'none', borderRadius: '8px', color: '#fff', padding: '0.55rem 1.1rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600 }}>
+          style={{ background: '#252c3c', border: '1px solid rgba(64, 112, 160, 0.40)', borderRadius: '8px', color: '#a0c4e8', padding: '0.55rem 1.1rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600 }}>
           + New Principal
         </button>
       </div>

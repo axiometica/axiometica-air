@@ -51,9 +51,9 @@ const sectionBody: CSSProperties = {
 const primaryBtn: CSSProperties = {
   padding: '7px 18px',
   borderRadius: 7,
-  border: 'none',
-  backgroundColor: DS.accent,
-  color: '#fff',
+  border: '1px solid rgba(64, 112, 160, 0.40)',
+  backgroundColor: '#252c3c',
+  color: '#a0c4e8',
   fontSize: '0.82rem',
   fontWeight: 600,
   cursor: 'pointer',
