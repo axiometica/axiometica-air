@@ -568,8 +568,8 @@ function StepItem({
           {annotation.condition && (
             <span style={{
               fontFamily: 'monospace', fontSize: 10, color: '#a0aec0',
-              background: annotation.branch === 'true' ? '#061a12' : '#1a0610',
-              border: `1px solid ${annotation.branch === 'true' ? '#10b98130' : '#f43f5e30'}`,
+              background: annotation.branch === 'true' ? '#152e25' : '#3d1818',
+              border: `1px solid ${annotation.branch === 'true' ? '#3a7a5a50' : '#a0484850'}`,
               borderRadius: 4, padding: '1px 6px',
             }}>
               {annotation.condition}
@@ -587,7 +587,7 @@ function StepItem({
             <span className="font-medium mr-1" style={{ color: '#c4cfd9' }}>{step.description}</span>
           )}
           <span className="font-mono text-xs px-1 py-0.5 rounded mr-1"
-            style={{ background: '#1a2035', color: '#60a5fa' }}>
+            style={{ background: '#252c3c', border: '1px solid #3d4557', color: '#4070a0' }}>
             {toolLabel}
           </span>
           {params && <span style={{ color: '#7a8ba3' }}>{params}</span>}
@@ -600,7 +600,7 @@ function StepItem({
           <div className="flex items-center gap-2">
             <div
               className="flex-1 font-mono text-xs px-2 py-1 rounded overflow-x-auto"
-              style={{ background: '#0d1117', color: '#7ee787', border: '1px solid #21262d', whiteSpace: 'pre' }}
+              style={{ background: '#1a1f2e', color: '#7ee787', border: '1px solid #3d4557', whiteSpace: 'pre' }}
             >
               $ {resolvedCmd}
             </div>
@@ -609,9 +609,9 @@ function StepItem({
                 onClick={toggleEnv}
                 className="flex-shrink-0 text-xs px-2 py-0.5 rounded border transition-colors whitespace-nowrap"
                 style={{
-                  borderColor: envOpen ? '#60a5fa' : 'rgba(255,255,255,0.55)',
-                  color:       envOpen ? '#60a5fa' : 'rgba(255,255,255,0.85)',
-                  background:  envOpen ? 'rgba(59,130,246,0.12)' : 'transparent',
+                  borderColor: envOpen ? '#4070a0' : '#3d4557',
+                  color:       envOpen ? '#60a5fa' : '#a0aec0',
+                  background:  envOpen ? 'rgba(64,112,160,0.12)' : 'transparent',
                 }}
               >
                 {envOpen ? '▾ envs' : '▸ envs'}
@@ -621,14 +621,14 @@ function StepItem({
 
           {/* Per-environment dispatch rows */}
           {envOpen && canExpand && (
-            <div className="rounded overflow-hidden text-xs" style={{ border: '1px solid #21262d' }}>
+            <div className="rounded overflow-hidden text-xs" style={{ border: '1px solid #3d4557' }}>
               {ENV_DISPATCH.map((env, ei) => (
                 <div
                   key={env.key}
                   className="flex items-start gap-2 px-2 py-1.5"
                   style={{
-                    borderBottom: ei < ENV_DISPATCH.length - 1 ? '1px solid #161b22' : undefined,
-                    background: '#0a0e17',
+                    borderBottom: ei < ENV_DISPATCH.length - 1 ? '1px solid #3d4557' : undefined,
+                    background: '#1a1f2e',
                   }}
                 >
                   {/* Env label */}
@@ -653,14 +653,14 @@ function StepItem({
                   {/* Dispatched command */}
                   <code
                     className="font-mono break-all leading-relaxed"
-                    style={{ color: '#6e7681', flex: 1 }}
+                    style={{ color: env.color, flex: 1 }}
                   >
                     {env.wrap(resolvedCmd)}
                   </code>
                 </div>
               ))}
-              <div className="px-2 py-1" style={{ background: '#0a0e17', borderTop: '1px solid #21262d' }}>
-                <span style={{ color: '#3d4557', fontSize: '0.6rem' }}>
+              <div className="px-2 py-1" style={{ background: '#1a1f2e', borderTop: '1px solid #3d4557' }}>
+                <span style={{ color: '#7a8ba3', fontSize: '0.6rem' }}>
                   host = watcher executes transport command · target = adapter API dispatches inner command to VM
                 </span>
               </div>
