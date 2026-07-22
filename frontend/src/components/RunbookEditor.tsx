@@ -123,15 +123,15 @@ function EventTypeCombobox({ value, onChange }: { value: string; onChange: (v: s
       {open && filtered.length > 0 && (
         <div style={{
           position: 'absolute', zIndex: 9999, left: 0, right: 0,
-          top: 'calc(100% + 2px)', background: '#0d1018',
-          border: '1px solid #2a3548', borderRadius: 6,
+          top: 'calc(100% + 2px)', background: '#252c3c',
+          border: '1px solid #3d4557', borderRadius: 6,
           maxHeight: 240, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.6)',
         }}>
           {filtered.map(opt => (
             <div key={opt.code}
               onMouseDown={() => { setQuery(opt.code); onChange(opt.code); setOpen(false) }}
-              style={{ padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #1a2030' }}
-              className="hover:bg-slate-800"
+              style={{ padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #3d4557' }}
+              className="hover:bg-slate-700/40"
             >
               <div style={{ fontSize: 11, color: '#cbd5e1', fontFamily: 'monospace' }}>{opt.code}</div>
               <div style={{ fontSize: 10, color: '#475569' }}>{opt.label}</div>
@@ -195,8 +195,8 @@ function NotificationTeamCombobox({ value, onChange }: { value: string; onChange
       {open && (filtered.length > 0 || options.length === 0) && (
         <div style={{
           position: 'absolute', zIndex: 9999, left: 0, right: 0,
-          top: 'calc(100% + 2px)', background: '#0d1018',
-          border: '1px solid #2a3548', borderRadius: 6,
+          top: 'calc(100% + 2px)', background: '#252c3c',
+          border: '1px solid #3d4557', borderRadius: 6,
           maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.6)',
         }}>
           {options.length === 0 ? (
@@ -207,7 +207,7 @@ function NotificationTeamCombobox({ value, onChange }: { value: string; onChange
             <div key={opt.name}
               onMouseDown={() => { setQuery(opt.name); onChange(opt.name); setOpen(false) }}
               style={{ padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #1a2030', display: 'flex', alignItems: 'center', gap: 6 }}
-              className="hover:bg-slate-800"
+              className="hover:bg-slate-700/40"
             >
               <span style={{ fontSize: 11, color: '#cbd5e1' }}>{opt.name}</span>
               {!opt.enabled && (
@@ -650,7 +650,7 @@ export default function RunbookEditor({ runbookId, onSave, onCancel }: RunbookEd
             )}
             <div className="space-y-2">
               {versions.map(v => (
-                <div key={v.version} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                <div key={v.version} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557' }}>
                   <div className="text-sm" style={{ color: '#a0aec0' }}>
                     <span className="font-medium" style={{ color: '#e8eef5' }}>v{v.version}</span>
                     {' — '}{new Date(v.created_at).toLocaleString()}
@@ -836,11 +836,11 @@ function StepRow({
 
   if (type === 'verification') {
     return (
-      <div className="flex gap-2 items-start p-3 rounded-lg bg-slate-900/60 border border-slate-700/50 group">
+      <div className="flex gap-2 items-start p-3 rounded-lg group" style={{ backgroundColor: '#1a1f2e', border: '1px solid #3d4557' }}>
         <div className="mt-2 text-gray-600 group-hover:text-gray-400 cursor-grab flex-shrink-0">
           <IconGripVertical size={16} />
         </div>
-        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-semibold mt-1.5" style={{ color: '#a0aec0' }}>
+        <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold mt-1.5" style={{ backgroundColor: '#252c3c', color: '#a0aec0' }}>
           {index + 1}
         </div>
         <div className="flex-1 space-y-2">
@@ -1023,7 +1023,7 @@ function StepRow({
 
         {/* Structured parameter fields */}
         {selectedToolDef && !isCustom && !isUnknown && selectedToolDef.params.length > 0 && (
-          <div className="rounded-lg border border-slate-700/60 bg-slate-950/40 p-3 space-y-2">
+          <div className="rounded-lg p-3 space-y-2" style={{ backgroundColor: '#252c3c', border: '1px solid #3d4557' }}>
             <p className="text-xs font-medium uppercase tracking-wide mb-2" style={{ color: '#7a8ba3' }}>
               Parameters
             </p>
@@ -1136,7 +1136,7 @@ function StepRow({
 
         {/* Unknown tool (loaded from DB, not in catalog): show tool key + editable JSON args */}
         {isUnknown && (
-          <div className="rounded-lg border border-slate-700/60 bg-slate-950/40 p-3 space-y-2">
+          <div className="rounded-lg p-3 space-y-2" style={{ backgroundColor: '#252c3c', border: '1px solid #3d4557' }}>
             <p className="text-xs font-medium uppercase tracking-wide" style={{ color: '#7a8ba3' }}>
               Tool: <span className="font-mono text-info-400">{step.tool}</span> · not in catalog — editing raw args
             </p>
