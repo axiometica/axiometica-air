@@ -1724,13 +1724,40 @@ class WatcherService:
         return anomalies
 
     def create_log_anomaly_alert(self, container_name: str, description: str) -> Dict[str, Any]:
-        """Create alert for log errors."""
+        """Create alert for log errors (built-in docker log scanning)."""
         return {
             "severity": "high",
             "type": "log_error",
             "resource_name": container_name,
             "title": f"Error logs detected on {container_name}",
             "description": f"Application logs contain errors: {description}",
+        }
+
+    def create_log_monitor_event_alert(
+        self, monitor_name: str, event_type: str, metadata: dict
+    ) -> Dict[str, Any]:
+        """Create alert for a custom log monitor event with full line capture."""
+        severity = metadata.get("severity", "warning")
+        matched_line = metadata.get("matched_line", "")
+        match_count = metadata.get("match_count", 1)
+        all_lines = metadata.get("all_matched_lines") or [matched_line]
+        log_file = metadata.get("log_file", "")
+        source = metadata.get("source", "file")
+
+        event_display = event_type.replace("_", " ").title()
+        source_label = f"container '{log_file}'" if source == "docker" else f"file '{log_file}'"
+        count_str = f"{match_count} matching line{'s' if match_count != 1 else ''}"
+
+        lines_block = "\n".join(all_lines[:10])
+
+        return {
+            "severity": severity,
+            "type": event_type,
+            "resource_name": monitor_name,
+            "title": f"{event_display} on {monitor_name}",
+            "description": (
+                f"Log monitor detected {count_str} from {source_label}:\n\n{lines_block}"
+            ),
         }
 
     def detect_adapter_log_anomalies(self, targets: List[str]) -> List[Tuple[str, str, str]]:
@@ -2482,20 +2509,25 @@ class WatcherService:
                         try:
                             log_matches = await loop.run_in_executor(None, self.log_monitor.poll)
                             for match in log_matches:
-                                logger.info(
-                                    f"📋 [LOG-MATCH] {match.monitor_name}: {match.matched_line[:100]}"
+                                count_detail = (
+                                    f" ({match.match_count} lines)" if match.match_count > 1 else ""
                                 )
-                                # Create event for this log match
-                                # Format: (resource_name, event_type, metadata_dict)
+                                logger.info(
+                                    f"📋 [LOG-MATCH] {match.monitor_name}: "
+                                    f"{match.matched_line[:100]}{count_detail}"
+                                )
                                 cfg = self.log_monitor.configs[match.monitor_name]
                                 log_file_anomalies.append((
                                     match.monitor_name,
                                     match.event_type,
                                     {
                                         "matched_line": match.matched_line,
+                                        "match_count": match.match_count,
+                                        "all_matched_lines": match.all_matched_lines,
                                         "source": cfg.source,
                                         "log_file": cfg.container if cfg.source == "docker" else cfg.file,
                                         "pattern": cfg.pattern,
+                                        "severity": cfg.severity,
                                     }
                                 ))
                         except Exception as log_err:
@@ -2772,6 +2804,9 @@ class WatcherService:
                                                    "external_tcp_failed", "dns_failed", "tls_expiry"}
                                 if anomaly_type in _external_types:
                                     alert = self.create_external_anomaly_alert(container_name, anomaly_type, description)
+                                elif isinstance(description, dict) and "matched_line" in description:
+                                    # Custom log monitor event — use dedicated builder
+                                    alert = self.create_log_monitor_event_alert(container_name, anomaly_type, description)
                                 else:
                                     alert = self.create_container_anomaly_alert(container_name, anomaly_type, description)
 
@@ -2793,6 +2828,9 @@ class WatcherService:
                                     or self.event_type_severity.get(platform_event_type)
                                     or criticality_map.get(anomaly_type, "critical")
                                 )
+                            elif isinstance(description, dict) and "severity" in description:
+                                # Custom log monitor — use the operator-configured severity directly
+                                raw_crit = description["severity"]
                             else:
                                 raw_crit = (
                                     self.event_type_severity.get(platform_event_type)

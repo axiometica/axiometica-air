@@ -1247,6 +1247,8 @@ export interface LogMonitor {
   pattern: string
   event_type: string
   interval_sec: number
+  min_occurrences: number
+  severity: string
   enabled: boolean
   created_at: string | null
   updated_at: string | null
@@ -1260,6 +1262,8 @@ export interface LogMonitorPayload {
   pattern: string
   event_type: string
   interval_sec?: number
+  min_occurrences?: number
+  severity?: string
   enabled?: boolean
 }
 

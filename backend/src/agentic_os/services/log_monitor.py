@@ -13,6 +13,8 @@ Configuration (from environment variable, JSON array):
       "file": "/var/log/app.log",
       "pattern": "ERROR|CRITICAL|panic",
       "event_type": "log_error_detected",
+      "severity": "warning",
+      "min_occurrences": 1,
       "interval_sec": 5
     },
     {
@@ -21,6 +23,8 @@ Configuration (from environment variable, JSON array):
       "container": "agentic_os_backend",
       "pattern": "ERROR|CRITICAL",
       "event_type": "backend_log_error",
+      "severity": "critical",
+      "min_occurrences": 2,
       "interval_sec": 10
     }
   ]
@@ -46,10 +50,12 @@ class LogMonitorConfig:
     name: str
     pattern: str
     event_type: str
-    source: str = "file"       # "file" or "docker"
-    file: str = ""             # log file path (file mode)
-    container: str = ""        # container name (docker mode)
+    source: str = "file"           # "file" or "docker"
+    file: str = ""                 # log file path (file mode)
+    container: str = ""            # container name (docker mode)
     interval_sec: int = 5
+    min_occurrences: int = 1       # min matching lines per poll to fire
+    severity: str = "warning"      # critical | high | warning | info
     enabled: bool = True
 
     @classmethod
@@ -62,17 +68,21 @@ class LogMonitorConfig:
             file=d.get("file", ""),
             container=d.get("container", ""),
             interval_sec=d.get("interval_sec", 5),
+            min_occurrences=max(1, int(d.get("min_occurrences", 1))),
+            severity=d.get("severity", "warning"),
             enabled=d.get("enabled", True),
         )
 
 
 @dataclass
 class LogMatch:
-    """A matched line from a log file or container"""
+    """A group of matched lines from one poll cycle for a single monitor."""
     monitor_name: str
     event_type: str
-    matched_line: str
+    matched_line: str          # first (or most representative) matching line
     timestamp: str
+    match_count: int = 1       # total matching lines in this poll
+    all_matched_lines: List[str] = field(default_factory=list)  # all matching lines (up to 20)
 
 
 class LogMonitor:
@@ -101,7 +111,7 @@ class LogMonitor:
             target = cfg.container if cfg.source == "docker" else cfg.file
             logger.info(
                 f"  • {name} [{cfg.source}]: {target} → {cfg.event_type} "
-                f"(pattern={cfg.pattern[:50]}...)"
+                f"(pattern={cfg.pattern[:50]}..., min={cfg.min_occurrences}, sev={cfg.severity})"
             )
 
     @classmethod
@@ -142,8 +152,8 @@ class LogMonitor:
         """
         Check all monitored sources for new lines matching their patterns.
 
-        Returns:
-            List of LogMatch objects for lines that matched
+        Returns at most one LogMatch per monitor (when min_occurrences is met).
+        Each LogMatch carries all matched lines for use in the incident description.
         """
         matches = []
 
@@ -151,24 +161,25 @@ class LogMonitor:
             if not config.enabled:
                 continue
             if config.source == "docker":
-                matches.extend(self._poll_docker(monitor_name, config))
+                result = self._poll_docker(monitor_name, config)
             else:
-                matches.extend(self._poll_file(monitor_name, config))
+                result = self._poll_file(monitor_name, config)
+            if result is not None:
+                matches.append(result)
 
         if matches or self.positions:
             self._save_positions()
 
         return matches
 
-    def _poll_file(self, monitor_name: str, config: LogMonitorConfig) -> List[LogMatch]:
+    def _poll_file(self, monitor_name: str, config: LogMonitorConfig) -> Optional[LogMatch]:
         """Tail a log file inside the watcher container and match new lines."""
         file_path = Path(config.file)
 
         if not file_path.exists():
             logger.debug(f"[LOG-MONITOR] File not found: {config.file}")
-            return []
+            return None
 
-        matches = []
         try:
             current_size = file_path.stat().st_size
             last_pos = self.positions.get(monitor_name, 0)
@@ -184,25 +195,42 @@ class LogMonitor:
                 new_pos = f.tell()
 
             pattern_re = re.compile(config.pattern, re.IGNORECASE | re.MULTILINE)
+            matched_lines: List[str] = []
             for line in new_lines:
                 line_stripped = line.rstrip("\n")
                 if pattern_re.search(line_stripped):
-                    matches.append(LogMatch(
-                        monitor_name=monitor_name,
-                        event_type=config.event_type,
-                        matched_line=line_stripped,
-                        timestamp=datetime.utcnow().isoformat(),
-                    ))
-                    logger.info(f"[LOG-MONITOR] {monitor_name} match: {line_stripped[:100]}")
+                    matched_lines.append(line_stripped)
+                    if len(matched_lines) >= 20:
+                        break
 
             self.positions[monitor_name] = new_pos
 
+            if len(matched_lines) < config.min_occurrences:
+                if matched_lines:
+                    logger.debug(
+                        f"[LOG-MONITOR] {monitor_name}: {len(matched_lines)} match(es), "
+                        f"need {config.min_occurrences} — skipping"
+                    )
+                return None
+
+            logger.info(
+                f"[LOG-MONITOR] {monitor_name} match: {matched_lines[0][:100]}"
+                + (f" (+{len(matched_lines)-1} more)" if len(matched_lines) > 1 else "")
+            )
+            return LogMatch(
+                monitor_name=monitor_name,
+                event_type=config.event_type,
+                matched_line=matched_lines[0],
+                timestamp=datetime.utcnow().isoformat(),
+                match_count=len(matched_lines),
+                all_matched_lines=matched_lines,
+            )
+
         except Exception as e:
             logger.error(f"[LOG-MONITOR] Error monitoring {monitor_name}: {e}")
+            return None
 
-        return matches
-
-    def _poll_docker(self, monitor_name: str, config: LogMonitorConfig) -> List[LogMatch]:
+    def _poll_docker(self, monitor_name: str, config: LogMonitorConfig) -> Optional[LogMatch]:
         """
         Fetch new log lines from a Docker container via `docker logs --since`.
 
@@ -217,14 +245,11 @@ class LogMonitor:
 
         cmd = ["docker", "logs"]
         if last_ts is not None:
-            # Fetch only lines since the last poll timestamp
             cmd += ["--since", str(int(last_ts))]
         else:
-            # First poll: last 100 lines to catch recent activity
             cmd += ["--tail", "100"]
         cmd.append(config.container)
 
-        matches = []
         try:
             result = subprocess.run(
                 cmd,
@@ -237,18 +262,34 @@ class LogMonitor:
             # container stderr → subprocess stderr; scan both.
             combined = result.stdout + result.stderr
             pattern_re = re.compile(config.pattern, re.IGNORECASE | re.MULTILINE)
+            matched_lines: List[str] = []
             for line in combined.splitlines():
                 line = line.strip()
                 if line and pattern_re.search(line):
-                    matches.append(LogMatch(
-                        monitor_name=monitor_name,
-                        event_type=config.event_type,
-                        matched_line=line,
-                        timestamp=datetime.utcnow().isoformat(),
-                    ))
-                    logger.info(
-                        f"[LOG-MONITOR] docker:{monitor_name} match: {line[:100]}"
+                    matched_lines.append(line)
+                    if len(matched_lines) >= 20:
+                        break
+
+            if len(matched_lines) < config.min_occurrences:
+                if matched_lines:
+                    logger.debug(
+                        f"[LOG-MONITOR] docker:{monitor_name}: {len(matched_lines)} match(es), "
+                        f"need {config.min_occurrences} — skipping"
                     )
+                return None
+
+            logger.info(
+                f"[LOG-MONITOR] docker:{monitor_name} match: {matched_lines[0][:100]}"
+                + (f" (+{len(matched_lines)-1} more)" if len(matched_lines) > 1 else "")
+            )
+            return LogMatch(
+                monitor_name=monitor_name,
+                event_type=config.event_type,
+                matched_line=matched_lines[0],
+                timestamp=datetime.utcnow().isoformat(),
+                match_count=len(matched_lines),
+                all_matched_lines=matched_lines,
+            )
 
         except FileNotFoundError:
             logger.error(
@@ -267,7 +308,7 @@ class LogMonitor:
             # Always advance the timestamp so the next poll only sees new lines.
             self.positions[pos_key] = now_ts
 
-        return matches
+        return None
 
     def is_enabled(self) -> bool:
         """Check if any monitors are enabled."""
@@ -343,5 +384,5 @@ class LogMonitor:
             target = cfg.container if cfg.source == "docker" else cfg.file
             logger.info(
                 f"  • {name} [{cfg.source}]: {target} → {cfg.event_type} "
-                f"(pattern={cfg.pattern[:50]}...)"
+                f"(pattern={cfg.pattern[:50]}..., min={cfg.min_occurrences}, sev={cfg.severity})"
             )

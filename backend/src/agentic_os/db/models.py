@@ -970,7 +970,9 @@ class LogMonitorConfigModel(Base):
     event_type = Column(String(100), nullable=False)        # Event type to emit (e.g., "log_error_detected")
 
     # Configuration
-    interval_sec = Column(Integer, nullable=False, default=5)  # Poll interval in seconds
+    interval_sec = Column(Integer, nullable=False, default=5)    # Poll interval in seconds
+    min_occurrences = Column(Integer, nullable=False, default=1) # Min matching lines per poll to fire
+    severity = Column(String(20), nullable=False, default="warning")  # critical|high|warning|info
     enabled = Column(Boolean, nullable=False, default=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

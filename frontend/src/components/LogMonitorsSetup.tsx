@@ -116,8 +116,51 @@ const td: CSSProperties = {
   color: DS.txtP,
 }
 
+const inputStyle: CSSProperties = {
+  width: '100%',
+  padding: '0.6rem 0.75rem',
+  backgroundColor: DS.bg,
+  border: `1px solid ${DS.border}`,
+  borderRadius: 6,
+  color: DS.txtP,
+  fontSize: '0.85rem',
+}
+
+const labelStyle: CSSProperties = {
+  fontSize: '0.8rem',
+  color: DS.txtS,
+  fontWeight: 500,
+  display: 'block',
+  marginBottom: '0.4rem',
+}
+
+const SEVERITY_STYLES: Record<string, { bg: string; color: string; border: string }> = {
+  critical: { bg: 'rgba(248,81,73,0.12)',   color: '#f85149', border: 'rgba(248,81,73,0.3)'  },
+  high:     { bg: 'rgba(210,153,34,0.12)',  color: '#e3a017', border: 'rgba(210,153,34,0.3)' },
+  warning:  { bg: 'rgba(210,153,34,0.08)',  color: '#d49a2a', border: 'rgba(210,153,34,0.2)' },
+  info:     { bg: 'rgba(59,130,246,0.10)',  color: '#60a5fa', border: 'rgba(59,130,246,0.25)' },
+}
+
+const SOURCE_STYLES: Record<string, { bg: string; color: string; border: string }> = {
+  docker: { bg: 'rgba(59,130,246,0.10)', color: '#60a5fa', border: 'rgba(59,130,246,0.22)' },
+  file:   { bg: 'rgba(63,185,80,0.09)',  color: '#3fb950', border: 'rgba(63,185,80,0.22)'  },
+}
+
 interface LogMonitorsSetupProps {
   watcherName: string
+}
+
+const EMPTY_FORM: LogMonitorPayload = {
+  name: '',
+  source: 'file',
+  file: '',
+  container: '',
+  pattern: '',
+  event_type: 'log_error_detected',
+  interval_sec: 5,
+  min_occurrences: 1,
+  severity: 'warning',
+  enabled: true,
 }
 
 export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps) {
@@ -128,24 +171,11 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
   const [expanded, setExpanded] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  // Form state
-  const [formData, setFormData] = useState<LogMonitorPayload>({
-    name: '',
-    source: 'file',
-    file: '',
-    container: '',
-    pattern: '',
-    event_type: 'log_error_detected',
-    interval_sec: 5,
-    enabled: true,
-  })
+  const [formData, setFormData] = useState<LogMonitorPayload>(EMPTY_FORM)
   const [patternError, setPatternError] = useState('')
   const [patternValid, setPatternValid] = useState<boolean | null>(null)
 
-  // Load monitors on mount or when watcher changes
-  useEffect(() => {
-    loadMonitors()
-  }, [watcherName])
+  useEffect(() => { loadMonitors() }, [watcherName])
 
   const loadMonitors = async () => {
     if (!watcherName) return
@@ -162,43 +192,26 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
   }
 
   const validatePattern = async (pattern: string) => {
-    if (!pattern) {
-      setPatternError('')
-      setPatternValid(null)
-      return
-    }
+    if (!pattern) { setPatternError(''); setPatternValid(null); return }
     try {
       const response = await validateLogPattern(pattern)
       if (response.data.valid) {
-        setPatternError('')
-        setPatternValid(true)
+        setPatternError(''); setPatternValid(true)
       } else {
-        setPatternError(response.data.error || 'Invalid regex pattern')
-        setPatternValid(false)
+        setPatternError(response.data.error || 'Invalid regex pattern'); setPatternValid(false)
       }
-    } catch (err: any) {
-      setPatternError('Failed to validate pattern')
-      setPatternValid(false)
+    } catch {
+      setPatternError('Failed to validate pattern'); setPatternValid(false)
     }
   }
 
   const handlePatternChange = (value: string) => {
     setFormData(prev => ({ ...prev, pattern: value }))
-    // Validate with slight delay (debounce)
     setTimeout(() => validatePattern(value), 300)
   }
 
   const resetForm = () => {
-    setFormData({
-      name: '',
-      source: 'file',
-      file: '',
-      container: '',
-      pattern: '',
-      event_type: 'log_error_detected',
-      interval_sec: 5,
-      enabled: true,
-    })
+    setFormData(EMPTY_FORM)
     setPatternError('')
     setPatternValid(null)
     setEditingId(null)
@@ -214,6 +227,8 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
       pattern: monitor.pattern,
       event_type: monitor.event_type,
       interval_sec: monitor.interval_sec,
+      min_occurrences: monitor.min_occurrences ?? 1,
+      severity: monitor.severity || 'warning',
       enabled: monitor.enabled,
     })
     setEditingId(monitor.id)
@@ -223,40 +238,22 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
 
   const handleSave = async () => {
     setError('')
-
-    // Validation
-    if (!formData.name.trim()) {
-      setError('Monitor name is required')
-      return
-    }
+    if (!formData.name?.trim()) { setError('Monitor name is required'); return }
     if (formData.source === 'docker' && !formData.container?.trim()) {
-      setError('Container name is required for Docker source')
-      return
+      setError('Container name is required for Docker source'); return
     }
     if (formData.source !== 'docker' && !formData.file?.trim()) {
-      setError('Log file path is required')
-      return
+      setError('Log file path is required'); return
     }
-    if (!formData.pattern.trim()) {
-      setError('Regex pattern is required')
-      return
-    }
-    if (patternValid === false) {
-      setError('Fix regex pattern errors before saving')
-      return
-    }
-    if (!formData.event_type.trim()) {
-      setError('Event type is required')
-      return
-    }
+    if (!formData.pattern.trim()) { setError('Regex pattern is required'); return }
+    if (patternValid === false) { setError('Fix regex pattern errors before saving'); return }
+    if (!formData.event_type.trim()) { setError('Event type is required'); return }
 
     try {
       if (editingId) {
-        // Update
         const response = await updateLogMonitor(watcherName, editingId, formData)
         setMonitors(monitors.map(m => m.id === editingId ? response.data : m))
       } else {
-        // Create
         const response = await createLogMonitor(watcherName, formData)
         setMonitors([...monitors, response.data])
       }
@@ -284,6 +281,13 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
     'custom',
   ]
 
+  const severityOptions: { value: string; label: string }[] = [
+    { value: 'critical', label: 'Critical' },
+    { value: 'high',     label: 'High'     },
+    { value: 'warning',  label: 'Warning'  },
+    { value: 'info',     label: 'Info'     },
+  ]
+
   return (
     <div style={sectionCard}>
       {/* Header */}
@@ -299,7 +303,9 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
             }
             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: DS.txtP, letterSpacing: '0.01em' }}>Log Monitors</span>
           </div>
-          <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: DS.txtS, marginLeft: 23 }}>Watch log files or container stdout/stderr and trigger runbooks on patterns</p>
+          <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: DS.txtS, marginLeft: 23 }}>
+            Watch log files or container stdout/stderr and trigger runbooks on patterns
+          </p>
         </div>
         {!showForm && (
           <button
@@ -341,46 +347,25 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
             padding: '1rem',
             marginBottom: '1rem',
           }}>
+
+            {/* Row 1: Name + Event Type */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-              {/* Name */}
               <div>
-                <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.4rem' }}>
-                  Monitor Name *
-                </label>
+                <label style={labelStyle}>Monitor Name *</label>
                 <input
                   type="text"
                   placeholder="e.g., app_error_detector"
                   value={formData.name}
                   onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '0.6rem 0.75rem',
-                    backgroundColor: DS.bg,
-                    border: `1px solid ${DS.border}`,
-                    borderRadius: 6,
-                    color: DS.txtP,
-                    fontSize: '0.85rem',
-                  }}
+                  style={inputStyle}
                 />
               </div>
-
-              {/* Event Type */}
               <div>
-                <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.4rem' }}>
-                  Event Type *
-                </label>
+                <label style={labelStyle}>Event Type *</label>
                 <select
                   value={formData.event_type}
                   onChange={e => setFormData(prev => ({ ...prev, event_type: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '0.6rem 0.75rem',
-                    backgroundColor: DS.bg,
-                    border: `1px solid ${DS.border}`,
-                    borderRadius: 6,
-                    color: DS.txtP,
-                    fontSize: '0.85rem',
-                  }}
+                  style={inputStyle}
                 >
                   {commonEventTypes.map(type => (
                     <option key={type} value={type}>{type}</option>
@@ -391,9 +376,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
 
             {/* Source toggle */}
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.5rem' }}>
-                Log Source *
-              </label>
+              <label style={labelStyle}>Log Source *</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 {(['file', 'docker'] as const).map(src => (
                   <button
@@ -413,7 +396,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                       cursor: 'pointer',
                     }}
                   >
-                    {src === 'file' ? '📄 File' : '🐳 Docker Container'}
+                    {src === 'file' ? 'File' : 'Docker Container'}
                   </button>
                 ))}
               </div>
@@ -427,70 +410,51 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
             {/* Target: file path or container name */}
             {formData.source === 'docker' ? (
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.4rem' }}>
-                  Container Name *
-                </label>
+                <label style={labelStyle}>Container Name *</label>
                 <input
                   type="text"
                   placeholder="e.g., agentic_os_backend"
                   value={formData.container ?? ''}
                   onChange={e => setFormData(prev => ({ ...prev, container: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '0.6rem 0.75rem',
-                    backgroundColor: DS.bg,
-                    border: `1px solid ${DS.border}`,
-                    borderRadius: 6,
-                    color: DS.txtP,
-                    fontSize: '0.85rem',
-                    fontFamily: 'monospace',
-                  }}
+                  style={{ ...inputStyle, fontFamily: 'monospace' }}
                 />
               </div>
             ) : (
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.4rem' }}>
-                  Log File Path *
-                </label>
+                <label style={labelStyle}>Log File Path *</label>
                 <input
                   type="text"
                   placeholder="e.g., /var/log/app.log"
                   value={formData.file ?? ''}
                   onChange={e => setFormData(prev => ({ ...prev, file: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '0.6rem 0.75rem',
-                    backgroundColor: DS.bg,
-                    border: `1px solid ${DS.border}`,
-                    borderRadius: 6,
-                    color: DS.txtP,
-                    fontSize: '0.85rem',
-                    fontFamily: 'monospace',
-                  }}
+                  style={{ ...inputStyle, fontFamily: 'monospace' }}
                 />
               </div>
             )}
 
             {/* Pattern */}
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                Regex Pattern *
-                {patternValid === true && <span style={{ color: DS.success, display: 'flex', gap: 4, alignItems: 'center' }}><IconCheck size={12} /> Valid</span>}
-                {patternValid === false && <span style={{ color: DS.error, display: 'flex', gap: 4, alignItems: 'center' }}><IconX size={12} /> Invalid</span>}
+              <label style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}>
+                <span>Regex Pattern *</span>
+                {patternValid === true && (
+                  <span style={{ color: DS.success, display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <IconCheck size={12} /> Valid
+                  </span>
+                )}
+                {patternValid === false && (
+                  <span style={{ color: DS.error, display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <IconX size={12} /> Invalid
+                  </span>
+                )}
               </label>
               <input
                 type="text"
-                placeholder="e.g., ERROR|CRITICAL|panic"
+                placeholder='e.g., "levelname":\s*"(ERROR|CRITICAL)"'
                 value={formData.pattern}
                 onChange={e => handlePatternChange(e.target.value)}
                 style={{
-                  width: '100%',
-                  padding: '0.6rem 0.75rem',
-                  backgroundColor: DS.bg,
+                  ...inputStyle,
                   border: patternValid === false ? `1px solid ${DS.error}` : `1px solid ${DS.border}`,
-                  borderRadius: 6,
-                  color: DS.txtP,
-                  fontSize: '0.85rem',
                 }}
               />
               {patternError && (
@@ -498,42 +462,56 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
               )}
             </div>
 
-            {/* Interval */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            {/* Row: Severity + Min Occurrences + Poll Interval + Enabled */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '1rem', marginBottom: '1rem', alignItems: 'start' }}>
               <div>
-                <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.4rem' }}>
-                  Poll Interval (seconds)
-                </label>
+                <label style={labelStyle}>Severity</label>
+                <select
+                  value={formData.severity ?? 'warning'}
+                  onChange={e => setFormData(prev => ({ ...prev, severity: e.target.value }))}
+                  style={inputStyle}
+                >
+                  {severityOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Min Matches / Poll</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={formData.min_occurrences ?? 1}
+                  onChange={e => setFormData(prev => ({ ...prev, min_occurrences: parseInt(e.target.value) || 1 }))}
+                  style={inputStyle}
+                />
+                <p style={{ margin: '0.3rem 0 0', fontSize: '0.7rem', color: DS.txtS }}>
+                  Minimum matching lines before event fires
+                </p>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Poll Interval (s)</label>
                 <input
                   type="number"
                   min="1"
                   max="3600"
                   value={formData.interval_sec}
                   onChange={e => setFormData(prev => ({ ...prev, interval_sec: parseInt(e.target.value) || 5 }))}
-                  style={{
-                    width: '100%',
-                    padding: '0.6rem 0.75rem',
-                    backgroundColor: DS.bg,
-                    border: `1px solid ${DS.border}`,
-                    borderRadius: 6,
-                    color: DS.txtP,
-                    fontSize: '0.85rem',
-                  }}
+                  style={inputStyle}
                 />
               </div>
 
-              {/* Enabled */}
-              <div>
-                <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.4rem' }}>
-                  Enabled
-                </label>
+              <div style={{ paddingTop: '1.6rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     checked={formData.enabled}
                     onChange={e => setFormData(prev => ({ ...prev, enabled: e.target.checked }))}
                   />
-                  <span style={{ fontSize: '0.85rem', color: DS.txtM }}>
+                  <span style={{ fontSize: '0.82rem', color: DS.txtM, whiteSpace: 'nowrap' }}>
                     {formData.enabled ? 'Active' : 'Disabled'}
                   </span>
                 </label>
@@ -568,76 +546,98 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                 <th style={th}>Target</th>
                 <th style={th}>Pattern</th>
                 <th style={th}>Event Type</th>
-                <th style={th}>Interval</th>
+                <th style={th}>Severity</th>
+                <th style={th}>Min / Interval</th>
                 <th style={th}>Status</th>
                 <th style={th}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {monitors.map(monitor => (
-                <tr key={monitor.id}>
-                  <td style={td}>
-                    <code style={{ fontSize: '0.8rem', color: DS.accent }}>{monitor.name}</code>
-                  </td>
-                  <td style={td}>
-                    <span style={{
-                      fontSize: '0.72rem',
-                      fontWeight: 600,
-                      padding: '0.15rem 0.5rem',
-                      borderRadius: 4,
-                      backgroundColor: monitor.source === 'docker' ? 'rgba(59,130,246,0.12)' : 'rgba(63,185,80,0.12)',
-                      color: monitor.source === 'docker' ? '#60a5fa' : DS.success,
-                      border: `1px solid ${monitor.source === 'docker' ? 'rgba(59,130,246,0.25)' : 'rgba(63,185,80,0.25)'}`,
-                    }}>
-                      {monitor.source === 'docker' ? '🐳 docker' : '📄 file'}
-                    </span>
-                  </td>
-                  <td style={td}>
-                    <code style={{ fontSize: '0.8rem', color: DS.txtM }}>
-                      {monitor.source === 'docker' ? monitor.container : monitor.file}
-                    </code>
-                  </td>
-                  <td style={td}>
-                    <code style={{ fontSize: '0.75rem', color: DS.txtM, maxWidth: '200px', display: 'inline-block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {monitor.pattern}
-                    </code>
-                  </td>
-                  <td style={td}>
-                    <span style={{ fontSize: '0.8rem', color: DS.accent }}>{monitor.event_type}</span>
-                  </td>
-                  <td style={td}>
-                    <span style={{ fontSize: '0.8rem', color: DS.txtM }}>{monitor.interval_sec}s</span>
-                  </td>
-                  <td style={td}>
-                    <span style={{
-                      fontSize: '0.75rem',
-                      padding: '0.2rem 0.6rem',
-                      backgroundColor: monitor.enabled ? `${DS.success}20` : `${DS.border}`,
-                      color: monitor.enabled ? DS.success : DS.txtS,
-                      borderRadius: 4,
-                      fontWeight: 500,
-                    }}>
-                      {monitor.enabled ? 'Active' : 'Disabled'}
-                    </span>
-                  </td>
-                  <td style={{ ...td, display: 'flex', gap: 4 }}>
-                    <button
-                      style={compactBtn}
-                      onClick={() => handleEdit(monitor)}
-                      title="Edit"
-                    >
-                      <IconPencil size={14} />
-                    </button>
-                    <button
-                      style={dangerBtn}
-                      onClick={() => handleDelete(monitor.id)}
-                      title="Delete"
-                    >
-                      <IconTrash size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {monitors.map(monitor => {
+                const sevStyle = SEVERITY_STYLES[monitor.severity] ?? SEVERITY_STYLES.warning
+                const srcStyle = SOURCE_STYLES[monitor.source] ?? SOURCE_STYLES.file
+                return (
+                  <tr key={monitor.id}>
+                    <td style={td}>
+                      <code style={{ fontSize: '0.8rem', color: DS.accent }}>{monitor.name}</code>
+                    </td>
+                    <td style={td}>
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: 4,
+                        backgroundColor: srcStyle.bg,
+                        color: srcStyle.color,
+                        border: `1px solid ${srcStyle.border}`,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.03em',
+                      }}>
+                        {monitor.source}
+                      </span>
+                    </td>
+                    <td style={td}>
+                      <code style={{ fontSize: '0.78rem', color: DS.txtM }}>
+                        {monitor.source === 'docker' ? monitor.container : monitor.file}
+                      </code>
+                    </td>
+                    <td style={td}>
+                      <code style={{
+                        fontSize: '0.75rem',
+                        color: DS.txtM,
+                        maxWidth: '160px',
+                        display: 'inline-block',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {monitor.pattern}
+                      </code>
+                    </td>
+                    <td style={td}>
+                      <span style={{ fontSize: '0.8rem', color: DS.accent }}>{monitor.event_type}</span>
+                    </td>
+                    <td style={td}>
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: 4,
+                        backgroundColor: sevStyle.bg,
+                        color: sevStyle.color,
+                        border: `1px solid ${sevStyle.border}`,
+                      }}>
+                        {monitor.severity || 'warning'}
+                      </span>
+                    </td>
+                    <td style={td}>
+                      <span style={{ fontSize: '0.78rem', color: DS.txtM }}>
+                        {monitor.min_occurrences ?? 1}× / {monitor.interval_sec}s
+                      </span>
+                    </td>
+                    <td style={td}>
+                      <span style={{
+                        fontSize: '0.75rem',
+                        padding: '0.2rem 0.6rem',
+                        backgroundColor: monitor.enabled ? `${DS.success}20` : `${DS.border}`,
+                        color: monitor.enabled ? DS.success : DS.txtS,
+                        borderRadius: 4,
+                        fontWeight: 500,
+                      }}>
+                        {monitor.enabled ? 'Active' : 'Disabled'}
+                      </span>
+                    </td>
+                    <td style={{ ...td, display: 'flex', gap: 4 }}>
+                      <button style={compactBtn} onClick={() => handleEdit(monitor)} title="Edit">
+                        <IconPencil size={14} />
+                      </button>
+                      <button style={dangerBtn} onClick={() => handleDelete(monitor.id)} title="Delete">
+                        <IconTrash size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

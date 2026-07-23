@@ -39,6 +39,8 @@ class LogMonitorCreate(BaseModel):
     pattern: str = Field(..., min_length=1, max_length=1000)
     event_type: str = Field(..., min_length=1, max_length=100)
     interval_sec: int = Field(default=5, ge=1, le=3600)
+    min_occurrences: int = Field(default=1, ge=1, le=1000)
+    severity: Literal["critical", "high", "warning", "info"] = "warning"
     enabled: bool = Field(default=True)
 
     @model_validator(mode="after")
@@ -58,6 +60,8 @@ class LogMonitorUpdate(BaseModel):
     pattern: Optional[str] = Field(None, min_length=1, max_length=1000)
     event_type: Optional[str] = Field(None, min_length=1, max_length=100)
     interval_sec: Optional[int] = Field(None, ge=1, le=3600)
+    min_occurrences: Optional[int] = Field(None, ge=1, le=1000)
+    severity: Optional[Literal["critical", "high", "warning", "info"]] = None
     enabled: Optional[bool] = None
 
 
@@ -90,6 +94,8 @@ def _monitor_to_dict(row: LogMonitorConfigModel) -> Dict[str, Any]:
         "pattern": row.pattern,
         "event_type": row.event_type,
         "interval_sec": row.interval_sec,
+        "min_occurrences": getattr(row, "min_occurrences", 1),
+        "severity": getattr(row, "severity", "warning"),
         "enabled": row.enabled,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
@@ -185,6 +191,8 @@ async def create_log_monitor(
         pattern=payload.pattern,
         event_type=payload.event_type,
         interval_sec=payload.interval_sec,
+        min_occurrences=payload.min_occurrences,
+        severity=payload.severity,
         enabled=payload.enabled,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -212,6 +220,8 @@ async def create_log_monitor(
             "pattern": m.pattern,
             "event_type": m.event_type,
             "interval_sec": m.interval_sec,
+            "min_occurrences": getattr(m, "min_occurrences", 1),
+            "severity": getattr(m, "severity", "warning"),
             "enabled": m.enabled,
         }
         for m in all_monitors
@@ -292,6 +302,8 @@ async def update_log_monitor(
             "pattern": m.pattern,
             "event_type": m.event_type,
             "interval_sec": m.interval_sec,
+            "min_occurrences": getattr(m, "min_occurrences", 1),
+            "severity": getattr(m, "severity", "warning"),
             "enabled": m.enabled,
         }
         for m in all_monitors
@@ -347,6 +359,8 @@ async def delete_log_monitor(
             "pattern": m.pattern,
             "event_type": m.event_type,
             "interval_sec": m.interval_sec,
+            "min_occurrences": getattr(m, "min_occurrences", 1),
+            "severity": getattr(m, "severity", "warning"),
             "enabled": m.enabled,
         }
         for m in remaining_monitors
