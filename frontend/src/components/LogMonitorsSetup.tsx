@@ -1,12 +1,14 @@
-import { useState, useEffect, CSSProperties } from 'react'
+import { useState, useEffect, useRef, CSSProperties } from 'react'
 import {
   listLogMonitors,
   createLogMonitor,
   updateLogMonitor,
   deleteLogMonitor,
   validateLogPattern,
+  testLogMonitor,
   type LogMonitor,
   type LogMonitorPayload,
+  type LogMonitorTestResult,
 } from '../services/api'
 import {
   IconPlus,
@@ -17,6 +19,8 @@ import {
   IconAlertCircle,
   IconChevronDown,
   IconChevronRight,
+  IconTestPipe,
+  IconRefresh,
 } from './icons'
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -147,6 +151,245 @@ const SOURCE_STYLES: Record<string, { bg: string; color: string; border: string 
   vcenter:  { bg: 'rgba(210,153,34,0.09)',  color: '#e3a017', border: 'rgba(210,153,34,0.22)' },
 }
 
+// ── Test Modal ────────────────────────────────────────────────────────────────
+
+function LogMonitorTestModal({
+  monitor,
+  watcherName,
+  onClose,
+}: {
+  monitor: LogMonitor
+  watcherName: string
+  onClose: () => void
+}) {
+  const [pattern, setPattern] = useState(monitor.pattern)
+  const [lines, setLines] = useState(50)
+  const [result, setResult] = useState<LogMonitorTestResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const resultsRef = useRef<HTMLDivElement>(null)
+
+  const runTest = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await testLogMonitor(watcherName, monitor.id, pattern, lines)
+      setResult(res.data)
+      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Run immediately on open
+  useEffect(() => { runTest() }, [])
+
+  const highlightLine = (line: string, pat: string): React.ReactNode => {
+    if (!pat) return line
+    try {
+      const re = new RegExp(`(${pat})`, 'gi')
+      const parts = line.split(re)
+      return parts.map((p, i) =>
+        re.test(p)
+          ? <mark key={i} style={{ backgroundColor: 'rgba(250,204,21,0.35)', color: '#fde047', borderRadius: 2, padding: '0 1px' }}>{p}</mark>
+          : p
+      )
+    } catch {
+      return line
+    }
+  }
+
+  const sourceLabel = monitor.source === 'docker'
+    ? monitor.container
+    : monitor.source === 'vcenter'
+    ? `${monitor.vm_name}:${monitor.file}`
+    : monitor.file
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} />
+
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: 820,
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: DS.surface,
+          border: `1px solid ${DS.border}`,
+          borderRadius: 10,
+          boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: `1px solid ${DS.border}`, flexShrink: 0 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <IconTestPipe size={15} color={DS.txtS} />
+              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: DS.txtP }}>Test Monitor — {monitor.name}</span>
+            </div>
+            <div style={{ marginTop: 3, fontSize: '0.72rem', color: DS.txtS }}>
+              <span style={{
+                display: 'inline-block',
+                padding: '0.1rem 0.4rem',
+                borderRadius: 3,
+                backgroundColor: (SOURCE_STYLES[monitor.source] ?? SOURCE_STYLES.file).bg,
+                color: (SOURCE_STYLES[monitor.source] ?? SOURCE_STYLES.file).color,
+                border: `1px solid ${(SOURCE_STYLES[monitor.source] ?? SOURCE_STYLES.file).border}`,
+                fontSize: '0.68rem',
+                fontWeight: 600,
+                textTransform: 'uppercase' as const,
+                marginRight: 6,
+              }}>{monitor.source}</span>
+              <code style={{ color: DS.txtM }}>{sourceLabel}</code>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: DS.txtS, cursor: 'pointer', display: 'flex', padding: 4 }}>
+            <IconX size={16} />
+          </button>
+        </div>
+
+        {/* Controls */}
+        <div style={{ padding: '0.9rem 1.25rem', borderBottom: `1px solid ${DS.border}`, flexShrink: 0, display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: '0.75rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.3rem' }}>Regex Pattern</label>
+            <input
+              type="text"
+              value={pattern}
+              onChange={e => setPattern(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && runTest()}
+              placeholder="e.g. ERROR|CRITICAL"
+              style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '0.82rem' }}
+            />
+          </div>
+          <div style={{ width: 90 }}>
+            <label style={{ fontSize: '0.75rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.3rem' }}>Lines</label>
+            <input
+              type="number"
+              min={1} max={200}
+              value={lines}
+              onChange={e => setLines(parseInt(e.target.value) || 50)}
+              style={{ ...inputStyle, fontSize: '0.82rem' }}
+            />
+          </div>
+          <button
+            onClick={runTest}
+            disabled={loading}
+            style={{
+              padding: '0.55rem 1rem',
+              borderRadius: 6,
+              border: '1px solid rgba(64,112,160,0.45)',
+              backgroundColor: loading ? DS.raised : 'rgba(64,112,160,0.15)',
+              color: loading ? DS.txtS : '#a0c4e8',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              whiteSpace: 'nowrap' as const,
+              flexShrink: 0,
+            }}
+          >
+            <IconRefresh size={13} style={{ animation: loading ? 'spin 0.8s linear infinite' : 'none' }} />
+            {loading ? 'Running…' : 'Run Test'}
+          </button>
+        </div>
+
+        {/* Results */}
+        <div ref={resultsRef} style={{ flex: 1, overflowY: 'auto', padding: '0.9rem 1.25rem' }}>
+          {error && (
+            <div style={{ backgroundColor: `${DS.error}15`, border: `1px solid ${DS.error}40`, borderRadius: 6, padding: '0.65rem 0.9rem', color: DS.error, fontSize: '0.82rem', marginBottom: '0.75rem', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <IconAlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />{error}
+            </div>
+          )}
+
+          {result && (
+            <>
+              {/* Summary bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem', fontSize: '0.78rem', color: DS.txtS }}>
+                <span>{result.total_fetched} line{result.total_fetched !== 1 ? 's' : ''} fetched</span>
+                <span style={{ color: DS.border }}>·</span>
+                {result.match_count > 0 ? (
+                  <span style={{ color: '#fde047', fontWeight: 600 }}>{result.match_count} match{result.match_count !== 1 ? 'es' : ''}</span>
+                ) : (
+                  <span style={{ color: DS.txtS }}>0 matches</span>
+                )}
+                {result.error && (
+                  <>
+                    <span style={{ color: DS.border }}>·</span>
+                    <span style={{ color: DS.error }}>{result.error}</span>
+                  </>
+                )}
+              </div>
+
+              {result.lines.length === 0 ? (
+                <div style={{ textAlign: 'center', color: DS.txtS, padding: '2rem', fontSize: '0.82rem' }}>
+                  {result.error ? 'Could not read log source.' : 'No log lines returned. The log may be empty or the target unreachable.'}
+                </div>
+              ) : (
+                <div style={{
+                  backgroundColor: '#0a0d14',
+                  border: `1px solid ${DS.border}`,
+                  borderRadius: 7,
+                  overflow: 'auto',
+                  fontFamily: 'monospace',
+                  fontSize: '0.75rem',
+                  lineHeight: 1.6,
+                }}>
+                  {result.lines.map((line, i) => {
+                    const isMatch = result.matched_indices.includes(i)
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          display: 'flex',
+                          padding: '0.15rem 0',
+                          backgroundColor: isMatch ? 'rgba(250,204,21,0.07)' : 'transparent',
+                          borderLeft: isMatch ? '2px solid rgba(250,204,21,0.6)' : '2px solid transparent',
+                        }}
+                      >
+                        <span style={{ color: '#3d4557', userSelect: 'none', minWidth: 44, paddingLeft: 8, paddingRight: 8, textAlign: 'right', flexShrink: 0, borderRight: `1px solid ${DS.border}`, marginRight: 12 }}>
+                          {i + 1}
+                        </span>
+                        <span style={{ color: isMatch ? DS.txtP : DS.txtM, paddingRight: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                          {isMatch ? highlightLine(line, pattern) : line}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {!result && !error && loading && (
+            <div style={{ textAlign: 'center', color: DS.txtS, padding: '2.5rem', fontSize: '0.82rem' }}>
+              Reading log source…
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '0.75rem 1.25rem', borderTop: `1px solid ${DS.border}`, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ ...secondaryBtn }}>Close</button>
+        </div>
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
 interface LogMonitorsSetupProps {
   watcherName: string
 }
@@ -177,6 +420,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
   const [formData, setFormData] = useState<LogMonitorPayload>(EMPTY_FORM)
   const [patternError, setPatternError] = useState('')
   const [patternValid, setPatternValid] = useState<boolean | null>(null)
+  const [testingMonitor, setTestingMonitor] = useState<LogMonitor | null>(null)
 
   useEffect(() => { loadMonitors() }, [watcherName])
 
@@ -619,7 +863,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                 return (
                   <tr key={monitor.id}>
                     <td style={td}>
-                      <code style={{ fontSize: '0.8rem', color: DS.accent }}>{monitor.name}</code>
+                      <span style={{ fontSize: '0.85rem', color: DS.txtP }}>{monitor.name}</span>
                     </td>
                     <td style={td}>
                       <span style={{
@@ -659,7 +903,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                       </code>
                     </td>
                     <td style={td}>
-                      <span style={{ fontSize: '0.8rem', color: DS.accent }}>{monitor.event_type}</span>
+                      <span style={{ fontSize: '0.85rem', color: DS.txtP }}>{monitor.event_type}</span>
                     </td>
                     <td style={td}>
                       <span style={{
@@ -680,22 +924,47 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                       </span>
                     </td>
                     <td style={td}>
-                      <span style={{
-                        fontSize: '0.75rem',
-                        padding: '0.2rem 0.6rem',
-                        backgroundColor: monitor.enabled ? `${DS.success}20` : `${DS.border}`,
-                        color: monitor.enabled ? DS.success : DS.txtS,
-                        borderRadius: 4,
-                        fontWeight: 500,
-                      }}>
-                        {monitor.enabled ? 'Active' : 'Disabled'}
-                      </span>
+                      <button
+                        title={monitor.enabled ? 'Disable' : 'Enable'}
+                        onClick={async () => {
+                          try {
+                            const res = await updateLogMonitor(watcherName, monitor.id, { enabled: !monitor.enabled })
+                            setMonitors(monitors.map(m => m.id === monitor.id ? res.data : m))
+                          } catch { /* ignore */ }
+                        }}
+                        style={{
+                          width: 32, height: 18, borderRadius: 9, border: 'none', cursor: 'pointer', flexShrink: 0,
+                          backgroundColor: monitor.enabled ? '#3a7a5a' : DS.border, transition: 'background 0.2s',
+                          position: 'relative',
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute', top: 3, left: monitor.enabled ? 14 : 3,
+                          width: 12, height: 12, borderRadius: '50%',
+                          backgroundColor: '#fff', transition: 'left 0.2s',
+                        }} />
+                      </button>
                     </td>
-                    <td style={{ ...td, display: 'flex', gap: 4 }}>
-                      <button style={compactBtn} onClick={() => handleEdit(monitor)} title="Edit">
+                    <td style={{ ...td, display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <button
+                        style={{ background: 'none', border: 'none', color: DS.txtS, cursor: 'pointer', padding: 4, borderRadius: 4, display: 'flex' }}
+                        onClick={() => setTestingMonitor(monitor)}
+                        title="Test monitor"
+                      >
+                        <IconTestPipe size={14} />
+                      </button>
+                      <button
+                        style={{ background: 'none', border: 'none', color: DS.txtS, cursor: 'pointer', padding: 4, borderRadius: 4, display: 'flex' }}
+                        onClick={() => handleEdit(monitor)}
+                        title="Edit"
+                      >
                         <IconPencil size={14} />
                       </button>
-                      <button style={dangerBtn} onClick={() => handleDelete(monitor.id)} title="Delete">
+                      <button
+                        style={{ background: 'none', border: 'none', color: DS.txtS, cursor: 'pointer', padding: 4, borderRadius: 4, display: 'flex' }}
+                        onClick={() => handleDelete(monitor.id)}
+                        title="Delete"
+                      >
                         <IconTrash size={14} />
                       </button>
                     </td>
@@ -706,6 +975,14 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
           </table>
         )}
       </div>
+      )}
+
+      {testingMonitor && (
+        <LogMonitorTestModal
+          monitor={testingMonitor}
+          watcherName={watcherName}
+          onClose={() => setTestingMonitor(null)}
+        />
       )}
     </div>
   )

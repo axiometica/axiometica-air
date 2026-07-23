@@ -459,6 +459,113 @@ async def handle_log_monitors_reload(request):
         return web.json_response({"success": False, "error": str(exc)}, status=400)
 
 
+async def handle_log_monitors_test(request):
+    """
+    POST /log-monitors/test
+    Body: { "monitor_name": "...", "pattern": "...", "lines": 50 }
+    Reads recent log lines for the named monitor without advancing position tracking,
+    applies the pattern, and returns raw lines with match indices.
+    """
+    from aiohttp import web
+    import subprocess, re as _re
+    from pathlib import Path as _Path
+
+    global _watcher_instance
+
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON body"}, status=400)
+
+    monitor_name = (body.get("monitor_name") or "").strip()
+    if not monitor_name:
+        return web.json_response({"error": "monitor_name is required"}, status=400)
+
+    if _watcher_instance is None:
+        return web.json_response({"error": "Watcher not initialised yet"}, status=503)
+
+    if not hasattr(_watcher_instance, "log_monitor"):
+        return web.json_response({"error": "Log monitor not initialised"}, status=503)
+
+    cfg = _watcher_instance.log_monitor.configs.get(monitor_name)
+    if cfg is None:
+        return web.json_response({"error": f"Monitor '{monitor_name}' not found or disabled"}, status=404)
+
+    lines_count = min(max(int(body.get("lines") or 50), 1), 200)
+    pattern_str = (body.get("pattern") or "").strip() or cfg.pattern
+
+    raw_lines: list = []
+    error: str | None = None
+    target = ""
+
+    if cfg.source == "docker":
+        target = cfg.container
+        try:
+            res = subprocess.run(
+                ["docker", "logs", "--tail", str(lines_count), cfg.container],
+                capture_output=True, text=True, errors="ignore", timeout=15,
+            )
+            combined = res.stdout + res.stderr
+            raw_lines = [l for l in combined.splitlines() if l.strip()]
+        except FileNotFoundError:
+            error = "docker CLI not found in watcher container"
+        except subprocess.TimeoutExpired:
+            error = f"docker logs timed out for container '{cfg.container}'"
+        except Exception as exc:
+            error = str(exc)
+
+    elif cfg.source == "file":
+        target = cfg.file
+        try:
+            fp = _Path(cfg.file)
+            if not fp.exists():
+                error = f"File not found: {cfg.file}"
+            else:
+                with open(fp, "r", errors="ignore") as f:
+                    all_lines = f.readlines()
+                raw_lines = [l.rstrip("\n") for l in all_lines[-lines_count:] if l.strip()]
+        except Exception as exc:
+            error = str(exc)
+
+    elif cfg.source == "vcenter":
+        target = f"{cfg.vm_name}:{cfg.file}"
+        try:
+            adapter = _watcher_instance.adapter
+            if not hasattr(adapter, "adapter_name") or adapter.adapter_name != "vcenter":
+                error = "Watcher is not using the vCenter adapter"
+            else:
+                lf = cfg.file.replace("'", "'\\''")
+                cmd = f"tail -n {lines_count} '{lf}' 2>/dev/null"
+                res = adapter.exec(cfg.vm_name, cmd, timeout=25)
+                raw_lines = [l for l in res.stdout.splitlines() if l.strip()]
+                if not raw_lines and not res.success:
+                    error = res.stderr or f"Command failed on VM '{cfg.vm_name}'"
+        except Exception as exc:
+            error = str(exc)
+    else:
+        error = f"Unknown source type: {cfg.source}"
+
+    # Apply pattern matching
+    matched_indices: list = []
+    if raw_lines and not error:
+        try:
+            pat = _re.compile(pattern_str, _re.IGNORECASE | _re.MULTILINE)
+            matched_indices = [i for i, line in enumerate(raw_lines) if pat.search(line)]
+        except _re.error as exc:
+            error = f"Invalid regex: {exc}"
+
+    return web.json_response({
+        "lines": raw_lines,
+        "matched_indices": matched_indices,
+        "match_count": len(matched_indices),
+        "total_fetched": len(raw_lines),
+        "source": cfg.source,
+        "target": target,
+        "pattern_used": pattern_str,
+        "error": error,
+    })
+
+
 async def handle_test_check(request):
     """
     POST /test-check
@@ -519,6 +626,7 @@ async def _run_kill_server_async():
     app.router.add_put("/config", handle_config)
     app.router.add_post("/reset", handle_reset)
     app.router.add_post("/log-monitors/reload", handle_log_monitors_reload)
+    app.router.add_post("/log-monitors/test", handle_log_monitors_test)
     app.router.add_post("/test-check", handle_test_check)
 
     runner = web.AppRunner(app)

@@ -73,6 +73,11 @@ class LogMonitorUpdate(BaseModel):
     enabled: Optional[bool] = None
 
 
+class LogMonitorTestRequest(BaseModel):
+    pattern: Optional[str] = Field(None, min_length=1, max_length=1000)
+    lines: int = Field(default=50, ge=1, le=200)
+
+
 class PatternValidationRequest(BaseModel):
     pattern: str = Field(..., min_length=1)
 
@@ -389,6 +394,50 @@ async def delete_log_monitor(
         configs_to_push,
         getattr(watcher, "kill_api_url", None),
     )
+
+
+# ── Test (proxy to watcher kill-API) ─────────────────────────────────────────
+
+@router.post("/monitoring/watchers/{watcher_name}/log-monitors/{monitor_id}/test", tags=["Monitoring"])
+async def test_log_monitor(
+    watcher_name: str,
+    monitor_id: str,
+    payload: LogMonitorTestRequest,
+    db: Session = Depends(get_session),
+):
+    """
+    Proxy a live test request to the watcher's kill-API.
+    The watcher reads N lines from the log source and returns them with match indices.
+    Does not update position tracking.
+    """
+    watcher = db.query(WatcherRegistrationModel).filter(
+        WatcherRegistrationModel.watcher_name == watcher_name
+    ).first()
+    if not watcher:
+        raise HTTPException(status_code=404, detail=f"Watcher '{watcher_name}' not found")
+
+    row = db.query(LogMonitorConfigModel).filter(
+        LogMonitorConfigModel.id == monitor_id,
+        LogMonitorConfigModel.watcher_name == watcher_name,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Log monitor not found")
+
+    kill_api_url = getattr(watcher, "kill_api_url", None) or f"http://{watcher_name}:8080"
+
+    try:
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            resp = await client.post(
+                f"{kill_api_url}/log-monitors/test",
+                json={
+                    "monitor_name": row.name,
+                    "pattern": payload.pattern or row.pattern,
+                    "lines": payload.lines,
+                },
+            )
+            return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Could not reach watcher kill-API: {exc}")
 
 
 # ── Pattern Validation ────────────────────────────────────────────────────────

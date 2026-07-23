@@ -1295,6 +1295,23 @@ export const deleteLogMonitor = (watcherName: string, monitorId: string) =>
 export const validateLogPattern = (pattern: string) =>
   axios.post<PatternValidationResponse>(`${API_BASE_URL}/monitoring/log-monitors/validate-pattern`, { pattern })
 
+export interface LogMonitorTestResult {
+  lines: string[]
+  matched_indices: number[]
+  match_count: number
+  total_fetched: number
+  source: string
+  target: string
+  pattern_used: string
+  error: string | null
+}
+
+export const testLogMonitor = (watcherName: string, monitorId: string, pattern?: string, lines?: number) =>
+  axios.post<LogMonitorTestResult>(
+    `${API_BASE_URL}/monitoring/watchers/${watcherName}/log-monitors/${monitorId}/test`,
+    { pattern, lines: lines ?? 50 },
+  )
+
 // ── Approved Actions ────────────────────────────────────────────────────────
 
 export interface ApprovedAction {
