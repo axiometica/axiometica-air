@@ -1,9 +1,10 @@
 """
 Log File Monitor - Watches log files or container stdout/stderr for regex patterns.
 
-Two sources are supported:
-  - "file"   — tails a log file inside the watcher container's filesystem
-  - "docker" — reads new lines from a named container via `docker logs --since`
+Three sources are supported:
+  - "file"    — tails a log file inside the watcher container's filesystem
+  - "docker"  — reads new lines from a named container via `docker logs --since`
+  - "vcenter" — reads a log file inside a VM via vCenter guest exec (VMware Tools)
 
 Configuration (from environment variable, JSON array):
   WATCHER_LOG_MONITORS=[
@@ -15,7 +16,7 @@ Configuration (from environment variable, JSON array):
       "event_type": "log_error_detected",
       "severity": "warning",
       "min_occurrences": 1,
-      "interval_sec": 5
+      "interval_sec": 30
     },
     {
       "name": "backend_errors",
@@ -25,7 +26,18 @@ Configuration (from environment variable, JSON array):
       "event_type": "backend_log_error",
       "severity": "critical",
       "min_occurrences": 2,
-      "interval_sec": 10
+      "interval_sec": 30
+    },
+    {
+      "name": "vm_app_errors",
+      "source": "vcenter",
+      "vm_name": "prod-app-01",
+      "file": "/var/log/app/app.log",
+      "pattern": "ERROR|CRITICAL|Exception",
+      "event_type": "vm_log_error",
+      "severity": "high",
+      "min_occurrences": 1,
+      "interval_sec": 60
     }
   ]
 """
@@ -50,9 +62,10 @@ class LogMonitorConfig:
     name: str
     pattern: str
     event_type: str
-    source: str = "file"           # "file" or "docker"
-    file: str = ""                 # log file path (file mode)
+    source: str = "file"           # "file", "docker", or "vcenter"
+    file: str = ""                 # log file path (file or vcenter mode)
     container: str = ""            # container name (docker mode)
+    vm_name: str = ""              # VM name (vcenter mode)
     interval_sec: int = 30
     min_occurrences: int = 1       # min matching lines per poll to fire
     severity: str = "warning"      # critical | high | warning | info
@@ -68,6 +81,7 @@ class LogMonitorConfig:
             source=d.get("source", "file"),
             file=d.get("file", ""),
             container=d.get("container", ""),
+            vm_name=d.get("vm_name", ""),
             interval_sec=d.get("interval_sec", 30),
             min_occurrences=max(1, int(d.get("min_occurrences", 1))),
             severity=d.get("severity", "warning"),
@@ -110,7 +124,12 @@ class LogMonitor:
 
         logger.info(f"[LOG-MONITOR] Initialized with {len(self.configs)} monitor(s)")
         for name, cfg in self.configs.items():
-            target = cfg.container if cfg.source == "docker" else cfg.file
+            if cfg.source == "docker":
+                target = cfg.container
+            elif cfg.source == "vcenter":
+                target = f"{cfg.vm_name}:{cfg.file}"
+            else:
+                target = cfg.file
             logger.info(
                 f"  • {name} [{cfg.source}]: {target} → {cfg.event_type} "
                 f"(pattern={cfg.pattern[:50]}..., min={cfg.min_occurrences}, sev={cfg.severity})"
@@ -150,12 +169,16 @@ class LogMonitor:
         except Exception as e:
             logger.error(f"[LOG-MONITOR] Failed to save positions: {e}")
 
-    def poll(self) -> List[LogMatch]:
+    def poll(self, vcenter_adapter=None) -> List[LogMatch]:
         """
         Check all monitored sources for new lines matching their patterns.
 
         Returns at most one LogMatch per monitor (when min_occurrences is met).
         Each LogMatch carries all matched lines for use in the incident description.
+
+        Args:
+            vcenter_adapter: Optional vCenterAdapter instance. Required for monitors
+                             with source="vcenter"; vcenter monitors are skipped if None.
         """
         matches = []
 
@@ -164,6 +187,15 @@ class LogMonitor:
                 continue
             if config.source == "docker":
                 result = self._poll_docker(monitor_name, config)
+            elif config.source == "vcenter":
+                if vcenter_adapter is None:
+                    logger.debug(
+                        f"[LOG-MONITOR] {monitor_name}: skipping vcenter source — "
+                        f"no vcenter adapter available"
+                    )
+                    result = None
+                else:
+                    result = self._poll_vcenter(monitor_name, config, vcenter_adapter)
             else:
                 result = self._poll_file(monitor_name, config)
             if result is not None:
@@ -312,6 +344,101 @@ class LogMonitor:
 
         return None
 
+    def _poll_vcenter(self, monitor_name: str, config: LogMonitorConfig, adapter) -> Optional[LogMatch]:
+        """
+        Read new log lines from a VM log file via vCenter guest exec.
+
+        Uses line-count tracking to read only new lines each poll. On the first
+        poll, reads the last 100 lines and records the current total line count.
+        Subsequent polls use awk to read only lines past the saved line count.
+
+        The vCenterAdapter.exec() runs a command in the VM via VMware Tools
+        GuestProcessManager — no SSH or direct network access to the VM required.
+        """
+        pos_key = f"vcenter:{monitor_name}"
+        last_line = self.positions.get(pos_key)
+
+        log_file = config.file.replace("'", "'\\''")  # escape single quotes for shell
+
+        if last_line is None:
+            # First poll: tail recent history and capture current line count
+            cmd = (
+                f"NL=$(wc -l < '{log_file}' 2>/dev/null || echo 0); "
+                f"tail -n 100 '{log_file}' 2>/dev/null; "
+                f"echo \"__VCENTER_LINECOUNT__:$NL\""
+            )
+        else:
+            # Subsequent polls: read only new lines and update count
+            cmd = (
+                f"NL=$(wc -l < '{log_file}' 2>/dev/null || echo 0); "
+                f"awk 'NR > {int(last_line)}' '{log_file}' 2>/dev/null; "
+                f"echo \"__VCENTER_LINECOUNT__:$NL\""
+            )
+
+        try:
+            result = adapter.exec(config.vm_name, cmd, timeout=25)
+        except Exception as exc:
+            logger.error(f"[LOG-MONITOR] vcenter:{monitor_name}: exec failed: {exc}")
+            return None
+
+        if not result.success and not result.stdout.strip():
+            logger.warning(
+                f"[LOG-MONITOR] vcenter:{monitor_name}: command returned non-zero "
+                f"on {config.vm_name} (rc={result.returncode}): {result.stderr[:200]}"
+            )
+            return None
+
+        # Parse the sentinel line for the updated line count
+        lines = result.stdout.splitlines()
+        new_line_count: Optional[int] = None
+        content_lines: List[str] = []
+        for line in lines:
+            if line.startswith("__VCENTER_LINECOUNT__:"):
+                try:
+                    new_line_count = int(line.split(":", 1)[1].strip())
+                except (ValueError, IndexError):
+                    pass
+            else:
+                content_lines.append(line)
+
+        # Persist updated line count so the next poll only reads new lines
+        if new_line_count is not None:
+            self.positions[pos_key] = new_line_count
+        elif last_line is not None:
+            self.positions[pos_key] = last_line  # keep previous on parse failure
+
+        # Apply pattern matching
+        pattern_re = re.compile(config.pattern, re.IGNORECASE | re.MULTILINE)
+        matched_lines: List[str] = []
+        for line in content_lines:
+            line = line.strip()
+            if line and pattern_re.search(line):
+                matched_lines.append(line)
+                if len(matched_lines) >= 20:
+                    break
+
+        if len(matched_lines) < config.min_occurrences:
+            if matched_lines:
+                logger.debug(
+                    f"[LOG-MONITOR] vcenter:{monitor_name}: {len(matched_lines)} match(es), "
+                    f"need {config.min_occurrences} — skipping"
+                )
+            return None
+
+        logger.info(
+            f"[LOG-MONITOR] vcenter:{monitor_name} match on {config.vm_name}: "
+            f"{matched_lines[0][:100]}"
+            + (f" (+{len(matched_lines)-1} more)" if len(matched_lines) > 1 else "")
+        )
+        return LogMatch(
+            monitor_name=monitor_name,
+            event_type=config.event_type,
+            matched_line=matched_lines[0],
+            timestamp=datetime.utcnow().isoformat(),
+            match_count=len(matched_lines),
+            all_matched_lines=matched_lines,
+        )
+
     def is_enabled(self) -> bool:
         """Check if any monitors are enabled."""
         return len(self.configs) > 0
@@ -365,6 +492,20 @@ class LogMonitor:
                             f"[LOG-MONITOR] Preserved docker timestamp for {config.name}"
                         )
 
+                    # Preserve vcenter line count
+                    vcenter_key = f"vcenter:{config.name}"
+                    if (
+                        config.source == "vcenter"
+                        and old.source == "vcenter"
+                        and old.vm_name == config.vm_name
+                        and old.file == config.file
+                        and vcenter_key in self.positions
+                    ):
+                        new_positions[vcenter_key] = self.positions[vcenter_key]
+                        logger.debug(
+                            f"[LOG-MONITOR] Preserved vcenter line count for {config.name}"
+                        )
+
                 new_configs[config.name] = config
             except Exception as e:
                 logger.error(f"[LOG-MONITOR] Invalid config: {e}")
@@ -383,7 +524,12 @@ class LogMonitor:
             f"preserved {len(new_positions)} position(s)"
         )
         for name, cfg in self.configs.items():
-            target = cfg.container if cfg.source == "docker" else cfg.file
+            if cfg.source == "docker":
+                target = cfg.container
+            elif cfg.source == "vcenter":
+                target = f"{cfg.vm_name}:{cfg.file}"
+            else:
+                target = cfg.file
             logger.info(
                 f"  • {name} [{cfg.source}]: {target} → {cfg.event_type} "
                 f"(pattern={cfg.pattern[:50]}..., min={cfg.min_occurrences}, sev={cfg.severity})"

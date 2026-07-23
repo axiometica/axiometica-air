@@ -102,7 +102,7 @@ The watcher detects and reports the following anomaly types. Each produces a `mo
 
 ## Log Monitors
 
-Log monitors watch container stdout/stderr (via `docker logs`) or a log file inside the watcher container for regex pattern matches. When enough matching lines are found in a single poll, a monitoring event is raised. When the pattern stops matching for a configurable number of consecutive polls, an all-clear is sent.
+Log monitors watch container stdout/stderr (via `docker logs`), a log file inside the watcher container, or a log file inside a VMware vCenter VM (via guest exec) for regex pattern matches. When enough matching lines are found in a single poll, a monitoring event is raised. When the pattern stops matching for a configurable number of consecutive polls, an all-clear is sent.
 
 ### Configuration
 
@@ -111,9 +111,10 @@ Log monitors are configured through the platform UI at **Settings → Log Monito
 | Field | Default | Description |
 |-------|---------|-------------|
 | **Name** | — | Unique display name (used as the monitor identifier) |
-| **Source** | `docker` | `docker` — tail a named container's stdout/stderr via `docker logs`; `file` — tail a log file path inside the watcher container |
+| **Source** | `docker` | `docker` — tail a container's stdout/stderr via `docker logs`; `file` — tail a log file inside the watcher container; `vcenter` — read a log file inside a VM via VMware Tools guest exec |
 | **Container** | — | Container name to watch (docker source only), e.g. `agentic_os_backend` |
-| **Log File** | — | Absolute path inside the watcher container (file source only) |
+| **VM Name** | — | VM name as shown in vCenter inventory (vcenter source only), e.g. `prod-app-01` |
+| **Log File** | — | Absolute path inside the watcher container (file source) or inside the guest OS (vcenter source) |
 | **Pattern** | — | Python regex matched against each log line (case-insensitive) |
 | **Event Type** | `log_error_detected` | Monitoring event type emitted when the pattern fires |
 | **Min Occurrences** | `1` | Minimum matching lines per poll interval before the event fires |
@@ -149,6 +150,40 @@ docker exec agentic_os_backend sh -c '
 # Watch the watcher detect it (within one poll interval)
 docker logs watcher_brain -f | grep -E "LOG-MONITOR|SUSTAINED|quiet poll|all-clear"
 ```
+
+### vCenter source
+
+When the watcher is deployed with `VCENTER_HOST` set (or `WATCHER_ADAPTER=vcenter`), it uses the `vCenterAdapter` — the same adapter used for runbook remediation commands. The `vcenter` log monitor source reuses this existing connection to read log files from VM guests via **VMware Tools guest exec** — no SSH, no direct network access to the VM, no additional credentials.
+
+**How it works:**
+1. The watcher runs `awk 'NR > {last_line}' {file}` inside the VM via `GuestProcessManager.StartProgramInGuest()`
+2. Output is staged to a temp file inside the VM, then downloaded via `GuestFileManager.InitiateFileTransferFromGuest()`
+3. The result is pattern-matched identically to the `file` source
+4. Line count is tracked across polls so each poll reads only new lines
+
+**Prerequisites** (same as for remediation):
+- VMware Tools running inside each guest VM
+- vCenter service account with "Guest Operations" privilege
+- `VCENTER_GUEST_USER` / `VCENTER_GUEST_PASSWORD` env vars set (the in-guest OS credentials)
+- The log file must be readable by the guest user
+
+**Example configuration:**
+```json
+{
+  "name": "prod_app_errors",
+  "source": "vcenter",
+  "vm_name": "prod-app-01",
+  "file": "/var/log/app/application.log",
+  "pattern": "ERROR|CRITICAL|Exception",
+  "event_type": "vm_log_error_detected",
+  "severity": "high",
+  "min_occurrences": 1,
+  "interval_sec": 60,
+  "clear_after_polls": 3
+}
+```
+
+The incident resource will be set to the VM name (e.g. `prod-app-01`), so CMDB blast-radius analysis works the same as for VM-level metric alerts.
 
 ### Kubernetes limitation
 

@@ -142,8 +142,9 @@ const SEVERITY_STYLES: Record<string, { bg: string; color: string; border: strin
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; color: string; border: string }> = {
-  docker: { bg: 'rgba(59,130,246,0.10)', color: '#60a5fa', border: 'rgba(59,130,246,0.22)' },
-  file:   { bg: 'rgba(63,185,80,0.09)',  color: '#3fb950', border: 'rgba(63,185,80,0.22)'  },
+  docker:   { bg: 'rgba(59,130,246,0.10)',  color: '#60a5fa', border: 'rgba(59,130,246,0.22)' },
+  file:     { bg: 'rgba(63,185,80,0.09)',   color: '#3fb950', border: 'rgba(63,185,80,0.22)'  },
+  vcenter:  { bg: 'rgba(210,153,34,0.09)',  color: '#e3a017', border: 'rgba(210,153,34,0.22)' },
 }
 
 interface LogMonitorsSetupProps {
@@ -155,6 +156,7 @@ const EMPTY_FORM: LogMonitorPayload = {
   source: 'file',
   file: '',
   container: '',
+  vm_name: '',
   pattern: '',
   event_type: 'log_error_detected',
   interval_sec: 30,
@@ -225,6 +227,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
       source: monitor.source || 'file',
       file: monitor.file,
       container: monitor.container || '',
+      vm_name: monitor.vm_name || '',
       pattern: monitor.pattern,
       event_type: monitor.event_type,
       interval_sec: monitor.interval_sec,
@@ -243,6 +246,9 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
     if (!formData.name?.trim()) { setError('Monitor name is required'); return }
     if (formData.source === 'docker' && !formData.container?.trim()) {
       setError('Container name is required for Docker source'); return
+    }
+    if (formData.source === 'vcenter' && !formData.vm_name?.trim()) {
+      setError('VM name is required for vCenter source'); return
     }
     if (formData.source !== 'docker' && !formData.file?.trim()) {
       setError('Log file path is required'); return
@@ -306,7 +312,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: DS.txtP, letterSpacing: '0.01em' }}>Log Monitors</span>
           </div>
           <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: DS.txtS, marginLeft: 23 }}>
-            Watch log files or container stdout/stderr and trigger runbooks on patterns
+            Watch log files, container stdout/stderr, or VM logs (vCenter) and trigger runbooks on patterns
           </p>
         </div>
         {!showForm && (
@@ -380,7 +386,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
             <div style={{ marginBottom: '1rem' }}>
               <label style={labelStyle}>Log Source *</label>
               <div style={{ display: 'flex', gap: 8 }}>
-                {(['file', 'docker'] as const).map(src => (
+                {(['file', 'docker', 'vcenter'] as const).map(src => (
                   <button
                     key={src}
                     type="button"
@@ -398,19 +404,21 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                       cursor: 'pointer',
                     }}
                   >
-                    {src === 'file' ? 'File' : 'Docker Container'}
+                    {src === 'file' ? 'File' : src === 'docker' ? 'Docker Container' : 'vCenter VM'}
                   </button>
                 ))}
               </div>
               <p style={{ margin: '0.4rem 0 0', fontSize: '0.72rem', color: DS.txtS }}>
                 {formData.source === 'docker'
                   ? 'Reads stdout + stderr from a named container via docker logs'
+                  : formData.source === 'vcenter'
+                  ? 'Reads a log file inside a VM via VMware Tools guest exec — no SSH required'
                   : 'Tails a log file mounted inside the watcher container'}
               </p>
             </div>
 
-            {/* Target: file path or container name */}
-            {formData.source === 'docker' ? (
+            {/* Target: container name (docker) */}
+            {formData.source === 'docker' && (
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Container Name *</label>
                 <input
@@ -421,7 +429,42 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                   style={{ ...inputStyle, fontFamily: 'monospace' }}
                 />
               </div>
-            ) : (
+            )}
+
+            {/* Target: VM name + log file (vcenter) */}
+            {formData.source === 'vcenter' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>VM Name *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., prod-app-01"
+                    value={formData.vm_name ?? ''}
+                    onChange={e => setFormData(prev => ({ ...prev, vm_name: e.target.value }))}
+                    style={{ ...inputStyle, fontFamily: 'monospace' }}
+                  />
+                  <p style={{ margin: '0.3rem 0 0', fontSize: '0.7rem', color: DS.txtS }}>
+                    VM name as shown in vCenter inventory
+                  </p>
+                </div>
+                <div>
+                  <label style={labelStyle}>Log File Path *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., /var/log/app/app.log"
+                    value={formData.file ?? ''}
+                    onChange={e => setFormData(prev => ({ ...prev, file: e.target.value }))}
+                    style={{ ...inputStyle, fontFamily: 'monospace' }}
+                  />
+                  <p style={{ margin: '0.3rem 0 0', fontSize: '0.7rem', color: DS.txtS }}>
+                    Absolute path inside the guest OS
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Target: log file path (file) */}
+            {formData.source === 'file' && (
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Log File Path *</label>
                 <input
@@ -595,7 +638,11 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                     </td>
                     <td style={td}>
                       <code style={{ fontSize: '0.78rem', color: DS.txtM }}>
-                        {monitor.source === 'docker' ? monitor.container : monitor.file}
+                        {monitor.source === 'docker'
+                          ? monitor.container
+                          : monitor.source === 'vcenter'
+                          ? `${monitor.vm_name}:${monitor.file}`
+                          : monitor.file}
                       </code>
                     </td>
                     <td style={td}>

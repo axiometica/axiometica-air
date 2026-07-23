@@ -33,9 +33,10 @@ router = APIRouter()
 
 class LogMonitorCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    source: Literal["file", "docker"] = "file"
+    source: Literal["file", "docker", "vcenter"] = "file"
     file: str = Field(default="", max_length=500)
     container: str = Field(default="", max_length=200)
+    vm_name: str = Field(default="", max_length=200)
     pattern: str = Field(..., min_length=1, max_length=1000)
     event_type: str = Field(..., min_length=1, max_length=100)
     interval_sec: int = Field(default=30, ge=1, le=3600)
@@ -50,14 +51,19 @@ class LogMonitorCreate(BaseModel):
             raise ValueError("file path is required when source is 'file'")
         if self.source == "docker" and not self.container.strip():
             raise ValueError("container name is required when source is 'docker'")
+        if self.source == "vcenter" and not self.vm_name.strip():
+            raise ValueError("vm_name is required when source is 'vcenter'")
+        if self.source == "vcenter" and not self.file.strip():
+            raise ValueError("file path is required when source is 'vcenter'")
         return self
 
 
 class LogMonitorUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
-    source: Optional[Literal["file", "docker"]] = None
+    source: Optional[Literal["file", "docker", "vcenter"]] = None
     file: Optional[str] = Field(None, max_length=500)
     container: Optional[str] = Field(None, max_length=200)
+    vm_name: Optional[str] = Field(None, max_length=200)
     pattern: Optional[str] = Field(None, min_length=1, max_length=1000)
     event_type: Optional[str] = Field(None, min_length=1, max_length=100)
     interval_sec: Optional[int] = Field(None, ge=1, le=3600)
@@ -93,6 +99,7 @@ def _monitor_to_dict(row: LogMonitorConfigModel) -> Dict[str, Any]:
         "source": getattr(row, "source", "file"),
         "file": row.file,
         "container": getattr(row, "container", ""),
+        "vm_name": getattr(row, "vm_name", ""),
         "pattern": row.pattern,
         "event_type": row.event_type,
         "interval_sec": row.interval_sec,
@@ -191,6 +198,7 @@ async def create_log_monitor(
         source=payload.source,
         file=payload.file,
         container=payload.container,
+        vm_name=payload.vm_name,
         pattern=payload.pattern,
         event_type=payload.event_type,
         interval_sec=payload.interval_sec,
@@ -221,6 +229,7 @@ async def create_log_monitor(
             "source": getattr(m, "source", "file"),
             "file": m.file,
             "container": getattr(m, "container", ""),
+            "vm_name": getattr(m, "vm_name", ""),
             "pattern": m.pattern,
             "event_type": m.event_type,
             "interval_sec": m.interval_sec,
@@ -304,6 +313,7 @@ async def update_log_monitor(
             "source": getattr(m, "source", "file"),
             "file": m.file,
             "container": getattr(m, "container", ""),
+            "vm_name": getattr(m, "vm_name", ""),
             "pattern": m.pattern,
             "event_type": m.event_type,
             "interval_sec": m.interval_sec,
@@ -362,6 +372,7 @@ async def delete_log_monitor(
             "source": getattr(m, "source", "file"),
             "file": m.file,
             "container": getattr(m, "container", ""),
+            "vm_name": getattr(m, "vm_name", ""),
             "pattern": m.pattern,
             "event_type": m.event_type,
             "interval_sec": m.interval_sec,

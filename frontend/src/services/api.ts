@@ -1244,6 +1244,7 @@ export interface LogMonitor {
   source: string
   file: string
   container: string
+  vm_name: string
   pattern: string
   event_type: string
   interval_sec: number
@@ -1260,6 +1261,7 @@ export interface LogMonitorPayload {
   source?: string
   file?: string
   container?: string
+  vm_name?: string
   pattern: string
   event_type: string
   interval_sec?: number

@@ -2512,8 +2512,16 @@ class WatcherService:
                     _held_log_conditions: set = set()  # populated below when log monitor is enabled
                     if self.log_monitor.is_enabled():
                         loop = asyncio.get_event_loop()
+                        # Pass the adapter for vcenter-source monitors
+                        _vcenter_adap = (
+                            self.adapter
+                            if getattr(self.adapter, "adapter_name", None) == "vcenter"
+                            else None
+                        )
                         try:
-                            log_matches = await loop.run_in_executor(None, self.log_monitor.poll)
+                            log_matches = await loop.run_in_executor(
+                                None, lambda: self.log_monitor.poll(_vcenter_adap)
+                            )
                             for match in log_matches:
                                 count_detail = (
                                     f" ({match.match_count} lines)" if match.match_count > 1 else ""
@@ -2523,13 +2531,15 @@ class WatcherService:
                                     f"{match.matched_line[:100]}{count_detail}"
                                 )
                                 cfg = self.log_monitor.configs[match.monitor_name]
-                                # Use the actual container/file as the resource so the
-                                # incident shows "agentic_os_backend" not "Backend Log".
-                                _lm_resource = (
-                                    cfg.container
-                                    if cfg.source == "docker" and cfg.container
-                                    else match.monitor_name
-                                )
+                                # Use the actual container/VM/file as the resource so the
+                                # incident shows "agentic_os_backend" or "prod-vm-01", not
+                                # the monitor display name.
+                                if cfg.source == "docker" and cfg.container:
+                                    _lm_resource = cfg.container
+                                elif cfg.source == "vcenter" and cfg.vm_name:
+                                    _lm_resource = cfg.vm_name
+                                else:
+                                    _lm_resource = match.monitor_name
                                 log_file_anomalies.append((
                                     _lm_resource,
                                     match.event_type,
@@ -2538,7 +2548,10 @@ class WatcherService:
                                         "match_count": match.match_count,
                                         "all_matched_lines": match.all_matched_lines,
                                         "source": cfg.source,
-                                        "log_file": cfg.container if cfg.source == "docker" else cfg.file,
+                                        "log_file": (
+                                            cfg.container if cfg.source == "docker"
+                                            else cfg.file
+                                        ),
                                         "pattern": cfg.pattern,
                                         "severity": cfg.severity,
                                         "monitor_name": match.monitor_name,
@@ -2553,21 +2566,23 @@ class WatcherService:
                         # Build a resource→config map so the lookup works with either.
                         _cfg_by_resource: dict = {}
                         for _mname, _mcfg in self.log_monitor.configs.items():
-                            _rname = (
-                                _mcfg.container
-                                if _mcfg.source == "docker" and _mcfg.container
-                                else _mname
-                            )
+                            if _mcfg.source == "docker" and _mcfg.container:
+                                _rname = _mcfg.container
+                            elif _mcfg.source == "vcenter" and _mcfg.vm_name:
+                                _rname = _mcfg.vm_name
+                            else:
+                                _rname = _mname
                             _cfg_by_resource[_rname] = _mcfg
 
                         _matched_log_keys = set()
                         for _m in log_matches:
                             _m_cfg = self.log_monitor.configs.get(_m.monitor_name)
-                            _m_res = (
-                                _m_cfg.container
-                                if _m_cfg and _m_cfg.source == "docker" and _m_cfg.container
-                                else _m.monitor_name
-                            )
+                            if _m_cfg and _m_cfg.source == "docker" and _m_cfg.container:
+                                _m_res = _m_cfg.container
+                            elif _m_cfg and _m_cfg.source == "vcenter" and _m_cfg.vm_name:
+                                _m_res = _m_cfg.vm_name
+                            else:
+                                _m_res = _m.monitor_name
                             _matched_log_keys.add(f"{_m_res}:{_m.event_type}")
 
                         for _ck in list(self.active_conditions):

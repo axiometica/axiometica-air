@@ -963,9 +963,10 @@ class LogMonitorConfigModel(Base):
 
     # Monitor descriptor
     name = Column(String(200), nullable=False)              # Display name, unique per watcher
-    source = Column(String(20), nullable=False, default="file")     # "file" or "docker"
-    file = Column(String(500), nullable=False, default="")  # Log file path (file mode)
+    source = Column(String(20), nullable=False, default="file")     # "file", "docker", or "vcenter"
+    file = Column(String(500), nullable=False, default="")  # Log file path (file or vcenter mode)
     container = Column(String(200), nullable=False, default="")     # Container name (docker mode)
+    vm_name = Column(String(200), nullable=False, default="")       # VM name (vcenter mode)
     pattern = Column(String(1000), nullable=False)          # Regex pattern to match
     event_type = Column(String(100), nullable=False)        # Event type to emit (e.g., "log_error_detected")
 
