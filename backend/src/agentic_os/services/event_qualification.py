@@ -98,6 +98,7 @@ class EventQualificationService:
         "criticality_min_score": {
             "info":     75.0,
             "warning":  50.0,
+            "high":     40.0,
             "critical": 30.0,
         },
     }

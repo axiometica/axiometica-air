@@ -973,6 +973,7 @@ class LogMonitorConfigModel(Base):
     interval_sec = Column(Integer, nullable=False, default=5)    # Poll interval in seconds
     min_occurrences = Column(Integer, nullable=False, default=1) # Min matching lines per poll to fire
     severity = Column(String(20), nullable=False, default="warning")  # critical|high|warning|info
+    clear_after_polls = Column(Integer, nullable=False, default=3)    # Quiet polls before all-clear fires
     enabled = Column(Boolean, nullable=False, default=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

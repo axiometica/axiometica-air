@@ -157,9 +157,10 @@ const EMPTY_FORM: LogMonitorPayload = {
   container: '',
   pattern: '',
   event_type: 'log_error_detected',
-  interval_sec: 5,
+  interval_sec: 30,
   min_occurrences: 1,
   severity: 'warning',
+  clear_after_polls: 3,
   enabled: true,
 }
 
@@ -229,6 +230,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
       interval_sec: monitor.interval_sec,
       min_occurrences: monitor.min_occurrences ?? 1,
       severity: monitor.severity || 'warning',
+      clear_after_polls: monitor.clear_after_polls ?? 3,
       enabled: monitor.enabled,
     })
     setEditingId(monitor.id)
@@ -462,8 +464,8 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
               )}
             </div>
 
-            {/* Row: Severity + Min Occurrences + Poll Interval + Enabled */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '1rem', marginBottom: '1rem', alignItems: 'start' }}>
+            {/* Row: Severity + Min Occurrences + Poll Interval + Clear After Polls + Enabled */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '1rem', marginBottom: '1rem', alignItems: 'start' }}>
               <div>
                 <label style={labelStyle}>Severity</label>
                 <select
@@ -488,7 +490,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                   style={inputStyle}
                 />
                 <p style={{ margin: '0.3rem 0 0', fontSize: '0.7rem', color: DS.txtS }}>
-                  Minimum matching lines before event fires
+                  Matching lines needed before event fires
                 </p>
               </div>
 
@@ -502,6 +504,21 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                   onChange={e => setFormData(prev => ({ ...prev, interval_sec: parseInt(e.target.value) || 5 }))}
                   style={inputStyle}
                 />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Clear After Polls</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={formData.clear_after_polls ?? 3}
+                  onChange={e => setFormData(prev => ({ ...prev, clear_after_polls: parseInt(e.target.value) || 0 }))}
+                  style={inputStyle}
+                />
+                <p style={{ margin: '0.3rem 0 0', fontSize: '0.7rem', color: DS.txtS }}>
+                  Quiet polls before all-clear (0 = immediate)
+                </p>
               </div>
 
               <div style={{ paddingTop: '1.6rem' }}>

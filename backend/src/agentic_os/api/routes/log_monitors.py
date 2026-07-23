@@ -38,9 +38,10 @@ class LogMonitorCreate(BaseModel):
     container: str = Field(default="", max_length=200)
     pattern: str = Field(..., min_length=1, max_length=1000)
     event_type: str = Field(..., min_length=1, max_length=100)
-    interval_sec: int = Field(default=5, ge=1, le=3600)
+    interval_sec: int = Field(default=30, ge=1, le=3600)
     min_occurrences: int = Field(default=1, ge=1, le=1000)
     severity: Literal["critical", "high", "warning", "info"] = "warning"
+    clear_after_polls: int = Field(default=3, ge=0, le=100)
     enabled: bool = Field(default=True)
 
     @model_validator(mode="after")
@@ -62,6 +63,7 @@ class LogMonitorUpdate(BaseModel):
     interval_sec: Optional[int] = Field(None, ge=1, le=3600)
     min_occurrences: Optional[int] = Field(None, ge=1, le=1000)
     severity: Optional[Literal["critical", "high", "warning", "info"]] = None
+    clear_after_polls: Optional[int] = Field(None, ge=0, le=100)
     enabled: Optional[bool] = None
 
 
@@ -96,6 +98,7 @@ def _monitor_to_dict(row: LogMonitorConfigModel) -> Dict[str, Any]:
         "interval_sec": row.interval_sec,
         "min_occurrences": getattr(row, "min_occurrences", 1),
         "severity": getattr(row, "severity", "warning"),
+        "clear_after_polls": getattr(row, "clear_after_polls", 3),
         "enabled": row.enabled,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
@@ -193,6 +196,7 @@ async def create_log_monitor(
         interval_sec=payload.interval_sec,
         min_occurrences=payload.min_occurrences,
         severity=payload.severity,
+        clear_after_polls=payload.clear_after_polls,
         enabled=payload.enabled,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -222,6 +226,7 @@ async def create_log_monitor(
             "interval_sec": m.interval_sec,
             "min_occurrences": getattr(m, "min_occurrences", 1),
             "severity": getattr(m, "severity", "warning"),
+            "clear_after_polls": getattr(m, "clear_after_polls", 3),
             "enabled": m.enabled,
         }
         for m in all_monitors
@@ -304,6 +309,7 @@ async def update_log_monitor(
             "interval_sec": m.interval_sec,
             "min_occurrences": getattr(m, "min_occurrences", 1),
             "severity": getattr(m, "severity", "warning"),
+            "clear_after_polls": getattr(m, "clear_after_polls", 3),
             "enabled": m.enabled,
         }
         for m in all_monitors
@@ -361,6 +367,7 @@ async def delete_log_monitor(
             "interval_sec": m.interval_sec,
             "min_occurrences": getattr(m, "min_occurrences", 1),
             "severity": getattr(m, "severity", "warning"),
+            "clear_after_polls": getattr(m, "clear_after_polls", 3),
             "enabled": m.enabled,
         }
         for m in remaining_monitors

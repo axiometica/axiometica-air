@@ -50,6 +50,7 @@ export interface MonitoringEvent {
 const CRITICALITY_MAP: Record<string, { label: string; cls: string }> = {
   info:     { label: 'Info',     cls: 'crit-info'     },
   warning:  { label: 'Warning',  cls: 'crit-warning'  },
+  high:     { label: 'High',     cls: 'crit-high'     },
   critical: { label: 'Critical', cls: 'crit-critical' },
 }
 

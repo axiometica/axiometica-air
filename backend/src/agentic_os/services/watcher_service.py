@@ -248,6 +248,11 @@ class WatcherService:
         # Monitor names that have an active alert open (fired but not yet cleared).
         self.synthetic_alert_active: set = set()
 
+        # Quiet-poll counters for log file monitors — keyed by "monitor_name:event_type".
+        # Counts consecutive polls with no match.  All-clear fires only when the
+        # counter reaches the monitor's clear_after_polls threshold.
+        self._log_quiet_polls: Dict[str, int] = {}
+
         # Per-resource cooldown timers — prevent re-opening an incident for the
         # same resource immediately after cooldown expires.
         self.per_resource_cooldown: Dict[str, datetime] = {}
@@ -2504,6 +2509,7 @@ class WatcherService:
                     # ── Log File Monitoring (works in all adapter modes) ──────────────
                     # Tails configured log files for regex patterns, emits custom events.
                     log_file_anomalies = []
+                    _held_log_conditions: set = set()  # populated below when log monitor is enabled
                     if self.log_monitor.is_enabled():
                         loop = asyncio.get_event_loop()
                         try:
@@ -2517,8 +2523,15 @@ class WatcherService:
                                     f"{match.matched_line[:100]}{count_detail}"
                                 )
                                 cfg = self.log_monitor.configs[match.monitor_name]
+                                # Use the actual container/file as the resource so the
+                                # incident shows "agentic_os_backend" not "Backend Log".
+                                _lm_resource = (
+                                    cfg.container
+                                    if cfg.source == "docker" and cfg.container
+                                    else match.monitor_name
+                                )
                                 log_file_anomalies.append((
-                                    match.monitor_name,
+                                    _lm_resource,
                                     match.event_type,
                                     {
                                         "matched_line": match.matched_line,
@@ -2528,10 +2541,64 @@ class WatcherService:
                                         "log_file": cfg.container if cfg.source == "docker" else cfg.file,
                                         "pattern": cfg.pattern,
                                         "severity": cfg.severity,
+                                        "monitor_name": match.monitor_name,
                                     }
                                 ))
                         except Exception as log_err:
                             logger.error(f"[LOG-MONITOR] Error polling: {log_err}")
+
+                        # ── Quiet-poll tracking for log monitors ──────────────────
+                        # condition_key format: "resource:event_type" where resource is
+                        # the container name (docker) or monitor name (file).
+                        # Build a resource→config map so the lookup works with either.
+                        _cfg_by_resource: dict = {}
+                        for _mname, _mcfg in self.log_monitor.configs.items():
+                            _rname = (
+                                _mcfg.container
+                                if _mcfg.source == "docker" and _mcfg.container
+                                else _mname
+                            )
+                            _cfg_by_resource[_rname] = _mcfg
+
+                        _matched_log_keys = set()
+                        for _m in log_matches:
+                            _m_cfg = self.log_monitor.configs.get(_m.monitor_name)
+                            _m_res = (
+                                _m_cfg.container
+                                if _m_cfg and _m_cfg.source == "docker" and _m_cfg.container
+                                else _m.monitor_name
+                            )
+                            _matched_log_keys.add(f"{_m_res}:{_m.event_type}")
+
+                        for _ck in list(self.active_conditions):
+                            if ":" not in _ck:
+                                continue
+                            _res, _at = _ck.split(":", 1)
+                            _cfg = _cfg_by_resource.get(_res)
+                            if _cfg is None:
+                                continue  # not a log monitor condition
+                            if _ck in _matched_log_keys:
+                                # Fresh match this poll — reset quiet counter
+                                self._log_quiet_polls.pop(_ck, None)
+                            else:
+                                # Quiet poll — increment counter
+                                self._log_quiet_polls[_ck] = (
+                                    self._log_quiet_polls.get(_ck, 0) + 1
+                                )
+                                _quiet = self._log_quiet_polls[_ck]
+                                _thresh = _cfg.clear_after_polls
+                                if _quiet < _thresh:
+                                    logger.info(
+                                        f"[LOG-MONITOR] {_res}: quiet poll "
+                                        f"{_quiet}/{_thresh} — holding all-clear"
+                                    )
+                                    _held_log_conditions.add(_ck)
+                                else:
+                                    logger.info(
+                                        f"[LOG-MONITOR] {_res}: {_quiet} quiet polls "
+                                        f">= {_thresh} — releasing all-clear"
+                                    )
+                                    self._log_quiet_polls.pop(_ck, None)
 
                     all_anomalies = (
                         container_anomalies + disk_anomalies + health_anomalies
@@ -2551,6 +2618,16 @@ class WatcherService:
                     for _cname, _atype, _ in all_anomalies:
                         currently_anomalous.add(_cname)
                         current_anomaly_keys.add(f"{_cname}:{_atype}")
+
+                    # Inject held log conditions to suppress premature all-clear.
+                    # These are conditions in their quiet-poll window (not yet matched,
+                    # but not yet past clear_after_polls threshold either).  We add
+                    # them directly here — bypassing log_file_anomalies — so they
+                    # never reach the incident-fire path.
+                    for _mk in _held_log_conditions:
+                        _hres, _ = _mk.split(":", 1)
+                        currently_anomalous.add(_hres)
+                        current_anomaly_keys.add(_mk)
 
                     # ── Per-resource all-clear ────────────────────────────────────────
                     # Any resource that WAS tracked (active_conditions) but is NOT in
@@ -2860,6 +2937,9 @@ class WatcherService:
                                     # and reconcile can clear it when the incident closes.
                                     self.active_conditions[condition_key] = platform_event_type
                                     self._active_workflow_ids[container_name] = wf_id
+                                    # Reset quiet counter so a fresh incident doesn't
+                                    # immediately all-clear on the first quiet poll.
+                                    self._log_quiet_polls.pop(condition_key, None)
                                 else:
                                     # Event submitted but dismissed (below threshold).
                                     # Cooldown prevents immediate retry; do NOT add to

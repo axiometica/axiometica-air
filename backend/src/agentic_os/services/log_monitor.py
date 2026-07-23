@@ -53,9 +53,10 @@ class LogMonitorConfig:
     source: str = "file"           # "file" or "docker"
     file: str = ""                 # log file path (file mode)
     container: str = ""            # container name (docker mode)
-    interval_sec: int = 5
+    interval_sec: int = 30
     min_occurrences: int = 1       # min matching lines per poll to fire
     severity: str = "warning"      # critical | high | warning | info
+    clear_after_polls: int = 3     # consecutive quiet polls before all-clear fires
     enabled: bool = True
 
     @classmethod
@@ -67,9 +68,10 @@ class LogMonitorConfig:
             source=d.get("source", "file"),
             file=d.get("file", ""),
             container=d.get("container", ""),
-            interval_sec=d.get("interval_sec", 5),
+            interval_sec=d.get("interval_sec", 30),
             min_occurrences=max(1, int(d.get("min_occurrences", 1))),
             severity=d.get("severity", "warning"),
+            clear_after_polls=max(0, int(d.get("clear_after_polls", 3))),
             enabled=d.get("enabled", True),
         )
 
@@ -104,7 +106,7 @@ class LogMonitor:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.positions_file = self.state_dir / "log_monitor_positions.json"
         self.positions = self._load_positions()
-        self.min_interval = min((c.interval_sec for c in self.configs.values()), default=5)
+        self.min_interval = min((c.interval_sec for c in self.configs.values()), default=30)
 
         logger.info(f"[LOG-MONITOR] Initialized with {len(self.configs)} monitor(s)")
         for name, cfg in self.configs.items():

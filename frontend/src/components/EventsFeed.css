@@ -329,6 +329,7 @@
 /* Criticality */
 .crit-info     { color: #94a3b8; }
 .crit-warning  { color: #f59e0b; }
+.crit-high     { color: #f97316; }
 .crit-critical { color: #dc2626; }
 
 /* Status */

@@ -1249,6 +1249,7 @@ export interface LogMonitor {
   interval_sec: number
   min_occurrences: number
   severity: string
+  clear_after_polls: number
   enabled: boolean
   created_at: string | null
   updated_at: string | null
@@ -1264,6 +1265,7 @@ export interface LogMonitorPayload {
   interval_sec?: number
   min_occurrences?: number
   severity?: string
+  clear_after_polls?: number
   enabled?: boolean
 }
 
