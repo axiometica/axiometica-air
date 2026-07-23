@@ -665,6 +665,11 @@ async def main():
         await asyncio.sleep(approval_check_interval)
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Load persisted log monitors from the platform DB now that we're approved.
+    # This covers the case where monitors were created/edited while the watcher
+    # was down — the live-push path only covers runtime updates to a running watcher.
+    await watcher.load_log_monitors_from_api()
+
     # Run the monitoring loop in the main event loop
     try:
         await watcher.run()

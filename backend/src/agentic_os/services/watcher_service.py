@@ -457,6 +457,34 @@ class WatcherService:
             logger.debug(f"[API CONFIG] Could not reach settings API: {exc}")
             return False
 
+    async def load_log_monitors_from_api(self) -> None:
+        """
+        Fetch persisted log monitor configs from the platform DB and push them
+        into the running LogMonitor service.
+
+        Called once at startup (after the watcher is approved) so that monitors
+        created or edited while the watcher was down are not silently dropped.
+        The live-push path (kill-API /log-monitors/reload) handles runtime updates.
+        """
+        url = f"{self.api_base_url}/api/monitoring/watchers/{self.watcher_name}/log-monitors"
+        try:
+            async with httpx.AsyncClient(timeout=5.0, headers=self._api_headers) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    logger.debug(
+                        f"[LOG-MONITOR] Could not load monitors from API: HTTP {resp.status_code}"
+                    )
+                    return
+                monitors = resp.json()
+                if not isinstance(monitors, list):
+                    return
+                self.log_monitor.reload_configs(monitors)
+                logger.info(
+                    f"📋 [LOG-MONITOR] Loaded {len(monitors)} monitor(s) from platform DB on startup"
+                )
+        except Exception as exc:
+            logger.debug(f"[LOG-MONITOR] Could not fetch log monitors from API: {exc}")
+
     def _load_identity(self) -> None:
         """Load persisted watcher_id from .state/watcher_identity.json (if present)."""
         try:
@@ -2459,13 +2487,15 @@ class WatcherService:
                                 )
                                 # Create event for this log match
                                 # Format: (resource_name, event_type, metadata_dict)
+                                cfg = self.log_monitor.configs[match.monitor_name]
                                 log_file_anomalies.append((
                                     match.monitor_name,
                                     match.event_type,
                                     {
                                         "matched_line": match.matched_line,
-                                        "log_file": self.log_monitor.configs[match.monitor_name].file,
-                                        "pattern": self.log_monitor.configs[match.monitor_name].pattern,
+                                        "source": cfg.source,
+                                        "log_file": cfg.container if cfg.source == "docker" else cfg.file,
+                                        "pattern": cfg.pattern,
                                     }
                                 ))
                         except Exception as log_err:
@@ -2671,6 +2701,13 @@ class WatcherService:
                             "dns_failed":             "critical",
                             "tls_expiry":             "warning",
                         }
+
+                        # Log-based events are one-time occurrences — the docker/file
+                        # --since cursor advances past them after each poll, so they
+                        # can never satisfy a multi-poll consecutive gate organically.
+                        # Pre-set their counters to threshold so they fire on first match.
+                        for _r, _a, _ in log_file_anomalies:
+                            self.consecutive_anomaly_counts[f"{_r}:{_a}"] = self.min_consecutive_polls
 
                         for container_name, anomaly_type, description in all_anomalies:
                             consecutive_count = self._increment_anomaly_count(container_name, anomaly_type)
