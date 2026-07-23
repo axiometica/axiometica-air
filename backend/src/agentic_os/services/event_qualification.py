@@ -69,8 +69,9 @@ class EventQualificationService:
             "network.tls.certificate_expiring":              1.0,
             "security.endpoint.ransomware_behavior":         2.5,
             "security.compliance.audit_log_cleared":         2.0,
-            "log.error.spike":                               0.75,  # above log domain (0.5), below security
-            "log.warning.pattern_detected":                  0.55,
+            "log.error.spike":                               1.0,   # explicit configured pattern match — treat as normal severity
+            "log.error.pattern_detected":                    1.0,   # same: configured regex match, not statistical noise
+            "log.warning.pattern_detected":                  0.75,
             "container.runtime.oom_kill":                    0.85,  # warning oom → 51, qualifies
         },
         "default_event_multiplier": 1.0,
@@ -322,7 +323,7 @@ class EventQualificationService:
 
     @staticmethod
     def _criticality_to_score(criticality: str) -> float:
-        return {"info": 0.3, "warning": 0.6, "critical": 1.0}.get(criticality, 0.5)
+        return {"info": 0.3, "warning": 0.6, "high": 0.8, "critical": 1.0}.get(criticality, 0.5)
 
     @staticmethod
     def _generate_reason(
