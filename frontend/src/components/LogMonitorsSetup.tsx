@@ -174,8 +174,25 @@ function LogMonitorTestModal({
     setError('')
     try {
       const res = await testLogMonitor(watcherName, monitor.id, pattern, lines)
-      setResult(res.data)
-      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+      const data = res.data
+      // Normalize: watcher error responses may omit lines/matched_indices
+      const normalized: LogMonitorTestResult = {
+        lines: Array.isArray(data.lines) ? data.lines : [],
+        matched_indices: Array.isArray(data.matched_indices) ? data.matched_indices : [],
+        match_count: data.match_count ?? 0,
+        total_fetched: data.total_fetched ?? 0,
+        source: data.source ?? monitor.source,
+        target: data.target ?? '',
+        pattern_used: data.pattern_used ?? pattern,
+        error: data.error ?? null,
+      }
+      if (normalized.error && normalized.lines.length === 0) {
+        setError(normalized.error)
+        setResult(null)
+      } else {
+        setResult(normalized)
+        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+      }
     } catch (err: any) {
       setError(err.response?.data?.detail || String(err))
     } finally {
@@ -862,8 +879,21 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                 const srcStyle = SOURCE_STYLES[monitor.source] ?? SOURCE_STYLES.file
                 return (
                   <tr key={monitor.id}>
-                    <td style={td}>
-                      <span style={{ fontSize: '0.85rem', color: DS.txtP }}>{monitor.name}</span>
+                    <td style={{ ...td, maxWidth: 180 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{
+                          flexShrink: 0,
+                          width: 7, height: 7, borderRadius: '50%',
+                          backgroundColor: monitor.enabled ? '#3fb950' : DS.border,
+                          boxShadow: monitor.enabled ? '0 0 5px rgba(63,185,80,0.5)' : 'none',
+                        }} />
+                        <span style={{
+                          fontSize: '0.85rem', color: DS.txtP,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {monitor.name}
+                        </span>
+                      </div>
                     </td>
                     <td style={td}>
                       <span style={{
