@@ -1241,7 +1241,9 @@ export interface LogMonitor {
   id: string
   watcher_name: string
   name: string
+  source: string
   file: string
+  container: string
   pattern: string
   event_type: string
   interval_sec: number
@@ -1252,7 +1254,9 @@ export interface LogMonitor {
 
 export interface LogMonitorPayload {
   name: string
-  file: string
+  source?: string
+  file?: string
+  container?: string
   pattern: string
   event_type: string
   interval_sec?: number

@@ -131,7 +131,9 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
   // Form state
   const [formData, setFormData] = useState<LogMonitorPayload>({
     name: '',
+    source: 'file',
     file: '',
+    container: '',
     pattern: '',
     event_type: 'log_error_detected',
     interval_sec: 5,
@@ -189,7 +191,9 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
   const resetForm = () => {
     setFormData({
       name: '',
+      source: 'file',
       file: '',
+      container: '',
       pattern: '',
       event_type: 'log_error_detected',
       interval_sec: 5,
@@ -204,7 +208,9 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
   const handleEdit = (monitor: LogMonitor) => {
     setFormData({
       name: monitor.name,
+      source: monitor.source || 'file',
       file: monitor.file,
+      container: monitor.container || '',
       pattern: monitor.pattern,
       event_type: monitor.event_type,
       interval_sec: monitor.interval_sec,
@@ -223,7 +229,11 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
       setError('Monitor name is required')
       return
     }
-    if (!formData.file.trim()) {
+    if (formData.source === 'docker' && !formData.container?.trim()) {
+      setError('Container name is required for Docker source')
+      return
+    }
+    if (formData.source !== 'docker' && !formData.file?.trim()) {
       setError('Log file path is required')
       return
     }
@@ -289,7 +299,7 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
             }
             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: DS.txtP, letterSpacing: '0.01em' }}>Log Monitors</span>
           </div>
-          <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: DS.txtS, marginLeft: 23 }}>Watch log files and trigger runbooks on patterns</p>
+          <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: DS.txtS, marginLeft: 23 }}>Watch log files or container stdout/stderr and trigger runbooks on patterns</p>
         </div>
         {!showForm && (
           <button
@@ -379,27 +389,87 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
               </div>
             </div>
 
-            {/* File Path */}
+            {/* Source toggle */}
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.4rem' }}>
-                Log File Path *
+              <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.5rem' }}>
+                Log Source *
               </label>
-              <input
-                type="text"
-                placeholder="e.g., /var/log/app.log"
-                value={formData.file}
-                onChange={e => setFormData(prev => ({ ...prev, file: e.target.value }))}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem 0.75rem',
-                  backgroundColor: DS.bg,
-                  border: `1px solid ${DS.border}`,
-                  borderRadius: 6,
-                  color: DS.txtP,
-                  fontSize: '0.85rem',
-                }}
-              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['file', 'docker'] as const).map(src => (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, source: src }))}
+                    style={{
+                      padding: '0.4rem 1rem',
+                      borderRadius: 6,
+                      border: formData.source === src
+                        ? '1px solid rgba(64,112,160,0.65)'
+                        : `1px solid ${DS.border}`,
+                      backgroundColor: formData.source === src ? 'rgba(64,112,160,0.15)' : DS.bg,
+                      color: formData.source === src ? '#a0c4e8' : DS.txtS,
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {src === 'file' ? '📄 File' : '🐳 Docker Container'}
+                  </button>
+                ))}
+              </div>
+              <p style={{ margin: '0.4rem 0 0', fontSize: '0.72rem', color: DS.txtS }}>
+                {formData.source === 'docker'
+                  ? 'Reads stdout + stderr from a named container via docker logs'
+                  : 'Tails a log file mounted inside the watcher container'}
+              </p>
             </div>
+
+            {/* Target: file path or container name */}
+            {formData.source === 'docker' ? (
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.4rem' }}>
+                  Container Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., agentic_os_backend"
+                  value={formData.container ?? ''}
+                  onChange={e => setFormData(prev => ({ ...prev, container: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '0.6rem 0.75rem',
+                    backgroundColor: DS.bg,
+                    border: `1px solid ${DS.border}`,
+                    borderRadius: 6,
+                    color: DS.txtP,
+                    fontSize: '0.85rem',
+                    fontFamily: 'monospace',
+                  }}
+                />
+              </div>
+            ) : (
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ fontSize: '0.8rem', color: DS.txtS, fontWeight: 500, display: 'block', marginBottom: '0.4rem' }}>
+                  Log File Path *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., /var/log/app.log"
+                  value={formData.file ?? ''}
+                  onChange={e => setFormData(prev => ({ ...prev, file: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '0.6rem 0.75rem',
+                    backgroundColor: DS.bg,
+                    border: `1px solid ${DS.border}`,
+                    borderRadius: 6,
+                    color: DS.txtP,
+                    fontSize: '0.85rem',
+                    fontFamily: 'monospace',
+                  }}
+                />
+              </div>
+            )}
 
             {/* Pattern */}
             <div style={{ marginBottom: '1rem' }}>
@@ -494,7 +564,8 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
             <thead>
               <tr>
                 <th style={th}>Name</th>
-                <th style={th}>File</th>
+                <th style={th}>Source</th>
+                <th style={th}>Target</th>
                 <th style={th}>Pattern</th>
                 <th style={th}>Event Type</th>
                 <th style={th}>Interval</th>
@@ -509,7 +580,22 @@ export default function LogMonitorsSetup({ watcherName }: LogMonitorsSetupProps)
                     <code style={{ fontSize: '0.8rem', color: DS.accent }}>{monitor.name}</code>
                   </td>
                   <td style={td}>
-                    <code style={{ fontSize: '0.8rem', color: DS.txtM }}>{monitor.file}</code>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      padding: '0.15rem 0.5rem',
+                      borderRadius: 4,
+                      backgroundColor: monitor.source === 'docker' ? 'rgba(59,130,246,0.12)' : 'rgba(63,185,80,0.12)',
+                      color: monitor.source === 'docker' ? '#60a5fa' : DS.success,
+                      border: `1px solid ${monitor.source === 'docker' ? 'rgba(59,130,246,0.25)' : 'rgba(63,185,80,0.25)'}`,
+                    }}>
+                      {monitor.source === 'docker' ? '🐳 docker' : '📄 file'}
+                    </span>
+                  </td>
+                  <td style={td}>
+                    <code style={{ fontSize: '0.8rem', color: DS.txtM }}>
+                      {monitor.source === 'docker' ? monitor.container : monitor.file}
+                    </code>
                   </td>
                   <td style={td}>
                     <code style={{ fontSize: '0.75rem', color: DS.txtM, maxWidth: '200px', display: 'inline-block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

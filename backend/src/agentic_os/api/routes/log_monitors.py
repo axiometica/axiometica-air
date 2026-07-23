@@ -14,10 +14,10 @@ import logging
 import re
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 import httpx
 import asyncio
@@ -33,16 +33,28 @@ router = APIRouter()
 
 class LogMonitorCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    file: str = Field(..., min_length=1, max_length=500)
+    source: Literal["file", "docker"] = "file"
+    file: str = Field(default="", max_length=500)
+    container: str = Field(default="", max_length=200)
     pattern: str = Field(..., min_length=1, max_length=1000)
     event_type: str = Field(..., min_length=1, max_length=100)
     interval_sec: int = Field(default=5, ge=1, le=3600)
     enabled: bool = Field(default=True)
 
+    @model_validator(mode="after")
+    def check_source_fields(self) -> "LogMonitorCreate":
+        if self.source == "file" and not self.file.strip():
+            raise ValueError("file path is required when source is 'file'")
+        if self.source == "docker" and not self.container.strip():
+            raise ValueError("container name is required when source is 'docker'")
+        return self
+
 
 class LogMonitorUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
-    file: Optional[str] = Field(None, min_length=1, max_length=500)
+    source: Optional[Literal["file", "docker"]] = None
+    file: Optional[str] = Field(None, max_length=500)
+    container: Optional[str] = Field(None, max_length=200)
     pattern: Optional[str] = Field(None, min_length=1, max_length=1000)
     event_type: Optional[str] = Field(None, min_length=1, max_length=100)
     interval_sec: Optional[int] = Field(None, ge=1, le=3600)
@@ -72,7 +84,9 @@ def _monitor_to_dict(row: LogMonitorConfigModel) -> Dict[str, Any]:
         "id": str(row.id),
         "watcher_name": row.watcher_name,
         "name": row.name,
+        "source": getattr(row, "source", "file"),
         "file": row.file,
+        "container": getattr(row, "container", ""),
         "pattern": row.pattern,
         "event_type": row.event_type,
         "interval_sec": row.interval_sec,
@@ -165,7 +179,9 @@ async def create_log_monitor(
     row = LogMonitorConfigModel(
         watcher_name=watcher_name,
         name=payload.name,
+        source=payload.source,
         file=payload.file,
+        container=payload.container,
         pattern=payload.pattern,
         event_type=payload.event_type,
         interval_sec=payload.interval_sec,
@@ -190,7 +206,9 @@ async def create_log_monitor(
     configs_to_push = [
         {
             "name": m.name,
+            "source": getattr(m, "source", "file"),
             "file": m.file,
+            "container": getattr(m, "container", ""),
             "pattern": m.pattern,
             "event_type": m.event_type,
             "interval_sec": m.interval_sec,
@@ -268,7 +286,9 @@ async def update_log_monitor(
     configs_to_push = [
         {
             "name": m.name,
+            "source": getattr(m, "source", "file"),
             "file": m.file,
+            "container": getattr(m, "container", ""),
             "pattern": m.pattern,
             "event_type": m.event_type,
             "interval_sec": m.interval_sec,
@@ -321,7 +341,9 @@ async def delete_log_monitor(
     configs_to_push = [
         {
             "name": m.name,
+            "source": getattr(m, "source", "file"),
             "file": m.file,
+            "container": getattr(m, "container", ""),
             "pattern": m.pattern,
             "event_type": m.event_type,
             "interval_sec": m.interval_sec,
