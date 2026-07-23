@@ -95,7 +95,64 @@ The watcher detects and reports the following anomaly types. Each produces a `mo
 | `disk_full` | `df -B1` per container | Filesystem utilisation exceeds `WATCHER_DISK_THRESHOLD` — read directly from `df` inside each container (v1.1.2+), not from Docker stats |
 | `connection_spike` | Docker stats | TCP connection count exceeds `WATCHER_CONNECTION_THRESHOLD` |
 | `health_check_failed` | HTTP probe | Container health endpoint returns non-200 or times out |
+| *(custom)* | Log monitor | Pattern matched in container docker logs or a log file — event type is operator-configured (e.g. `log_error_detected`) |
 | `condition_cleared` | All sources | Previously anomalous condition has normalised (triggers auto-resolution) |
+
+---
+
+## Log Monitors
+
+Log monitors watch container stdout/stderr (via `docker logs`) or a log file inside the watcher container for regex pattern matches. When enough matching lines are found in a single poll, a monitoring event is raised. When the pattern stops matching for a configurable number of consecutive polls, an all-clear is sent.
+
+### Configuration
+
+Log monitors are configured through the platform UI at **Settings → Log Monitors**, or via the API (`GET/POST/PATCH/DELETE /api/monitoring/watchers/{id}/log-monitors`). They are stored in the database and pushed to the watcher automatically — no restart required.
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| **Name** | — | Unique display name (used as the monitor identifier) |
+| **Source** | `docker` | `docker` — tail a named container's stdout/stderr via `docker logs`; `file` — tail a log file path inside the watcher container |
+| **Container** | — | Container name to watch (docker source only), e.g. `agentic_os_backend` |
+| **Log File** | — | Absolute path inside the watcher container (file source only) |
+| **Pattern** | — | Python regex matched against each log line (case-insensitive) |
+| **Event Type** | `log_error_detected` | Monitoring event type emitted when the pattern fires |
+| **Min Occurrences** | `1` | Minimum matching lines per poll interval before the event fires |
+| **Severity** | `warning` | Raw criticality sent to the incident pipeline: `info`, `warning`, `high`, or `critical` |
+| **Clear After Polls** | `3` | Consecutive quiet polls (no match) required before an all-clear is sent. `0` = immediate all-clear on first quiet poll |
+| **Poll Interval** | `30` | Seconds between log polls for this monitor |
+
+### How `clear_after_polls` works
+
+When a log monitor condition is active and the pattern stops appearing, the watcher does **not** immediately send an all-clear. Instead it counts consecutive quiet polls. Only when `quiet_count >= clear_after_polls` does it emit `condition_cleared`. This prevents false recoveries from log bursts that momentarily stop between polls.
+
+```
+Poll 1: 2 ERROR lines matched → incident fired
+Poll 2: 0 matches → quiet 1/3 — holding all-clear
+Poll 3: 0 matches → quiet 2/3 — holding all-clear
+Poll 4: 0 matches → quiet 3/3 — releasing all-clear → condition_cleared sent
+```
+
+Set `clear_after_polls: 0` for immediate all-clear on the first quiet poll (suitable for very high-frequency monitors or one-shot alerts).
+
+### Testing a log monitor
+
+Inject matching lines directly into a container's docker log stream:
+
+```bash
+# Inject 2 JSON-format ERROR lines into the backend container
+docker exec agentic_os_backend sh -c '
+  TS=$(date -u +"%Y-%m-%dT%H:%M:%S")
+  printf "{\"levelname\": \"ERROR\", \"message\": \"test error 1\", \"asctime\": \"$TS\"}\n" >> /proc/1/fd/2
+  printf "{\"levelname\": \"ERROR\", \"message\": \"test error 2\", \"asctime\": \"$TS\"}\n" >> /proc/1/fd/2
+'
+
+# Watch the watcher detect it (within one poll interval)
+docker logs watcher_brain -f | grep -E "LOG-MONITOR|SUSTAINED|quiet poll|all-clear"
+```
+
+### Kubernetes limitation
+
+The `docker` source mode runs `docker logs <container>` as a subprocess and requires the Docker socket (`/var/run/docker.sock`) to be mounted in the watcher pod. **This is not available on Kubernetes** (containerd/CRI-O clusters have no Docker daemon). See [WATCHER_KUBERNETES.md](./WATCHER_KUBERNETES.md#log-monitors-on-kubernetes) for alternatives.
 
 ---
 

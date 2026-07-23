@@ -204,6 +204,24 @@ Set via environment variables in the watcher pod (or `.env` for Docker Compose):
 
 ---
 
+## Log Monitors on Kubernetes
+
+The `docker` source mode for log monitors runs `docker logs <container>` as a subprocess and requires `/var/run/docker.sock` mounted in the watcher pod. **This does not work on Kubernetes** — containerd and CRI-O clusters have no Docker daemon, so the command fails and the monitor silently produces no events.
+
+The `file` source mode works on Kubernetes provided the log file is accessible inside the watcher pod via a volume mount.
+
+### Alternatives for pod log monitoring on Kubernetes
+
+| Approach | How | Trade-off |
+|----------|-----|-----------|
+| **`file` source + hostPath** | Mount `/var/log/pods/` from the node as a hostPath volume; point the monitor at the pod's log file path | Requires a DaemonSet (one watcher per node); log file paths include the pod UID and must be updated on pod restarts |
+| **`kubectl logs` (not yet implemented)** | A future `kubernetes` source type would call the Kubernetes API using the in-cluster `pods/log` RBAC permission (already granted in `k8s/base/01-rbac.yaml`) | Requires the Python `kubernetes` client in the watcher image |
+| **Log aggregation stack** | Ship pod logs to Loki/Elasticsearch; use a webhook connector to forward alerts to Axiometica AIR | Decouples log storage from the watcher entirely; suitable for production |
+
+> The `pods/log` RBAC permission is already present in the watcher's `ClusterRole` — any future `kubernetes` source implementation will work without RBAC changes.
+
+---
+
 ## Single-Node Cluster Notes (KinD / Docker Desktop)
 
 KinD runs the entire cluster inside a single Docker container. All pods share the same CPUs and kernel. This has practical consequences for load testing:
