@@ -468,17 +468,24 @@ class TuningAgent:
         # above threshold" (that's a much weaker signal — it can't see events
         # that never made it to a WorkflowStateModel row at all). Needs
         # MonitoringEventModel, the pre-workflow signal log.
+        # condition_cleared events are all-clear signals, not alert candidates —
+        # they are stored for audit purposes but must not count toward the
+        # denominator, as they would dilute the rate with non-qualifiable events.
         qualification_rate = None
         try:
             mon_total = (
                 self.db.query(MonitoringEventModel)
-                .filter(MonitoringEventModel.created_at >= cutoff)
+                .filter(
+                    MonitoringEventModel.created_at >= cutoff,
+                    MonitoringEventModel.event_type != "condition_cleared",
+                )
                 .count()
             )
             mon_qualified = (
                 self.db.query(MonitoringEventModel)
                 .filter(
                     MonitoringEventModel.created_at >= cutoff,
+                    MonitoringEventModel.event_type != "condition_cleared",
                     MonitoringEventModel.qualified_as_incident.is_(True),
                 )
                 .count()
