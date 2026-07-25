@@ -29,6 +29,10 @@ class LLMConfig(BaseModel):
     base_url: Optional[str] = None  # required for custom; ignored for cloud providers
     model: Optional[str] = None
     insights_enabled: Optional[bool] = True
+    # Upper bound applied to every LLM call's max_tokens. Range 500..16000.
+    # Left None on save means "keep the existing value" — API defaults to 4000
+    # when persisting for the first time.
+    max_tokens_ceiling: Optional[int] = None
 
 
 class LLMStatus(BaseModel):
@@ -38,6 +42,7 @@ class LLMStatus(BaseModel):
     configured: bool
     cached_summaries: int
     insights_enabled: bool
+    max_tokens_ceiling: int = 4000
 
 
 class InsightsToggle(BaseModel):
@@ -56,6 +61,7 @@ async def get_llm_status():
         configured=info["configured"],
         cached_summaries=info["cached_summaries"],
         insights_enabled=get_insights_enabled(),
+        max_tokens_ceiling=info.get("max_tokens_ceiling", 4000),
     )
 
 
@@ -85,14 +91,25 @@ async def set_llm_config(config: LLMConfig):
             if not config.api_key:
                 raise HTTPException(status_code=400, detail="api_key is required for cloud providers")
 
+        # Validate ceiling before persisting
+        ceiling = config.max_tokens_ceiling
+        if ceiling is None:
+            ceiling = 4000
+        elif not (500 <= ceiling <= 16000):
+            raise HTTPException(
+                status_code=400,
+                detail=f"max_tokens_ceiling must be between 500 and 16000; got {ceiling}"
+            )
+
         # Update configuration
-        logger.info(f"Calling set_summary_service_config with api_key={key_preview}")
+        logger.info(f"Calling set_summary_service_config with api_key={key_preview}, ceiling={ceiling}")
         service = set_summary_service_config(
             provider_name=config.provider.lower(),
             api_key=config.api_key,
             base_url=config.base_url,
             model=config.model,
             insights_enabled=config.insights_enabled if config.insights_enabled is not None else True,
+            max_tokens_ceiling=ceiling,
         )
         logger.info(f"Service configured: is_configured={service.is_provider_configured()}")
 

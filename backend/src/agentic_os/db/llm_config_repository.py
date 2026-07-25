@@ -25,6 +25,7 @@ class LLMConfigRepository:
                 "model": config.model,
                 "base_url": config.base_url,
                 "insights_enabled": config.insights_enabled if config.insights_enabled is not None else True,
+                "max_tokens_ceiling": config.max_tokens_ceiling if config.max_tokens_ceiling is not None else 4000,
             }
         return None
 
@@ -36,6 +37,7 @@ class LLMConfigRepository:
         config_key: str = "default",
         insights_enabled: bool = True,
         base_url: str | None = None,
+        max_tokens_ceiling: int = 4000,
     ) -> dict:
         """Save or update LLM configuration"""
         existing = self.db.query(LLMConfigModel).filter(
@@ -52,6 +54,7 @@ class LLMConfigRepository:
                     model=model,
                     base_url=base_url,
                     insights_enabled=insights_enabled,
+                    max_tokens_ceiling=max_tokens_ceiling,
                     updated_at=datetime.utcnow()
                 )
             )
@@ -63,6 +66,7 @@ class LLMConfigRepository:
                 model=model,
                 base_url=base_url,
                 insights_enabled=insights_enabled,
+                max_tokens_ceiling=max_tokens_ceiling,
             )
             self.db.add(config)
 
@@ -74,6 +78,7 @@ class LLMConfigRepository:
             "model": model,
             "base_url": base_url,
             "insights_enabled": insights_enabled,
+            "max_tokens_ceiling": max_tokens_ceiling,
         }
 
     def update_insights_enabled(self, enabled: bool, config_key: str = "default") -> bool:

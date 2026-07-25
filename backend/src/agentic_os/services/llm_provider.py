@@ -333,6 +333,16 @@ def _parse_rich_response(text: str) -> Dict[str, str]:
 class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
+    # Upper bound applied to every max_tokens value before it reaches the
+    # underlying SDK. Configured via LLM settings UI (writes to llm_configs
+    # table). Concrete subclasses inherit this default; get_llm_provider()
+    # overrides it with the persisted value on construction.
+    max_tokens_ceiling: int = 4000
+
+    def _clamp_tokens(self, max_tokens: int) -> int:
+        """Cap requested max_tokens at the configured ceiling."""
+        return min(max_tokens, self.max_tokens_ceiling) if self.max_tokens_ceiling else max_tokens
+
     @abstractmethod
     async def generate_summary(self, incident_data: dict) -> str:
         """Generate a one-paragraph incident summary (legacy, minimal context)"""
@@ -435,7 +445,7 @@ class OpenAIProvider(LLMProvider):
             resp = await client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=250, temperature=0.3,
+                max_tokens=self._clamp_tokens(250), temperature=0.3,
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
@@ -461,7 +471,7 @@ class OpenAIProvider(LLMProvider):
                     {"role": "system", "content": RICH_SUMMARY_SYSTEM_PROMPT},
                     {"role": "user",   "content": prompt},
                 ],
-                max_tokens=2000, temperature=0.3,
+                max_tokens=self._clamp_tokens(2000), temperature=0.3,
             )
             raw = resp.choices[0].message.content.strip()
             logger.debug(f"OpenAI raw response ({len(raw)} chars): {raw[:200]}")
@@ -485,7 +495,7 @@ class OpenAIProvider(LLMProvider):
                     {"role": "system", "content": system_p},
                     {"role": "user",   "content": user_p},
                 ],
-                max_tokens=350, temperature=0.2,
+                max_tokens=self._clamp_tokens(350), temperature=0.2,
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
@@ -511,7 +521,7 @@ class OpenAIProvider(LLMProvider):
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": user_content},
                 ],
-                max_tokens=max_tokens,
+                max_tokens=self._clamp_tokens(max_tokens),
                 temperature=temperature,
             )
             return resp.choices[0].message.content.strip()
@@ -539,7 +549,7 @@ class OpenAIProvider(LLMProvider):
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": user_content},
                 ],
-                max_tokens=max_tokens,
+                max_tokens=self._clamp_tokens(max_tokens),
                 temperature=temperature,
                 stream=True,
             )
@@ -582,7 +592,7 @@ class AnthropicProvider(LLMProvider):
                 f"Cover what happened, business impact, and resolution status."
             )
             message = await client.messages.create(
-                model=self.model, max_tokens=250,
+                model=self.model, max_tokens=self._clamp_tokens(250),
                 messages=[{"role": "user", "content": prompt}],
             )
             return message.content[0].text.strip()
@@ -605,7 +615,7 @@ class AnthropicProvider(LLMProvider):
             prompt = _build_rich_prompt(full_context)
             message = await client.messages.create(
                 model=self.model,
-                max_tokens=2000,
+                max_tokens=self._clamp_tokens(2000),
                 system=RICH_SUMMARY_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -627,7 +637,7 @@ class AnthropicProvider(LLMProvider):
             system_p, user_p = _build_storm_prompt(storm_context)
             message = await client.messages.create(
                 model=self.model,
-                max_tokens=350,
+                max_tokens=self._clamp_tokens(350),
                 system=system_p,
                 messages=[{"role": "user", "content": user_p}],
             )
@@ -651,7 +661,7 @@ class AnthropicProvider(LLMProvider):
             client = AsyncAnthropic(api_key=self.api_key, max_retries=3)
             message = await client.messages.create(
                 model=self.model,
-                max_tokens=max_tokens,
+                max_tokens=self._clamp_tokens(max_tokens),
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_content}],
             )
@@ -676,7 +686,7 @@ class AnthropicProvider(LLMProvider):
             client = AsyncAnthropic(api_key=self.api_key, max_retries=3)
             async with client.messages.stream(
                 model=self.model,
-                max_tokens=max_tokens,
+                max_tokens=self._clamp_tokens(max_tokens),
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_content}],
             ) as stream:
@@ -712,7 +722,7 @@ class GenericOpenAIProvider(LLMProvider):
             resp = await self._client().chat.completions.create(
                 model=self.model,
                 messages=messages,
-                max_tokens=max_tokens,
+                max_tokens=self._clamp_tokens(max_tokens),
                 temperature=temperature,
             )
             return resp.choices[0].message.content.strip()
@@ -739,7 +749,7 @@ class GenericOpenAIProvider(LLMProvider):
         raw = await self._chat(
             [{"role": "system", "content": RICH_SUMMARY_SYSTEM_PROMPT},
              {"role": "user",   "content": prompt}],
-            max_tokens=2000,
+            max_tokens=self._clamp_tokens(2000),
         )
         if raw is None:
             return {"summary": None, "technical_summary": None}
@@ -752,7 +762,7 @@ class GenericOpenAIProvider(LLMProvider):
         return await self._chat(
             [{"role": "system", "content": system_p},
              {"role": "user",   "content": user_p}],
-            max_tokens=350, temperature=0.2,
+            max_tokens=self._clamp_tokens(350), temperature=0.2,
         )
 
     async def generate_agent_completion(
@@ -767,7 +777,7 @@ class GenericOpenAIProvider(LLMProvider):
         return await self._chat(
             [{"role": "system", "content": system_prompt},
              {"role": "user",   "content": user_content}],
-            max_tokens=max_tokens,
+            max_tokens=self._clamp_tokens(max_tokens),
             temperature=temperature,
         )
 
@@ -786,7 +796,7 @@ class GenericOpenAIProvider(LLMProvider):
                 model=self.model,
                 messages=[{"role": "system", "content": system_prompt},
                           {"role": "user",   "content": user_content}],
-                max_tokens=max_tokens,
+                max_tokens=self._clamp_tokens(max_tokens),
                 temperature=temperature,
                 stream=True,
             )
@@ -804,15 +814,20 @@ def get_llm_provider(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     base_url: Optional[str] = None,
+    max_tokens_ceiling: Optional[int] = None,
 ) -> LLMProvider:
-    """Factory function to get LLM provider by name"""
+    """Factory function to get LLM provider by name."""
     provider_name = (provider_name or "openai").lower()
 
     if provider_name == "openai":
-        return OpenAIProvider(api_key=api_key, model=model or "gpt-3.5-turbo")
+        provider = OpenAIProvider(api_key=api_key, model=model or "gpt-3.5-turbo")
     elif provider_name == "anthropic":
-        return AnthropicProvider(api_key=api_key, model=model or "claude-3-haiku-20240307")
+        provider = AnthropicProvider(api_key=api_key, model=model or "claude-3-haiku-20240307")
     elif provider_name == "custom":
-        return GenericOpenAIProvider(base_url=base_url, api_key=api_key, model=model or "")
+        provider = GenericOpenAIProvider(base_url=base_url, api_key=api_key, model=model or "")
     else:
         raise ValueError(f"Unknown LLM provider: {provider_name}")
+
+    if max_tokens_ceiling is not None:
+        provider.max_tokens_ceiling = max_tokens_ceiling
+    return provider

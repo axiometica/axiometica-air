@@ -5,6 +5,7 @@ export interface LLMConfig {
   api_key?: string     // required for openai/anthropic; omitted for ollama
   base_url?: string    // required for ollama
   model?: string
+  max_tokens_ceiling?: number   // 500..16000; clamps every LLM call's max_tokens
 }
 
 export interface LLMStatus {
@@ -13,6 +14,7 @@ export interface LLMStatus {
   configured: boolean
   cached_summaries: number
   insights_enabled: boolean
+  max_tokens_ceiling: number
 }
 
 export interface SupportedProvider {

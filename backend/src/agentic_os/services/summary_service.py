@@ -18,9 +18,9 @@ class SummaryService:
     # In-memory cache for summaries (in production, use Redis or database)
     _cache = {}
 
-    def __init__(self, provider_name: str = "openai", api_key: Optional[str] = None, model: Optional[str] = None, base_url: Optional[str] = None):
+    def __init__(self, provider_name: str = "openai", api_key: Optional[str] = None, model: Optional[str] = None, base_url: Optional[str] = None, max_tokens_ceiling: Optional[int] = None):
         """Initialize summary service with LLM provider"""
-        self.provider: LLMProvider = get_llm_provider(provider_name, api_key, model, base_url)
+        self.provider: LLMProvider = get_llm_provider(provider_name, api_key, model, base_url, max_tokens_ceiling)
         self.provider_name = provider_name
         self.model = model
 
@@ -161,6 +161,7 @@ class SummaryService:
             "model": self.model,
             "configured": self.is_provider_configured(),
             "cached_summaries": len(self._cache),
+            "max_tokens_ceiling": getattr(self.provider, "max_tokens_ceiling", 4000),
         }
 
     @classmethod
@@ -240,11 +241,13 @@ def get_summary_service(
 
     # Build a fingerprint from the fields that determine which LLM is used.
     # api_key is intentionally excluded — it changes on rotate but provider stays.
+    # max_tokens_ceiling IS included so a ceiling change triggers reinit.
     if db_config:
         config_key = (
             db_config.get("provider"),
             db_config.get("model"),
             db_config.get("base_url"),
+            db_config.get("max_tokens_ceiling"),
         )
     else:
         config_key = None
@@ -262,6 +265,7 @@ def get_summary_service(
                 api_key=db_config.get("api_key", api_key),
                 model=db_config.get("model", model),
                 base_url=db_config.get("base_url"),
+                max_tokens_ceiling=db_config.get("max_tokens_ceiling"),
             )
             logger.info(f"Summary service initialised: {db_config.get('provider')} / {db_config.get('model')}")
         else:
@@ -277,11 +281,12 @@ def set_summary_service_config(
     model: Optional[str] = None,
     insights_enabled: bool = True,
     base_url: Optional[str] = None,
+    max_tokens_ceiling: int = 4000,
 ) -> SummaryService:
     """Update summary service configuration and save to database"""
     global _summary_service, _insights_enabled
 
-    _summary_service = SummaryService(provider_name, api_key, model, base_url)
+    _summary_service = SummaryService(provider_name, api_key, model, base_url, max_tokens_ceiling)
     _insights_enabled = insights_enabled
 
     try:
@@ -291,8 +296,13 @@ def set_summary_service_config(
         db = SessionLocal()
         try:
             repo = LLMConfigRepository(db)
-            repo.save_config(provider_name, api_key, model, "default", insights_enabled=insights_enabled, base_url=base_url)
-            logger.info(f"LLM config saved to database: {provider_name}, insights_enabled={insights_enabled}")
+            repo.save_config(
+                provider_name, api_key, model, "default",
+                insights_enabled=insights_enabled,
+                base_url=base_url,
+                max_tokens_ceiling=max_tokens_ceiling,
+            )
+            logger.info(f"LLM config saved: {provider_name}, insights={insights_enabled}, ceiling={max_tokens_ceiling}")
         finally:
             db.close()
     except Exception as e:

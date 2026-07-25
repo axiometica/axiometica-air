@@ -719,6 +719,12 @@ class LLMConfigModel(Base):
     # Feature flags
     insights_enabled = Column(Boolean, nullable=False, default=True, server_default='true')
 
+    # Safety cap for LLM response length. Applied as an upper bound to every
+    # generate_agent_completion call — call sites keep their own default values
+    # (chosen per task), and this only clamps them down. Prevents runaway costs
+    # or context-blowout when swapping to models with tighter output budgets.
+    max_tokens_ceiling = Column(Integer, nullable=False, default=4000, server_default='4000')
+
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

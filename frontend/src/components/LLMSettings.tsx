@@ -16,6 +16,7 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
   const [baseUrl, setBaseUrl]               = useState('')
   const [insightsEnabled, setInsightsEnabled] = useState(true)
   const [insightsSaving, setInsightsSaving]   = useState(false)
+  const [maxTokensCeiling, setMaxTokensCeiling] = useState<number>(4000)
   const [loading, setLoading]               = useState(false)
   const [testing, setTesting]               = useState(false)
   const [testPassed, setTestPassed]         = useState(false)   // unlocks Save button
@@ -43,6 +44,7 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
       if (response.data.provider) setSelectedProvider(response.data.provider)
       if (response.data.model)    setSelectedModel(response.data.model)
       setInsightsEnabled(response.data.insights_enabled ?? true)
+      setMaxTokensCeiling(response.data.max_tokens_ceiling ?? 4000)
     } catch (err) { console.error('Failed to load LLM status:', err) }
   }
 
@@ -85,6 +87,7 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
           ? { base_url: baseUrl, ...(apiKey ? { api_key: apiKey } : {}) }
           : { api_key: apiKey }),
         model: selectedModel,
+        max_tokens_ceiling: maxTokensCeiling,
       })
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
@@ -224,6 +227,33 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
               </div>
             )}
 
+            {/* Max response tokens (ceiling) */}
+            <div>
+              <label style={{ color: '#a0aec0' }} className="text-xs font-semibold uppercase tracking-wider block mb-2">
+                Max Response Tokens (ceiling)
+              </label>
+              <input
+                type="number"
+                min={500}
+                max={16000}
+                step={100}
+                value={maxTokensCeiling}
+                onChange={(e) => setMaxTokensCeiling(Number(e.target.value) || 4000)}
+                style={{
+                  width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: '0.9rem',
+                  backgroundColor: '#1a1f2e', color: '#e8eef5',
+                  border: '1px solid #3d4557',
+                }}
+              />
+              <p style={{ color: '#7a8ba3' }} className="text-xs mt-1">
+                Upper bound applied to every LLM request. Each internal call already picks its own
+                <code style={{ color: '#a0aec0' }}> max_tokens</code> per task (250 for summaries,
+                4000 for tool definitions, etc.); this only clamps them down. Increase if you're
+                using a large-context model and see truncated JSON; decrease to cap cost with
+                smaller models. Range 500–16000.
+              </p>
+            </div>
+
             {/* Error */}
             {error && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: '#7f1d1d', color: '#f87171' }}>
@@ -252,6 +282,7 @@ export default function LLMSettings({ isExpanded = true, onToggle = () => {} }: 
                 <p><strong>Current Provider:</strong> {llmStatus.provider} {llmStatus.model ? `(${llmStatus.model})` : ''}</p>
                 <p><strong>Status:</strong> {llmStatus.configured ? '✓ Configured' : '✗ Not Configured'}</p>
                 <p><strong>Cached Summaries:</strong> {llmStatus.cached_summaries}</p>
+                <p><strong>Max Tokens Ceiling:</strong> {llmStatus.max_tokens_ceiling}</p>
               </div>
             )}
 

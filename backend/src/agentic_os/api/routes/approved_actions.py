@@ -675,10 +675,14 @@ Rules:
             pass  # graceful fallback: proceed with 2-call flow
 
         # ── Call 1: tool structure ────────────────────────────────────────────
+        # 4000 tokens: a full tool definition with samples and multi-adapter
+        # command_variants regularly runs 2500-3500 tokens; 2000 truncated the
+        # JSON mid-object and returned a "non-JSON" error. Ceiling in LLM
+        # settings will clamp this down if the configured model can't do 4000.
         result_text = await provider.generate_agent_completion(
             system_prompt=system_prompt,
             user_content=call1_prompt,
-            max_tokens=2000,
+            max_tokens=4000,
             temperature=0.2,
         )
         tool_def = _sanitize_tool_def(json.loads(_strip_md_fences(result_text)))
