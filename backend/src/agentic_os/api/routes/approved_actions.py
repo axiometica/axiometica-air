@@ -22,6 +22,13 @@ from agentic_os.db.repositories import ApprovedActionRepository
 router = APIRouter(prefix="/approved-actions", tags=["approved-actions"])
 
 
+def _strip_md_fences(s: str) -> str:
+    # Some models wrap JSON responses in ```json ... ``` fences even when asked
+    # to reply with raw JSON. Strip a single leading and trailing fence, if any.
+    s = re.sub(r'^```(?:json)?\s*', '', s.strip())
+    return re.sub(r'\s*```$', '', s)
+
+
 # ─── Request / Response schemas ────────────────────────────────────────────────
 
 class ProcessRule(BaseModel):
@@ -337,7 +344,7 @@ Rules:
             max_tokens=800,
             temperature=0.2,
         )
-        cleaned = re.sub(r'\br"((?:[^"\\]|\\.)*)"', r'"\1"', raw.strip())
+        cleaned = re.sub(r'\br"((?:[^"\\]|\\.)*)"', r'"\1"', _strip_md_fences(raw))
         return json.loads(cleaned)
 
     async def _generate_patterns(provider, command: str, fields: list,
@@ -444,7 +451,7 @@ Rules:
             max_tokens=1200,
             temperature=0.1,
         )
-        cleaned = re.sub(r'\br"((?:[^"\\]|\\.)*)"', r'"\1"', raw.strip())
+        cleaned = re.sub(r'\br"((?:[^"\\]|\\.)*)"', r'"\1"', _strip_md_fences(raw))
         data = json.loads(cleaned)
 
         # If we already have authoritative sample lines, inject them
@@ -674,7 +681,7 @@ Rules:
             max_tokens=2000,
             temperature=0.2,
         )
-        tool_def = _sanitize_tool_def(json.loads(result_text.strip()))
+        tool_def = _sanitize_tool_def(json.loads(_strip_md_fences(result_text)))
 
         # ── Call 2: regex patterns ────────────────────────────────────────────
         # Skip pattern generation if output is unpredictable (e.g. user-supplied script)
@@ -789,10 +796,7 @@ Rules:
             max_tokens=4000,
             temperature=0.1,
         )
-        # Strip markdown fences if present
-        cleaned = re.sub(r'^```(?:json)?\s*', '', result_text.strip())
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        return json.loads(cleaned)
+        return json.loads(_strip_md_fences(result_text))
     except json.JSONDecodeError:
         raise HTTPException(
             status_code=500,
