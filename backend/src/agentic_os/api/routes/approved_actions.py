@@ -666,6 +666,19 @@ Rules:
             """
             return _AWK_DOUBLE_Q.sub(lambda m: f"awk '{m.group(1)}'", inner)
 
+        def _normalise_awk_dollar_escapes(inner: str) -> str:
+            """Inside `bash -c '…'` (single-quoted outer), any `awk "…"` block
+            MUST escape every `$N` as `\\$N` so bash's double-quote expansion
+            leaves the field reference intact for awk. LLMs commonly produce
+            mixed escaping (some `$` escaped, some not) — normalise by first
+            un-escaping every `\\$` back to `$`, then re-escaping ALL `$` to
+            `\\$`. Idempotent."""
+            def repl(m: re.Match) -> str:
+                prog = m.group(1)
+                prog = prog.replace(r'\$', '$').replace('$', r'\$')
+                return f'awk "{prog}"'
+            return _AWK_DOUBLE_Q.sub(repl, inner)
+
         for key, val in list(variants.items()):
             if not val:
                 continue
@@ -681,6 +694,11 @@ Rules:
                 if outer_q == "'":
                     # Existing behaviour: awk '...' inside bash -c '...' → awk "..." with \$
                     inner = _fix_chain(inner)
+                    # Additional pass: normalise $ escaping inside any awk "..."
+                    # blocks the LLM produced directly (mixed \$ / $ won't survive
+                    # bash's double-quote expansion). Idempotent — safe to run after
+                    # _fix_chain has already produced normalised awk "..." blocks.
+                    inner = _normalise_awk_dollar_escapes(inner)
                 else:
                     # New: awk "..." inside bash -c "..." → awk '...'
                     inner = _fix_nested_double_awk(inner)
