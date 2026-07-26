@@ -256,7 +256,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
         >
           <IconArrowLeft size={18} />
         </button>
-        <div style={{ flex: 1 }}>
+        <div>
           <h2 className="text-section-title" style={{ color: '#e8eef5' }}>
             {isNew ? 'New Action' : name || 'Edit Action'}
           </h2>
@@ -264,67 +264,12 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
             {isNew ? 'Define a new approved action for the catalog' : `Editing: ${toolName}`}
           </p>
         </div>
-        <button
-          onClick={runValidation}
-          disabled={validating || (!command && Object.keys(commandVariants).length === 0)}
-          className="btn flex items-center gap-2"
-          title="Run shell-syntax validation on the current command + every variant"
-          style={{
-            background: 'transparent',
-            border: '1px solid #3d4557',
-            color: '#a0aec0',
-            padding: '7px 14px',
-            borderRadius: 7,
-            fontSize: '0.82rem',
-            fontWeight: 600,
-            cursor: validating ? 'wait' : 'pointer',
-            opacity: validating ? 0.6 : 1,
-          }}
-        >
-          {validating ? 'Validating…' : 'Validate Shell Syntax'}
-        </button>
       </div>
 
       {error && (
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-critical-700/50 text-sm mb-4 text-critical-300">
           <IconAlertTriangle size={15} className="flex-shrink-0" />
           {error}
-        </div>
-      )}
-
-      {validation && (
-        <div style={{
-          marginBottom: 16,
-          padding: '12px 16px',
-          borderRadius: 8,
-          background: Object.values(validation).every(v => v.ok) ? '#0f2a1e' : '#2a1f0f',
-          border: `1px solid ${Object.values(validation).every(v => v.ok) ? '#10b981' : '#f59e0b'}`,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ color: '#e8eef5', fontWeight: 600, fontSize: '0.9rem' }}>
-              {Object.values(validation).every(v => v.ok)
-                ? `Validation: all ${Object.keys(validation).length} variant(s) OK`
-                : `Validation: ${Object.values(validation).filter(v => !v.ok).length} of ${Object.keys(validation).length} variant(s) broken`}
-            </div>
-            <button
-              onClick={() => setValidation(null)}
-              style={{ background: 'transparent', border: 'none', color: '#7a8ba3', fontSize: '0.85rem', cursor: 'pointer' }}
-            >
-              Dismiss
-            </button>
-          </div>
-          <div style={{ fontSize: '0.8rem' }}>
-            {Object.entries(validation).map(([adapter, r]) => (
-              <div key={adapter} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: r.ok ? '#94a3b8' : '#fbbf24', marginTop: 3 }}>
-                <span style={{ minWidth: 90, fontFamily: 'monospace' }}>[{adapter}]</span>
-                <span>
-                  {r.ok
-                    ? (r.stage === 'skipped-powershell' ? 'skipped (PowerShell)' : 'OK')
-                    : (r.message || 'invalid').split('\n')[0]}
-                </span>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
@@ -620,6 +565,76 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
             (SSM, Azure, vCenter) dispatch the inner command via their API —{' '}
             <span style={{ color: '#4a5568' }}>no agent on the target VM required.</span>
           </p>
+        </div>
+
+        {/* ── Shell-syntax validator ─────────────────────────────────────── */}
+        <div style={{
+          marginTop: 20,
+          paddingTop: 16,
+          borderTop: '1px solid #3d4557',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div>
+              <div style={{ color: '#e8eef5', fontWeight: 600, fontSize: '0.85rem' }}>Shell Syntax Validation</div>
+              <div style={{ color: '#7a8ba3', fontSize: '0.75rem', marginTop: 2 }}>
+                Run every command variant through bash's parser to catch broken quoting before saving.
+              </div>
+            </div>
+            <button
+              onClick={runValidation}
+              disabled={validating || (!command && Object.keys(commandVariants).length === 0)}
+              className="btn flex items-center gap-2"
+              style={{
+                background: 'transparent',
+                border: '1px solid #3d4557',
+                color: '#a0aec0',
+                padding: '7px 14px',
+                borderRadius: 7,
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                cursor: validating ? 'wait' : 'pointer',
+                opacity: validating ? 0.6 : 1,
+                flexShrink: 0,
+              }}
+            >
+              {validating ? 'Validating…' : 'Validate Shell Syntax'}
+            </button>
+          </div>
+
+          {validation && (
+            <div style={{
+              padding: '12px 16px',
+              borderRadius: 8,
+              background: Object.values(validation).every(v => v.ok) ? '#0f2a1e' : '#2a1f0f',
+              border: `1px solid ${Object.values(validation).every(v => v.ok) ? '#10b981' : '#f59e0b'}`,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ color: '#e8eef5', fontWeight: 600, fontSize: '0.85rem' }}>
+                  {Object.values(validation).every(v => v.ok)
+                    ? `All ${Object.keys(validation).length} variant(s) OK`
+                    : `${Object.values(validation).filter(v => !v.ok).length} of ${Object.keys(validation).length} variant(s) broken`}
+                </div>
+                <button
+                  onClick={() => setValidation(null)}
+                  style={{ background: 'transparent', border: 'none', color: '#7a8ba3', fontSize: '0.8rem', cursor: 'pointer' }}
+                >
+                  Dismiss
+                </button>
+              </div>
+              <div style={{ fontSize: '0.78rem' }}>
+                {Object.entries(validation).map(([adapter, r]) => (
+                  <div key={adapter} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: r.ok ? '#94a3b8' : '#fbbf24', marginTop: 3 }}>
+                    <span style={{ minWidth: 90, fontFamily: 'monospace' }}>[{adapter}]</span>
+                    <span style={{ fontFamily: r.ok ? 'inherit' : 'monospace' }}>
+                      {r.ok
+                        ? (r.stage === 'skipped-powershell' ? 'skipped (PowerShell)' : 'OK')
+                        : (r.message || 'invalid').split('\n')[0]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </Section>
 
