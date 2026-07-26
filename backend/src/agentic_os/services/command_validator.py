@@ -48,6 +48,31 @@ _PLACEHOLDER_TOKEN = "PH"
 # independently in step 2.
 _WRAPPER_INTERPRETERS = ("bash", "sh")
 
+# PowerShell / Windows commands — bash can't parse `@{...}` hash tables,
+# `[math]::Round()` static-method calls, or PowerShell cmdlet syntax. Skip
+# bash-based validation for these entirely rather than reporting false-positive
+# syntax errors. Matching is intentionally conservative — a single strong
+# indicator is enough to flip a command into "not-bash" territory.
+_POWERSHELL_INDICATORS = re.compile(
+    r'\b(?:'
+    r'Invoke-Command|Invoke-Expression|Invoke-RestMethod|Invoke-WebRequest|'
+    r'Get-(?:CimInstance|WmiObject|Process|Service|EventLog|ChildItem|Content|'
+        r'Item|Location|Date|Random|Member)|'
+    r'Set-(?:CimInstance|Service|Location|Content|Item|Variable|ExecutionPolicy)|'
+    r'Test-(?:Path|Connection|NetConnection)|'
+    r'New-(?:Item|Object|PSSession|CimSession)|'
+    r'Remove-(?:Item|Service|Variable)|'
+    r'Start-(?:Service|Process|Sleep)|'
+    r'Stop-(?:Service|Process|Computer)|'
+    r'Restart-(?:Service|Computer)|'
+    r'ForEach-Object|Where-Object|Select-Object|Sort-Object|Measure-Object|'
+    r'Out-(?:Null|File|String|GridView)'
+    r')\b'
+    r'|\[math\]::'
+    r'|@\{[^}]*=',
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class ValidationResult:
@@ -84,6 +109,15 @@ def validate_command(command: str) -> ValidationResult:
         # Empty is valid — approved_actions may have command=None for
         # controller-dispatched tools (nothing to validate).
         return ValidationResult(ok=True, stage="outer")
+
+    # PowerShell/Windows commands aren't parseable by bash; skip rather than
+    # generate false-positive syntax errors. Report the skip transparently
+    # so operators know why the command wasn't validated.
+    if _POWERSHELL_INDICATORS.search(command):
+        return ValidationResult(
+            ok=True, stage="skipped-powershell",
+            message="PowerShell / Windows command — bash validator does not apply",
+        )
 
     substituted = _PLACEHOLDER_RE.sub(_PLACEHOLDER_TOKEN, command)
 
