@@ -370,7 +370,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
             <div className="grid text-xs font-semibold uppercase tracking-wide"
               style={{ gridTemplateColumns: '140px 1fr 32px', gap: '8px', color: '#7a8ba3', padding: '0 4px' }}>
               <span>Environment</span>
-              <span>Command  <span className="normal-case font-normal" style={{ color: '#4a5568' }}>— inner shell command only; transport wrapper shown below</span></span>
+              <span>Command  <span className="normal-case font-normal" style={{ color: '#4a5568' }}>— full shell command as run on the watcher host. For container/host adapters (docker, ssh, kubernetes) include the transport prefix (e.g. <code>docker exec {"{"}target{"}"} sh -c '…'</code>). For controller adapters (vcenter, aws_ssm, azure) provide only the inner command — the adapter wraps it.</span></span>
               <span />
             </div>
             {Object.entries(commandVariants).map(([env, cmd]) => {
@@ -429,8 +429,22 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
                 },
               }
               const meta = envMeta[env] || { icon: '⚙', label: env }
-              const resolvedTransport = meta.transport
-                ? meta.transport.replace('⟨cmd⟩', (cmd ?? '').trim() || '⟨cmd⟩')
+              // Suppress the transport preview when the stored command already
+              // begins with that adapter's transport prefix. Otherwise the UI
+              // shows a misleading double-wrap (e.g. `docker exec {target} sh
+              // -c "docker exec {target} sh -c '…'"`) even though execution is
+              // fine — see docker_adapter.exec() with mode="host".
+              const trimmedCmd = (cmd ?? '').trim()
+              const transportPrefixes: Record<string, RegExp> = {
+                docker:     /^docker\s+exec\b/i,
+                kubernetes: /^kubectl\s+exec\b/i,
+                ssh:        /^ssh\s+/i,
+                aws_ssm:    /^aws\s+ssm\s+send-command\b/i,
+                azure:      /^az\s+vm\s+run-command\b/i,
+              }
+              const alreadyWrapped = transportPrefixes[env]?.test(trimmedCmd) ?? false
+              const resolvedTransport = (meta.transport && !alreadyWrapped)
+                ? meta.transport.replace('⟨cmd⟩', trimmedCmd || '⟨cmd⟩')
                 : null
               return (
                 <div key={env} className="space-y-1">
@@ -445,7 +459,11 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
                       onChange={e => setCommandVariants(prev => ({ ...prev, [env]: e.target.value }))}
                       className="form-input text-sm"
                       style={{ fontFamily: '"Monaco", "Consolas", "Courier New", monospace', fontSize: '0.75rem' }}
-                      placeholder={`Inner command for ${meta.label}`}
+                      placeholder={alreadyWrapped
+                        ? `Full command for ${meta.label} (already includes transport)`
+                        : transportPrefixes[env]
+                          ? `Full command for ${meta.label} — include transport prefix`
+                          : `Command for ${meta.label}`}
                     />
                     <button
                       type="button"
