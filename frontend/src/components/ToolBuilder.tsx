@@ -79,6 +79,14 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
   const [regError, setRegError]         = useState<string | null>(null)
   const [registeredName, setRegisteredName] = useState('')
 
+  // Validation results from /generate — backend runs the shell-syntax check on
+  // every variant it emits. Populated on generate, refreshed on-demand from the
+  // Review step. Registration is soft-blocked when broken: user must tick the
+  // acknowledgment checkbox before Register unlocks, but the checkbox is always
+  // available (validator may false-positive on unusual patterns).
+  const [validation, setValidation] = useState<Record<string, { ok: boolean; stage: string; message: string | null }> | null>(null)
+  const [ackBroken, setAckBroken]   = useState(false)
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleGenerate = async () => {
@@ -93,6 +101,12 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
       // Pull research sample out before storing in the JSON editor
       const rs: string = data._research_sample ?? ''
       delete data._research_sample
+      // Pull the shell-syntax validation report out too — displayed as a banner
+      // on the Review step, NOT included in the JSON that gets registered.
+      const val = data._validation ?? null
+      delete data._validation
+      setValidation(val)
+      setAckBroken(false)
       setToolName(data.name ?? '')
       setToolId(data.tool_name ?? '')
       setDraftJson(JSON.stringify(data, null, 2))
@@ -580,6 +594,53 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
                 AI-generated tools may contain mistakes. The tool will be registered as <strong>disabled</strong> — test it in the Action Editor before enabling.
               </div>
 
+              {/* Shell-syntax validation banner — non-blocking. Broken variants
+                  require ticking the acknowledgment checkbox before Register unlocks,
+                  since the validator can false-positive on unusual patterns. */}
+              {validation && Object.keys(validation).length > 0 && (() => {
+                const failures = Object.entries(validation).filter(([, v]) => !v.ok)
+                const anyBroken = failures.length > 0
+                return (
+                  <div style={{
+                    marginTop: '0.75rem',
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    background: anyBroken ? '#2a1f0f' : '#0f2a1e',
+                    border: `1px solid ${anyBroken ? '#f59e0b' : '#10b981'}`,
+                    fontSize: '0.78rem',
+                    color: '#e8eef5',
+                  }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                      Shell-syntax validation: {anyBroken
+                        ? `${failures.length} of ${Object.keys(validation).length} variant(s) broken`
+                        : `all ${Object.keys(validation).length} variant(s) OK`}
+                    </div>
+                    {anyBroken && (
+                      <>
+                        <div style={{ marginBottom: 8 }}>
+                          {failures.map(([k, v]) => (
+                            <div key={k} style={{ display: 'flex', gap: 8, marginTop: 3, color: '#fbbf24' }}>
+                              <span style={{ minWidth: 90, fontFamily: 'monospace' }}>[{k}]</span>
+                              <span style={{ fontFamily: 'monospace' }}>
+                                {(v.message || 'invalid').split('\n')[0].slice(0, 160)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: '#cbd5e1' }}>
+                          <input
+                            type="checkbox"
+                            checked={ackBroken}
+                            onChange={e => setAckBroken(e.target.checked)}
+                          />
+                          I've reviewed the validation warnings and want to register anyway (may be a false positive)
+                        </label>
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
+
               {/* Register / back */}
               <div style={{ marginTop: '0.75rem', display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
                 <button
@@ -601,23 +662,31 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
                   {regError && (
                     <span style={{ fontSize: '0.78rem', color: '#f87171' }}>{regError}</span>
                   )}
-                  <button
-                    onClick={handleRegister}
-                    disabled={registering}
-                    className="btn"
-                    style={{
-                      backgroundColor: C.green,
-                      color: '#fff',
-                      border: 'none',
-                      opacity: registering ? 0.5 : 1,
-                      cursor: registering ? 'not-allowed' : 'pointer',
-                      padding: '8px 22px',
-                      fontSize: '0.84rem',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {registering ? 'Registering…' : 'Register Tool'}
-                  </button>
+                  {(() => {
+                    const hasBrokenVariants = !!validation && Object.values(validation).some(v => !v.ok)
+                    const blockedOnAck = hasBrokenVariants && !ackBroken
+                    const disabled = registering || blockedOnAck
+                    return (
+                      <button
+                        onClick={handleRegister}
+                        disabled={disabled}
+                        className="btn"
+                        title={blockedOnAck ? 'Acknowledge the validation warnings above to enable' : undefined}
+                        style={{
+                          backgroundColor: C.green,
+                          color: '#fff',
+                          border: 'none',
+                          opacity: disabled ? 0.5 : 1,
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          padding: '8px 22px',
+                          fontSize: '0.84rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {registering ? 'Registering…' : 'Register Tool'}
+                      </button>
+                    )
+                  })()}
                 </div>
               </div>
             </div>

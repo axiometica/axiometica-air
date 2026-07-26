@@ -1329,6 +1329,45 @@ export interface ApprovedAction {
 export const getApprovedActions = (enabledOnly = true, category?: string) =>
   axios.get<ApprovedAction[]>(`${API_BASE_URL}/approved-actions`, { params: { enabled_only: enabledOnly, category } })
 
+// ── Approved Action shell-syntax validation ────────────────────────────────
+export interface ValidationResult {
+  ok:      boolean
+  stage:   string       // "outer" | "shlex" | "inner_script" | "skipped-powershell"
+  message: string | null
+}
+
+export interface SingleActionValidation {
+  action_id: string
+  tool_name: string
+  name:      string
+  ok:        boolean
+  results:   Record<string, ValidationResult>   // keyed by adapter ("command", "docker", …)
+}
+
+export interface CatalogValidationReport {
+  checked: number
+  ok:      number
+  broken:  number
+  issues:  Array<{
+    action_id: string
+    tool_name: string
+    name:      string
+    failures:  Record<string, ValidationResult>
+  }>
+}
+
+/** Sweep every approved action; returns counts + broken variants report. */
+export const validateAllActions = () =>
+  axios.get<CatalogValidationReport>(`${API_BASE_URL}/approved-actions/validate-all`)
+
+/** Validate one saved action by id (checks its command + every variant). */
+export const validateSingleAction = (actionId: string) =>
+  axios.get<SingleActionValidation>(`${API_BASE_URL}/approved-actions/${actionId}/validate`)
+
+/** Validate an ad-hoc command string — used before saving edits or by Tool Builder Review. */
+export const validateCommand = (command: string) =>
+  axios.post<ValidationResult>(`${API_BASE_URL}/approved-actions/validate-command`, { command })
+
 // ── Platform Intelligence ────────────────────────────────────────────────────
 
 // Run Analysis / Force Refresh now runs as a background Celery job — this

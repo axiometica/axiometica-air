@@ -107,6 +107,11 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
   const [deletingId, setDeletingId]     = useState<string | null>(null)
   const [confirmId, setConfirmId]       = useState<string | null>(null)
   const [showAIBuilder, setShowAIBuilder] = useState(false)
+  const [validating, setValidating]       = useState(false)
+  const [validationReport, setValidationReport] = useState<null | {
+    checked: number; ok: number; broken: number;
+    issues: Array<{ action_id: string; tool_name: string; name: string; failures: Record<string, { ok: boolean; stage: string; message: string | null }> }>
+  }>(null)
 
   useEffect(() => { load() }, [])
 
@@ -120,6 +125,18 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
       setError('Failed to load approved actions')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const runValidationSweep = async () => {
+    try {
+      setValidating(true)
+      const { data } = await axios.get('/api/approved-actions/validate-all')
+      setValidationReport(data)
+    } catch {
+      setError('Validation sweep failed')
+    } finally {
+      setValidating(false)
     }
   }
 
@@ -176,6 +193,26 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button
+            onClick={runValidationSweep}
+            disabled={validating}
+            className="btn flex items-center gap-2"
+            title="Run shell-syntax validation over every tool's command_variants"
+            style={{
+              background: 'transparent',
+              border: '1px solid #3d4557',
+              color: '#a0aec0',
+              padding: '7px 14px',
+              borderRadius: 7,
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: validating ? 'wait' : 'pointer',
+              opacity: validating ? 0.6 : 1,
+            }}
+          >
+            <IconShieldCheck size={16} />
+            {validating ? 'Validating…' : 'Validate All'}
+          </button>
+          <button
             onClick={() => setShowAIBuilder(v => !v)}
             className="btn flex items-center gap-2"
             style={{
@@ -216,6 +253,54 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
           onClose={() => setShowAIBuilder(false)}
           onRegistered={() => { load(); setShowAIBuilder(false) }}
         />
+      )}
+
+      {/* Validation report banner — shown after "Validate All" completes */}
+      {validationReport && (
+        <div style={{
+          marginBottom: 20,
+          padding: '14px 18px',
+          borderRadius: 8,
+          background: validationReport.broken === 0 ? '#0f2a1e' : '#2a1f0f',
+          border: `1px solid ${validationReport.broken === 0 ? '#10b981' : '#f59e0b'}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: validationReport.broken > 0 ? 10 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#e8eef5', fontWeight: 600, fontSize: '0.9rem' }}>
+              {validationReport.broken === 0 ? <IconShieldCheck size={18} /> : <IconAlertTriangle size={18} />}
+              Validation: {validationReport.ok} of {validationReport.checked} tools OK
+              {validationReport.broken > 0 && ` — ${validationReport.broken} broken`}
+            </div>
+            <button
+              onClick={() => setValidationReport(null)}
+              style={{ background: 'transparent', border: 'none', color: '#7a8ba3', fontSize: '0.85rem', cursor: 'pointer' }}
+            >
+              Dismiss
+            </button>
+          </div>
+          {validationReport.broken > 0 && (
+            <div style={{ fontSize: '0.82rem', color: '#cbd5e1' }}>
+              {validationReport.issues.map(issue => (
+                <div key={issue.action_id} style={{ marginBottom: 6, paddingLeft: 8, borderLeft: '2px solid #f59e0b' }}>
+                  <button
+                    onClick={() => {
+                      const action = actions.find(a => a.action_id === issue.action_id)
+                      if (action) onEdit(action)
+                    }}
+                    style={{ background: 'transparent', border: 'none', color: '#fbbf24', cursor: 'pointer', padding: 0, fontWeight: 600 }}
+                    title="Open this tool in the editor"
+                  >
+                    {issue.name} <span style={{ color: '#7a8ba3', fontWeight: 400 }}>({issue.tool_name})</span>
+                  </button>
+                  {Object.entries(issue.failures).map(([adapter, fail]) => (
+                    <div key={adapter} style={{ marginLeft: 12, marginTop: 2, color: '#94a3b8', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                      [{adapter}] {fail.stage}: {(fail.message || '').split('\n')[0].slice(0, 140)}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Filter tabs */}

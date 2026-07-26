@@ -84,6 +84,46 @@ def list_actions(
     return [repo.to_dict(a) for a in items]
 
 
+class ValidateCommandRequest(BaseModel):
+    command: str
+
+
+@router.post("/validate-command")
+def validate_arbitrary_command(body: ValidateCommandRequest):
+    """
+    Validate any command string on demand — used by the Tool Builder Review
+    step and the Action Editor's "Validate" button to check un-saved edits
+    without needing to write to the DB first.
+
+    Returns a single ValidationResult as a dict — see command_validator.py.
+    """
+    from agentic_os.services.command_validator import validate_command
+    return validate_command(body.command).as_dict()
+
+
+@router.get("/{action_id}/validate")
+def validate_single_action(action_id: UUID, db: Session = Depends(get_session)):
+    """
+    Validate one action's command + every command_variant. Returns a map
+    keyed by adapter ("command", "docker", "ssh", …) with per-variant
+    {ok, stage, message} — same shape as the per-item entries in
+    /validate-all's issues list, plus a top-level "ok" summary.
+    """
+    from agentic_os.services.command_validator import validate_action
+    repo   = ApprovedActionRepository(db)
+    action = repo.get(action_id)
+    if not action:
+        raise HTTPException(status_code=404, detail="Action not found")
+    results = validate_action(action)
+    return {
+        "action_id": str(action.id),
+        "tool_name": action.tool_name,
+        "name":      action.name,
+        "ok":        all(v.ok for v in results.values()),
+        "results":   {k: v.as_dict() for k, v in results.items()},
+    }
+
+
 @router.get("/validate-all")
 def validate_all_actions(db: Session = Depends(get_session)):
     """

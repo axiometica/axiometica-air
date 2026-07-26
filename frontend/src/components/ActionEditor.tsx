@@ -66,6 +66,37 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
   const [testResult,   setTestResult]   = useState<TestResult | null>(null)
   const [testLoading,  setTestLoading]  = useState(false)
 
+  // Shell-syntax validation (per-tool)
+  const [validating,   setValidating]   = useState(false)
+  const [validation,   setValidation]   = useState<Record<string, { ok: boolean; stage: string; message: string | null }> | null>(null)
+
+  const runValidation = async () => {
+    try {
+      setValidating(true); setValidation(null)
+      // For unsaved edits, validate each variant against the ad-hoc endpoint
+      // (avoids requiring a save first). For saved actions with untouched
+      // variants, /validate on the ID would also work — using the per-command
+      // endpoint keeps the behaviour identical for both cases.
+      const targets: Array<[string, string]> = []
+      if (command) targets.push(['command', command])
+      for (const [k, v] of Object.entries(commandVariants)) {
+        if (v) targets.push([k, v])
+      }
+      const results: Record<string, { ok: boolean; stage: string; message: string | null }> = {}
+      await Promise.all(targets.map(async ([key, cmd]) => {
+        try {
+          const { data } = await axios.post('/api/approved-actions/validate-command', { command: cmd })
+          results[key] = data
+        } catch (e: any) {
+          results[key] = { ok: false, stage: 'error', message: e?.message || 'request failed' }
+        }
+      }))
+      setValidation(results)
+    } finally {
+      setValidating(false)
+    }
+  }
+
   useEffect(() => {
     if (actionId) {
       axios.get<ApprovedAction>(`/api/approved-actions/${actionId}`)
@@ -225,7 +256,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
         >
           <IconArrowLeft size={18} />
         </button>
-        <div>
+        <div style={{ flex: 1 }}>
           <h2 className="text-section-title" style={{ color: '#e8eef5' }}>
             {isNew ? 'New Action' : name || 'Edit Action'}
           </h2>
@@ -233,12 +264,67 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
             {isNew ? 'Define a new approved action for the catalog' : `Editing: ${toolName}`}
           </p>
         </div>
+        <button
+          onClick={runValidation}
+          disabled={validating || (!command && Object.keys(commandVariants).length === 0)}
+          className="btn flex items-center gap-2"
+          title="Run shell-syntax validation on the current command + every variant"
+          style={{
+            background: 'transparent',
+            border: '1px solid #3d4557',
+            color: '#a0aec0',
+            padding: '7px 14px',
+            borderRadius: 7,
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            cursor: validating ? 'wait' : 'pointer',
+            opacity: validating ? 0.6 : 1,
+          }}
+        >
+          {validating ? 'Validating…' : 'Validate Shell Syntax'}
+        </button>
       </div>
 
       {error && (
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-critical-700/50 text-sm mb-4 text-critical-300">
           <IconAlertTriangle size={15} className="flex-shrink-0" />
           {error}
+        </div>
+      )}
+
+      {validation && (
+        <div style={{
+          marginBottom: 16,
+          padding: '12px 16px',
+          borderRadius: 8,
+          background: Object.values(validation).every(v => v.ok) ? '#0f2a1e' : '#2a1f0f',
+          border: `1px solid ${Object.values(validation).every(v => v.ok) ? '#10b981' : '#f59e0b'}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ color: '#e8eef5', fontWeight: 600, fontSize: '0.9rem' }}>
+              {Object.values(validation).every(v => v.ok)
+                ? `Validation: all ${Object.keys(validation).length} variant(s) OK`
+                : `Validation: ${Object.values(validation).filter(v => !v.ok).length} of ${Object.keys(validation).length} variant(s) broken`}
+            </div>
+            <button
+              onClick={() => setValidation(null)}
+              style={{ background: 'transparent', border: 'none', color: '#7a8ba3', fontSize: '0.85rem', cursor: 'pointer' }}
+            >
+              Dismiss
+            </button>
+          </div>
+          <div style={{ fontSize: '0.8rem' }}>
+            {Object.entries(validation).map(([adapter, r]) => (
+              <div key={adapter} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: r.ok ? '#94a3b8' : '#fbbf24', marginTop: 3 }}>
+                <span style={{ minWidth: 90, fontFamily: 'monospace' }}>[{adapter}]</span>
+                <span>
+                  {r.ok
+                    ? (r.stage === 'skipped-powershell' ? 'skipped (PowerShell)' : 'OK')
+                    : (r.message || 'invalid').split('\n')[0]}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
