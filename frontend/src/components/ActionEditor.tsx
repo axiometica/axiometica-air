@@ -420,7 +420,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
                   icon: '⬡',
                   label: 'VMware vCenter',
                   transportLabel: 'Guest Ops API',
-                  transport: 'vCenter GuestProcessManager.startProgram() → {target}  (no agent on VM — controller dispatches via vCenter API)',
+                  transport: 'vCenter GuestProcessManager.startProgram({target}, "/bin/sh -c \'⟨cmd⟩\'")  (dispatched via vCenter API — no agent on VM)',
                   transportColor: '#a78bfa',
                 },
                 any: {
