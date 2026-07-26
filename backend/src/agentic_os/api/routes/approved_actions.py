@@ -228,6 +228,18 @@ async def generate_tool_definition(body: GenerateToolRequest):
         "quotes), and reopens the string.\n"
         "  WRONG:  bash -c 'awk \\'$6>=100 {print $1}\\''   -> literally passes \\ to awk\n"
         "  RIGHT:  bash -c 'awk '\\''$6>=100 {print $1}'\\'''\n"
+        "IRON RULE — NEVER NEST SAME-TYPE QUOTES.\n"
+        "If the outer wrapper is double-quoted (\"...\"), every inner quoted region MUST use "
+        "single quotes ('...'). If the outer wrapper is single-quoted ('...'), every inner "
+        "quoted region MUST use double quotes or the '\\'' idiom. Nesting the same quote type "
+        "silently closes the outer string mid-command and everything after runs in a broken "
+        "shell context.\n"
+        "  WRONG:  bash -c \"ps aux | awk \"\\$6>=100 {print \\$1}\"\"\n"
+        "          (inner \" closes the outer bash -c \"...\" early — awk gets $6/$1 as\n"
+        "          empty shell vars and > becomes shell redirection)\n"
+        "  RIGHT:  bash -c \"ps aux | awk '\\$6>=100 {print \\$1}'\"\n"
+        "          (inner single quotes are fine inside double quotes; \\$ stays escaped so\n"
+        "          awk sees literal $6/$1)\n"
         "STRONGLY PREFERRED — avoid the escape hell entirely with any of these patterns:\n"
         "  1. awk -v: pass shell values into awk as awk variables, no embedded quotes.\n"
         "     bash -c 'awk -v thresh=100 \"\\$6>=thresh {print \\$1}\" <(ps aux)'\n"
@@ -639,14 +651,40 @@ Rules:
                 return f'awk "{inner}"'
             return _AWK_SINGLE_Q.sub(_fix_awk, joined)
 
+        # Lint: nested same-type quotes inside a bash -c wrapper are a common
+        # LLM failure — the inner quote closes the outer string prematurely.
+        # This is the SYMMETRIC counterpart to _fix_chain's awk-single-inside-single
+        # rewrite: here we handle awk-double-inside-double, which reaches the
+        # user as e.g. `bash -c "ps | awk "\$3>0 {print \$1}""` — visibly broken
+        # but tricky to spot in a JSON blob.
+        _AWK_DOUBLE_Q = re.compile(r'awk\s+"([^"]*)"')
+
+        def _fix_nested_double_awk(inner: str) -> str:
+            """Convert `awk "..."` to `awk '...'` inside a double-quoted bash -c.
+            The \\$ escapes stay put — they were escaped for the OUTER double-quote
+            layer, and single quotes preserve them so awk still sees $N field refs.
+            """
+            return _AWK_DOUBLE_Q.sub(lambda m: f"awk '{m.group(1)}'", inner)
+
         for key, val in list(variants.items()):
             if not val:
                 continue
-            # Docker: inner chain is wrapped in bash -c '...' or bash -c "..."
-            m = re.match(r"^(docker exec \{target\} bash -c ['\"])(.+)(['\"])$",
-                         val, re.DOTALL)
+            # Match ANY bash -c wrapper (docker exec ... bash -c, kubectl exec ... bash -c,
+            # or a bare bash -c) — not just docker, since kubernetes variants have the
+            # same nested-quote failure mode.
+            m = re.search(r"""(\bbash\s+-c\s+)(['"])(.+)(\2)\s*$""", val, re.DOTALL)
             if m:
-                variants[key] = m.group(1) + _fix_chain(m.group(2)) + m.group(3)
+                before = val[:m.start()]
+                bash_prefix = m.group(1)
+                outer_q = m.group(2)
+                inner = m.group(3)
+                if outer_q == "'":
+                    # Existing behaviour: awk '...' inside bash -c '...' → awk "..." with \$
+                    inner = _fix_chain(inner)
+                else:
+                    # New: awk "..." inside bash -c "..." → awk '...'
+                    inner = _fix_nested_double_awk(inner)
+                variants[key] = f"{before}{bash_prefix}{outer_q}{inner}{outer_q}"
             else:
                 variants[key] = _fix_chain(val)
 
