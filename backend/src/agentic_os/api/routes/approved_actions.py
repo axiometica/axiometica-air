@@ -84,6 +84,64 @@ def list_actions(
     return [repo.to_dict(a) for a in items]
 
 
+@router.get("/validate-all")
+def validate_all_actions(db: Session = Depends(get_session)):
+    """
+    Sweep every approved_action's command + command_variants through the
+    shared shell-syntax validator. Returns a report of broken variants so
+    operators can locate LLM-generated or hand-authored tools that will
+    silently fail at runtime.
+
+    Response shape:
+      {
+        "checked": <int>,      # total actions inspected
+        "ok":      <int>,      # actions with all variants passing
+        "broken":  <int>,      # actions with at least one failing variant
+        "issues":  [
+          {
+            "action_id":   "<uuid>",
+            "tool_name":   "…",
+            "name":        "Human name",
+            "failures": {
+              "<adapter>": {"ok": false, "stage": "inner_script", "message": "…"},
+              …
+            }
+          },
+          …
+        ]
+      }
+    """
+    from agentic_os.services.command_validator import validate_action
+
+    repo  = ApprovedActionRepository(db)
+    items = repo.list()
+
+    checked = 0
+    ok      = 0
+    issues: list[dict] = []
+
+    for a in items:
+        checked += 1
+        results  = validate_action(a)
+        failures = {k: v.as_dict() for k, v in results.items() if not v.ok}
+        if failures:
+            issues.append({
+                "action_id": str(a.id),
+                "tool_name": a.tool_name,
+                "name":      a.name,
+                "failures":  failures,
+            })
+        else:
+            ok += 1
+
+    return {
+        "checked": checked,
+        "ok":      ok,
+        "broken":  len(issues),
+        "issues":  issues,
+    }
+
+
 @router.get("/{action_id}")
 def get_action(action_id: UUID, db: Session = Depends(get_session)):
     repo   = ApprovedActionRepository(db)
@@ -810,6 +868,22 @@ Rules:
         # Prefixed with underscore — the register endpoint will ignore unknown fields.
         if research_sample:
             tool_def["_research_sample"] = "\n".join(research_sample)
+
+        # ── Post-generation validation ────────────────────────────────────────
+        # Run every command_variant through the shared shell-syntax validator so
+        # the frontend can flag broken variants (fragmented bash -c args, unclosed
+        # quotes, etc.) BEFORE the user hits "Register". Non-blocking — we still
+        # return the tool_def so the user can fix it inline; frontend gets a
+        # parallel _validation map keyed by adapter with {ok, stage, message}.
+        try:
+            from agentic_os.services.command_validator import validate_action
+            _val = validate_action(tool_def)
+            tool_def["_validation"] = {k: v.as_dict() for k, v in _val.items()}
+        except Exception as _val_err:
+            # Never fail the endpoint on validator internal errors — surface them
+            # as a per-key "error" so the operator sees something's off but still
+            # gets the generated tool.
+            tool_def["_validation"] = {"__validator_error__": str(_val_err)}
 
         return tool_def
 
