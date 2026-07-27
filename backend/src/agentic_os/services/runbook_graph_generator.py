@@ -173,6 +173,55 @@ def _output_fields_for(tool: dict) -> list[str]:
     return _LEGACY_OUTPUT_FIELDS.get(tool["tool_name"], [])
 
 
+def _output_fields_annotated_for(tool: dict) -> list[tuple[str, str]]:
+    """Same as _output_fields_for but pairs each field with a compact unit hint
+    extracted from its description. Used by the prompt so the LLM sees that
+    used_memory is MB rather than a percent — the previous names-only listing
+    was the root cause of comparisons like `used_memory_after less_than 85`
+    where 85 was intended as a percent but the field returns raw MB."""
+    db_fields = tool.get("output_fields") or []
+    if not db_fields:
+        return [(name, "") for name in _LEGACY_OUTPUT_FIELDS.get(tool["tool_name"], [])]
+    out: list[tuple[str, str]] = []
+    for f in db_fields:
+        if not isinstance(f, dict) or not f.get("field"):
+            continue
+        out.append((f.get("field"), _extract_unit_hint(f.get("description") or "")))
+    return out
+
+
+# Short unit tokens the LLM should treat as "this field's magnitude is that
+# unit". We look for these inside the field description. Ordered — longer
+# / more specific tokens first so "MB/s" beats a later "s". Case-insensitive.
+_UNIT_TOKENS = (
+    "percent", "%",
+    "MB/s", "KB/s", "GB/s",
+    "GB", "MB", "KB", "bytes",
+    "milliseconds", "ms",
+    "seconds", "sec",
+    "count", "requests/sec", "req/s", "rps",
+    "boolean", "true/false", "yes/no",
+    "PID", "pid",
+    "epoch",
+    "load", "load1", "load5",
+)
+
+
+def _extract_unit_hint(description: str) -> str:
+    """Pull a short unit hint out of a field description. `"amount of used memory
+    in MB"` → `"MB"`. Returns empty string when no known unit token appears —
+    that's OK; the field is either dimensionless (a name, a status) or the
+    description didn't spell it out, and the LLM will fall back to the field
+    name for a hint."""
+    if not description:
+        return ""
+    low = description.lower()
+    for tok in _UNIT_TOKENS:
+        if tok.lower() in low:
+            return tok
+    return ""
+
+
 def _required_params_for(tool: dict) -> list[str]:
     """Required parameter names for a tool — without these, the LLM tends to emit empty
     args for tools that can't do anything useful without them (e.g. get_thread_dump needs
@@ -197,8 +246,17 @@ def _build_tools_block(tools: list[dict]) -> str:
     for cat, items in by_cat.items():
         lines.append(f"[{cat.upper().replace('_', ' ')}]")
         for t in items:
-            fields = _output_fields_for(t)
-            fields_str = ", ".join(fields) if fields else "none"
+            annotated = _output_fields_annotated_for(t)
+            if annotated:
+                # Render "name:unit" pairs when a unit was detected; bare name
+                # otherwise. Compact form so the tools block doesn't balloon —
+                # this block is repeated on every generation call.
+                fields_str = ", ".join(
+                    f"{name}:{unit}" if unit else name
+                    for name, unit in annotated
+                )
+            else:
+                fields_str = "none"
             required = _required_params_for(t)
             req_str = f" | requires: {', '.join(required)}" if required else ""
             desc = (t['description'] or "")[:55].rstrip()
@@ -488,6 +546,30 @@ PLATFORM: {platform}
     "incident_update" step with state="resolved" before any final "notify". A runbook with no
     incident_update step reachable after its verification can never auto-resolve a real incident —
     it will always end up awaiting manual review even when everything actually worked.
+17. UNIT CONSISTENCY (single most common way verification steps fail):
+    Each output field in the tools block above is shown as "name:unit" when its unit is known
+    (e.g. `used_memory:MB`, `cpu_percent:%`, `response_time:ms`). When you write a decision
+    condition or verification threshold against a captured field, the LITERAL number you compare
+    against MUST be expressed in that field's declared unit.
+      RIGHT: used_memory:MB -> `used_memory_after less_than 4096` (4 GB in MB — a real MB threshold)
+      RIGHT: cpu_percent:% -> `cpu_percent_after less_than 80`   (80% — a real percent threshold)
+      WRONG: used_memory:MB -> `used_memory_after less_than 85`  (85 what? 85 MB? 85%? Neither
+             makes sense — this comparison ALWAYS fires because any container using more than
+             85 MB fails the check, so the "verification" is meaningless.)
+    Cross-check every threshold against its field's unit before writing it. If the field's unit
+    is `%`, the threshold is roughly 0-100. If the field's unit is `MB`, thresholds under 100
+    are almost always wrong for real workloads. If the field has no unit shown, its name is your
+    hint — `*_percent` / `*_pct` is a percent, `*_count` is a count, `*_seconds` / `*_ms` are
+    time. When in doubt, prefer a delta comparison against the pre-remediation reading (see
+    rule 18) over guessing an absolute threshold.
+18. RELATIVE (BEFORE/AFTER) COMPARISONS are the preferred verification pattern when the user's
+    request is "verify X dropped by N%" or similar — capture the pre-remediation value in an
+    early diagnostic step, capture the post-remediation value in the verification step (with an
+    "_after" suffix), and gate resolution on the delta. Example: capture `mem_before` in a
+    diagnostic step and `mem_after` in verification, then a decision node with condition
+    `mem_after less_than mem_before` (or `mem_after less_than (mem_before * 0.9)` for a 10%
+    drop). An absolute threshold picked out of thin air is worse than a relative one drawn
+    from the same environment.
 
 === OUTPUT FORMAT ===
 Follow this exact JSON schema. Output ONLY the JSON — no markdown fences, no explanation.
@@ -617,7 +699,152 @@ def _parse_and_normalise(raw: str, event_type: str, platform: str, tools: list[d
         # patterns like "http://service-url/health" despite rule 15.
         _repair_service_urls(data["steps"])
 
+        # Non-blocking lint: catch obvious unit mismatches in decision/verification
+        # thresholds. Returned as _lint_warnings for the caller (editor UI) to
+        # surface next to the affected step. Egregious cases are also logged.
+        data["_lint_warnings"] = _lint_threshold_units(data["steps"], tools)
+
     return data
+
+
+# ── Threshold / unit lint ────────────────────────────────────────────────────
+# Catches the class of runbook bug where a decision or verification step
+# compares a captured field against a literal threshold whose magnitude
+# doesn't match the field's declared unit. The archetypal case:
+#     used_memory (declared MB, real values 500-8000) compared to 85
+#     — 85 was intended as a percent but the field returns raw MB, so the
+#     comparison always fires and "verification" is meaningless. The prompt
+#     tells the LLM about this (rule 17), but the LLM slips; this is the
+#     deterministic backstop that flags it in server logs and returns a
+#     warnings list to the caller so the editor can surface it.
+
+# Comparison operators recognised inside decision "condition" strings.
+_DECISION_CMP_RE = re.compile(
+    r'(\b[a-z_][a-z_0-9]*\b)\s*'
+    r'(<=|>=|==|!=|<|>|less_than|greater_than|equals|not_equals|'
+    r'less_than_or_equal|greater_than_or_equal)\s*'
+    r"([+-]?\d+(?:\.\d+)?)",   # numeric literal — string comparisons are skipped
+    re.IGNORECASE,
+)
+
+
+def _plausible_range_for_unit(unit: str) -> tuple[float, float] | None:
+    """Return (low_ok, high_ok) plausible-value bounds for a unit hint.
+    Comparisons falling outside these bounds are almost certainly a
+    unit-mismatch bug. Conservative — we want no false positives on real
+    thresholds, only glaring outliers. `None` = don't check."""
+    u = (unit or "").lower()
+    if u in ("percent", "%"):
+        return (0, 100)
+    if u == "mb":
+        return (200, 1_000_000)          # <200MB memory threshold is nonsense in practice
+    if u == "gb":
+        return (1, 10_000)
+    if u == "kb":
+        return (1_000, 10_000_000)
+    if u == "bytes":
+        return (1_000_000, 10_000_000_000)
+    if u in ("ms", "milliseconds"):
+        return (10, 600_000)             # 10ms – 10min
+    if u in ("seconds", "sec"):
+        return (1, 3_600)                # 1s – 1h
+    return None
+
+
+def _looks_percent_shaped(value: float) -> bool:
+    """Percent-shaped values (0–100, no decimal or one decimal) are the archetypal
+    unit-confusion source — the LLM was picturing a percent and wrote it against
+    a field with different units. Catch this even when the field's own plausible
+    range would technically admit the value."""
+    return 0 < value <= 100
+
+
+def _lint_threshold_units(steps: list[dict], tools: list[dict]) -> list[dict]:
+    """Walk verification + decision steps and flag comparisons whose literal
+    threshold doesn't match the referenced field's declared unit. Returns a
+    list of warning dicts; each is also logged so the server-side operator
+    can see the alert without pulling the response body."""
+    tools_by_name = {t["tool_name"]: t for t in tools}
+    # Build a `captured_var -> unit` map by scanning every step's output_capture.
+    # Each entry is (variable_name, referenced_field, unit_hint).
+    var_units: dict[str, str] = {}
+    for step in steps:
+        tool = tools_by_name.get(step.get("tool") or "")
+        if not tool:
+            continue
+        field_units = {name: unit for name, unit in _output_fields_annotated_for(tool)}
+        for var_name, capture_expr in (step.get("output_capture") or {}).items():
+            # capture_expr is a JSONPath like "$.cpu_percent" — extract the tail.
+            m = re.search(r'\$\.(\w+)', str(capture_expr))
+            if not m:
+                continue
+            field = m.group(1)
+            unit = field_units.get(field, "")
+            # Also infer from the CAPTURED variable name itself — user often
+            # writes `cpu_percent_after` when the field is `cpu_percent`.
+            if not unit:
+                for suffix in ("_percent", "_pct", "_seconds", "_ms", "_count"):
+                    if var_name.endswith(suffix):
+                        unit = {"_percent": "%", "_pct": "%", "_seconds": "seconds",
+                                "_ms": "ms", "_count": "count"}[suffix]
+                        break
+            if unit:
+                var_units[var_name] = unit
+
+    warnings_out: list[dict] = []
+
+    def _flag(step_id: str, msg: str) -> None:
+        warnings_out.append({"step_id": step_id, "message": msg})
+        logger.warning("[GraphGenerator/lint] %s: %s", step_id, msg)
+
+    for step in steps:
+        step_id = step.get("id") or "(unknown)"
+        stype = (step.get("type") or "").lower()
+
+        def _check(cmp_var: str, val_num: float, where: str) -> None:
+            """Two-heuristic threshold check: (a) value is outside the field's
+            plausible unit range; (b) value looks percent-shaped (0-100) but
+            the field is NOT a percent — that's the archetypal
+            "wrote 85 meaning 85% against a MB field" bug."""
+            unit = var_units.get(cmp_var, "")
+            if not unit:
+                return   # no unit info — can't judge
+            bounds = _plausible_range_for_unit(unit)
+            if bounds and not (bounds[0] <= val_num <= bounds[1]):
+                _flag(step_id,
+                      f"{where} compares '{cmp_var}' ({unit}) to {val_num}, outside the "
+                      f"plausible {unit} range {bounds} — likely a unit mismatch")
+                return
+            if unit.lower() not in ("percent", "%") and _looks_percent_shaped(val_num):
+                _flag(step_id,
+                      f"{where} compares '{cmp_var}' ({unit}) to {val_num}, which looks "
+                      f"percent-shaped (0-100) but '{cmp_var}' is {unit} — did you mean a "
+                      f"threshold in {unit}, or intend to capture a percent-valued field?")
+
+        # Structured verification: metric / check / value tuple.
+        if stype == "verification":
+            metric = step.get("metric")
+            value  = step.get("value")
+            if metric and value is not None:
+                try:
+                    val_num = float(value)
+                except (TypeError, ValueError):
+                    val_num = None
+                if val_num is not None:
+                    _check(metric, val_num, "verification threshold")
+
+        # Free-form decision conditions: parse each `var CMP number` triple.
+        elif stype == "decision":
+            cond = str(step.get("condition") or "")
+            for m in _DECISION_CMP_RE.finditer(cond):
+                var, _op, num = m.group(1), m.group(2), m.group(3)
+                try:
+                    val_num = float(num)
+                except ValueError:
+                    continue
+                _check(var, val_num, "decision condition")
+
+    return warnings_out
 
 
 _PLACEHOLDER_URL_RE = re.compile(
