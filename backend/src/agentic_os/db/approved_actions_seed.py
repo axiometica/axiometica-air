@@ -635,12 +635,19 @@ APPROVED_ACTIONS = [
         "tool_name": "rotate_logs",
         "name": "Rotate Log Files",
         "description": "Trigger logrotate inside a container to compress and cycle the current log files.",
-        # logrotate is not in Alpine/slim images; fall back to manual rotation using find+mv.
-        "command": "docker exec {target} sh -c 'if command -v logrotate >/dev/null 2>&1; then logrotate -f {config} && echo \"logrotate completed\"; else find /var/log -name \"*.log\" -size +1k -exec sh -c \\'mv \"$1\" \"$1.$(date +%Y%m%d%H%M%S)\" && touch \"$1\"\\' _ {} \\; && echo \"[FALLBACK] Manual rotation applied to /var/log (logrotate not installed)\"; fi'",
+        # NOTE: earlier versions attempted a find + `sh -c '\''mv ... {} \\;'\''`
+        # fallback for images without logrotate. That version was broken twice
+        # over — (a) `\'` inside the outer sh -c '...' is literal backslash +
+        # closing quote (bash "unterminated quoted string" at runtime), and
+        # (b) the bare `{}` placeholder made Python's format_map raise
+        # IndexError so the whole command_template fell back UNRENDERED —
+        # {target} reached the shell as literal text. If logrotate isn't
+        # installed we now just skip cleanly and let the operator handle it.
+        "command":    "docker exec {target} sh -c 'if command -v logrotate >/dev/null 2>&1; then logrotate -f {config} && echo \"logrotate completed\"; else echo \"[SKIP] logrotate not installed in this image — manual rotation required\"; fi'",
         "command_variants": {
-            "docker":     "docker exec {target} sh -c 'if command -v logrotate >/dev/null 2>&1; then logrotate -f {config} && echo \"logrotate completed\"; else find /var/log -name \"*.log\" -size +1k -exec sh -c \\'mv \"$1\" \"$1.$(date +%Y%m%d%H%M%S)\" && touch \"$1\"\\' _ {} \\; && echo \"[FALLBACK] Manual rotation applied to /var/log\"; fi'",
-            "ssh":        "ssh {target} logrotate -f {config}",
-            "kubernetes": "kubectl exec {target} -n {namespace} -- sh -c 'command -v logrotate >/dev/null 2>&1 && logrotate -f {config} || echo \"[WARN] logrotate not installed\"'",
+            "docker":     "docker exec {target} sh -c 'if command -v logrotate >/dev/null 2>&1; then logrotate -f {config} && echo \"logrotate completed\"; else echo \"[SKIP] logrotate not installed in this image — manual rotation required\"; fi'",
+            "ssh":        "ssh {target} 'if command -v logrotate >/dev/null 2>&1; then logrotate -f {config} && echo \"logrotate completed\"; else echo \"[SKIP] logrotate not installed — manual rotation required\"; fi'",
+            "kubernetes": "kubectl exec {target} -n {namespace} -- sh -c 'if command -v logrotate >/dev/null 2>&1; then logrotate -f {config} && echo \"logrotate completed\"; else echo \"[SKIP] logrotate not installed — manual rotation required\"; fi'",
             "vcenter":    "logrotate -f {config}",
             "aws_ssm":    "logrotate -f {config}",
             "azure":      "logrotate -f {config}",
