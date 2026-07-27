@@ -347,7 +347,38 @@ async def generate_tool_definition(body: GenerateToolRequest):
         "  3. When awk/sed only needs a fixed regex or literal, put it in single quotes:\n"
         "     ps aux | grep -v grep | awk '/nginx/ {print $2}'\n"
         "In general: if you find yourself writing three or more quote characters in a row, "
-        "stop and rewrite using awk -v, double-quoted outer wrapper, or splitting the pipeline."
+        "stop and rewrite using awk -v, double-quoted outer wrapper, or splitting the pipeline.\n\n"
+        "IRON RULE — SQL LITERALS INSIDE bash -c ARE A LANDMINE.\n"
+        "SQL requires string values to be wrapped in SINGLE quotes: state='active', "
+        "role='admin', name='foo'. When that SQL is embedded inside a bash -c '...' outer "
+        "wrapper, those inner single quotes CLOSE THE OUTER STRING and every character "
+        "after runs in a different shell context. This produces a bash-valid command "
+        "whose SQL has NO string literal quotes — the DB then complains that 'active' "
+        "is an unknown column. The shell-syntax validator will NOT catch this because "
+        "bash is happy; only the DB engine will reject the query at runtime.\n"
+        "This applies to EVERY SQL / query CLI: psql, mysql, mysqladmin, mariadb, mongo, "
+        "mongosh, redis-cli, sqlite3, cqlsh, clickhouse-client, influx, bq.\n"
+        "  WRONG:  bash -c 'psql -c \"SELECT * FROM t WHERE state='active'\"'\n"
+        "          (the SQL 'active' quotes close the outer bash string — reaches DB as\n"
+        "          `SELECT * FROM t WHERE state=active` → column-not-found error)\n"
+        "  RIGHT:  bash -c \"psql -c \\\"SELECT * FROM t WHERE state='active'\\\"\"\n"
+        "          (outer double, inner double escaped — SQL single quotes stay intact)\n"
+        "  ALSO RIGHT:  bash -c 'psql -c \"SELECT * FROM t WHERE state='\\''active'\\''\"'\n"
+        "          (outer single, SQL literal quotes escaped with the '\\'' idiom)\n"
+        "STRONGLY PREFERRED — sidestep the quoting entirely:\n"
+        "  1. Wrap the outer bash -c in DOUBLE quotes so inner SQL single quotes are "
+        "just characters. Escape the wrapping -c argument's own double quotes as \\\".\n"
+        "     docker exec {target} bash -c \"psql -U postgres -c \\\"SELECT ... WHERE x='y'\\\"\"\n"
+        "  2. Pass the query on stdin with a heredoc — no quoting collision:\n"
+        "     docker exec {target} bash -c \"psql -U postgres <<'SQL'\\nSELECT ... WHERE x='y';\\nSQL\"\n"
+        "  3. For a single value comparison, use psql / mysql variable binding:\n"
+        "     docker exec {target} psql -U postgres -v state=active -c \"SELECT ... WHERE state = :'state'\"\n"
+        "Prefer pattern 1 (outer double + escaped inner double) — it is the shortest, "
+        "reads naturally, and the shell-syntax validator can verify it end-to-end.\n"
+        "One more gotcha specific to SQL clients: NEVER wrap the whole invocation in "
+        "'echo \"key=$(psql ...)\"' — it swallows non-zero exit codes and hides DB "
+        "errors from the runbook. Call the client directly; the platform captures stdout "
+        "and the exit code separately."
     )
 
     user_prompt = f"""Generate a complete tool catalog entry for this request:
@@ -764,6 +795,39 @@ Rules:
             """
             return _AWK_DOUBLE_Q.sub(lambda m: f"awk '{m.group(1)}'", inner)
 
+        # SQL clients embedded inside a single-quoted bash -c '...' are the
+        # other landmine: SQL string literals need their own single quotes
+        # (state='active'), but those bare `'` characters silently close the
+        # outer bash string. Result is a bash-valid command whose SQL has NO
+        # string literals — the DB then rejects `state=active` as an unknown
+        # column. The shell-syntax validator can't catch this because bash
+        # parses cleanly. Sanitize by rewriting bare `'x'` inside the SQL
+        # client's -c/-e argument to the '\'' idiom, which preserves both
+        # the outer bash string AND the SQL literal semantics.
+        _SQL_CLIENT_ARG = re.compile(
+            r'\b(psql|mysql|mysqladmin|mariadb|mongo|mongosh|redis-cli|sqlite3|'
+            r'cqlsh|clickhouse-client|influx|bq)\b'
+            r'([^"\']*?)'
+            r'\s+-[ceE]\s+"([^"]*)"'
+        )
+
+        def _fix_sql_literals_in_single_quoted_bash(inner: str) -> str:
+            """When outer bash -c uses single quotes, any bare `'` in an inner
+            SQL query argument would have closed the outer string. Detect the
+            common `<sqlclient> ... -c "…'x'…"` pattern and replace each bare
+            single quote in the -c argument with the '\\'' idiom so the SQL
+            literals survive bash's outer quoting. Idempotent — `'\\''` sequences
+            are matched as-is and rewritten to themselves."""
+            def repl(m: re.Match) -> str:
+                client, mid, arg = m.group(1), m.group(2), m.group(3)
+                if "'" not in arg:
+                    return m.group(0)
+                # First collapse any pre-existing '\'' back to a bare ' to keep
+                # this idempotent, then re-escape every ' as '\''.
+                arg = arg.replace(r"'\''", "'").replace("'", r"'\''")
+                return f'{client}{mid} -c "{arg}"'
+            return _SQL_CLIENT_ARG.sub(repl, inner)
+
         def _normalise_awk_dollar_escapes(inner: str) -> str:
             """Inside `bash -c '…'` (single-quoted outer), any `awk "…"` block
             MUST escape every `$N` as `\\$N` so bash's double-quote expansion
@@ -797,6 +861,10 @@ Rules:
                     # bash's double-quote expansion). Idempotent — safe to run after
                     # _fix_chain has already produced normalised awk "..." blocks.
                     inner = _normalise_awk_dollar_escapes(inner)
+                    # Rescue SQL string literals whose bare `'` would silently
+                    # close the outer single-quoted bash -c wrapper — see
+                    # _fix_sql_literals_in_single_quoted_bash docstring.
+                    inner = _fix_sql_literals_in_single_quoted_bash(inner)
                 else:
                     # New: awk "..." inside bash -c "..." → awk '...'
                     inner = _fix_nested_double_awk(inner)
