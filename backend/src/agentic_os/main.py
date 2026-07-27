@@ -146,6 +146,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠ Risk weight seed failed: {e}")
 
+    # Provision demo principal (only when DEMO_MODE=true; no-op otherwise).
+    # Idempotent — resets password/role/enabled on every startup so a
+    # malicious visitor can't lock out subsequent demo users.
+    try:
+        from agentic_os.services.demo_mode import ensure_demo_principal, DEMO_MODE
+        if DEMO_MODE:
+            ensure_demo_principal()
+    except Exception as e:
+        logger.warning(f"⚠ Demo principal provisioning failed: {e}")
+
     # Seed platform settings (watcher thresholds, etc.) — no-op if already seeded
     try:
         from agentic_os.api.routes.platform_settings import (
@@ -306,13 +316,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Demo-mode access control ────────────────────────────────────────────────
+# No-op for every non-demo principal (peeks at the JWT and early-returns
+# when role != 'demo'). Only fires for the auto-provisioned demo user, and
+# only on installs where DEMO_MODE=true has surfaced that user. Enforces
+# read-only access + a small write allow-list (login/logout/chat).
+from agentic_os.services.demo_mode import demo_access_middleware
+app.middleware("http")(demo_access_middleware)
+
 # ── Route-level auth dependencies ───────────────────────────────────────────
 # _open    : no auth (health checks, login endpoints)
-# _any     : any valid JWT or API key (viewer, operator, itom_admin, admin, automation)
-# _itom_up : itom_admin or admin (configuration & knowledge-base routes)
-# _admin   : admin only (platform management, LLM keys, user admin)
+# _any     : any valid JWT or API key (viewer, operator, itom_admin, admin, automation, demo)
+# _itom_up : itom_admin or admin (or demo — read-only, writes blocked by middleware above)
+# _admin   : admin only (demo is deliberately excluded — cannot even GET admin routes)
 _any    = [Depends(get_current_principal)]
-_itom_up = [Depends(require_role("admin", "itom_admin"))]
+_itom_up = [Depends(require_role("admin", "itom_admin", "demo"))]
 _admin  = [Depends(require_role("admin"))]
 
 # Include routers

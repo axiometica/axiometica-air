@@ -31,6 +31,8 @@ from sqlalchemy import text
 
 from agentic_os.db.database import get_session
 from agentic_os.api.rate_limit import RateLimit
+from agentic_os.api.auth import get_current_principal
+from agentic_os.services.demo_mode import is_demo, check_chat_quota, increment_chat_count
 
 # 60 chat requests per minute per IP (Fix 7)
 _chat_rate_limit = RateLimit(times=60, seconds=60)
@@ -1181,7 +1183,23 @@ async def operator_chat_stream(
     body: ChatRequest,
     db: Session = Depends(get_session),
     _rl: None = Depends(_chat_rate_limit),       # Fix 7 — 60 req/min per IP
+    principal = Depends(get_current_principal),
 ):
+    # Demo chat quota: chat is the sole write exception for demo users, so
+    # cap message count per demo principal per UTC day. Runs before the LLM
+    # is touched so an exhausted quota returns a clean 429 with no cost.
+    if is_demo(principal):
+        ok, used, limit = check_chat_quota(str(principal.id))
+        if not ok:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Demo chat quota exhausted ({used}/{limit} messages today). "
+                    "Resets at UTC midnight."
+                ),
+            )
+        increment_chat_count(str(principal.id))
     """
     Stream the LLM reply as SSE chunks, then emit an optional action metadata event.
 
@@ -1242,7 +1260,23 @@ async def operator_chat(
     body: ChatRequest,
     db: Session = Depends(get_session),
     _rl: None = Depends(_chat_rate_limit),       # Fix 7 — 60 req/min per IP
+    principal = Depends(__import__("agentic_os.api.auth", fromlist=["get_current_principal"]).get_current_principal),
 ):
+    # Demo chat quota — same enforcement as /chat/stream. See that endpoint
+    # for the rationale.
+    from agentic_os.services.demo_mode import is_demo, check_chat_quota, increment_chat_count
+    if is_demo(principal):
+        ok, used, limit = check_chat_quota(str(principal.id))
+        if not ok:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Demo chat quota exhausted ({used}/{limit} messages today). "
+                    "Resets at UTC midnight."
+                ),
+            )
+        increment_chat_count(str(principal.id))
     """Non-streaming fallback — returns complete reply as JSON."""
     try:
         from agentic_os.services.summary_service import get_summary_service

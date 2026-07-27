@@ -307,7 +307,7 @@ def create_principal(
     _admin: Principal = Depends(require_role("admin")),
 ):
     """Create a user or automation account [admin only]."""
-    valid_roles = {"admin", "itom_admin", "operator", "viewer", "automation"}
+    valid_roles = {"admin", "itom_admin", "operator", "viewer", "automation", "demo"}
     if body.role not in valid_roles:
         raise HTTPException(status_code=422, detail=f"Invalid role. Must be one of: {', '.join(sorted(valid_roles))}")
 
@@ -361,7 +361,7 @@ def update_principal(
         details.append(f"name: {row.name!r} → {body.name!r}")
         row.name = body.name
     if body.role is not None:
-        valid_roles = {"admin", "itom_admin", "operator", "viewer", "automation"}
+        valid_roles = {"admin", "itom_admin", "operator", "viewer", "automation", "demo"}
         if body.role not in valid_roles:
             raise HTTPException(status_code=422, detail=f"Invalid role. Must be one of: {', '.join(sorted(valid_roles))}")
         details.append(f"role: {row.role!r} → {body.role!r}")
