@@ -40,11 +40,17 @@ interface MenuItem {
   badge?: number   // numeric badge shown on the item (0 = hidden)
 }
 
-// Role constants for clarity
-const ALL_HUMANS  = ['admin', 'itom_admin', 'operator', 'viewer']
-const OPS_UP      = ['admin', 'itom_admin', 'operator']   // can act on incidents
-const ITOM_UP     = ['admin', 'itom_admin']                // can configure automation
-const ADMIN_ONLY  = ['admin']
+// Role constants for clarity.
+// 'demo' is included in every tier EXCEPT ADMIN_ONLY (Admin/Users) and OPS_UP
+// (Create Incident, which is a write). Server middleware blocks all demo
+// writes anyway — the tiers here decide what appears in the nav.
+const ALL_HUMANS  = ['admin', 'itom_admin', 'operator', 'viewer', 'demo']
+const OPS_UP      = ['admin', 'itom_admin', 'operator']       // writes — demo excluded
+const ITOM_UP     = ['admin', 'itom_admin', 'demo']            // config views + demo browse
+const ADMIN_ONLY  = ['admin']                                  // real users only
+const SETTINGS_VIEW = ['admin', 'demo']                        // Settings — demo can view
+                                                                // (Save is disabled; LLM tab
+                                                                // 403s at the API layer)
 
 // Event types that should trigger an immediate badge refetch
 const BADGE_EVENTS = new Set([
@@ -127,7 +133,7 @@ export default function Sidebar({
     { divider: true },
     { icon: AdminIcon,          label: 'Admin',              view: 'admin',               allowedRoles: ADMIN_ONLY },
     { icon: UsersNavIcon,       label: 'Users',              view: 'users',               allowedRoles: ADMIN_ONLY },
-    { icon: SettingsIcon,       label: 'Settings',           view: 'settings',            allowedRoles: ADMIN_ONLY },
+    { icon: SettingsIcon,       label: 'Settings',           view: 'settings',            allowedRoles: SETTINGS_VIEW },
   ]
 
   // Filter to items this role can see; also hide dividers with nothing visible below them

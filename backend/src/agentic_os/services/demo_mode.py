@@ -38,11 +38,19 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Optional
 
 from jose import JWTError, jwt as _jwt
+
+# Per-request context — set by demo_access_middleware for demo principals,
+# read by the LLM provider layer to know whether to enforce caps / override
+# the model. None for every non-demo request (the middleware early-returns
+# without setting it). ContextVar isolates values per asyncio task so
+# concurrent requests never see each other's demo state.
+demo_request_ctx: ContextVar[Optional[dict]] = ContextVar("demo_request_ctx", default=None)
 
 logger = logging.getLogger(__name__)
 
@@ -332,10 +340,28 @@ def is_demo_principal_from_request(request) -> tuple[bool, Optional[str], Option
 async def demo_access_middleware(request, call_next):
     """Enforce demo access rules. No-op for every non-demo request.
     Runs BEFORE FastAPI's route dependencies fire, so a 403 here short-
-    circuits the whole request pipeline (no DB query, no LLM call)."""
-    is_demo, _principal_id, _jti = is_demo_principal_from_request(request)
+    circuits the whole request pipeline (no DB query, no LLM call).
+
+    Also stashes principal_id/jti in demo_request_ctx so the LLM provider
+    layer can cross-reference for cap enforcement and model override
+    without needing to re-parse the JWT."""
+    is_demo, principal_id, jti = is_demo_principal_from_request(request)
     if not is_demo:
         return await call_next(request)
+
+    # Publish demo state for LLM provider hooks. Reset when the request ends
+    # so the token doesn't leak across coroutines (ContextVar handles this
+    # per-task, but explicit reset avoids surprises in shared executors).
+    token = demo_request_ctx.set({"principal_id": principal_id, "jti": jti})
+    try:
+        return await _demo_dispatch(request, call_next)
+    finally:
+        demo_request_ctx.reset(token)
+
+
+async def _demo_dispatch(request, call_next):
+    """Actual access-control logic — split out so the middleware wrapper
+    can own the contextvar lifecycle."""
 
     path   = request.url.path
     method = request.method.upper()
@@ -412,6 +438,89 @@ def ensure_demo_principal() -> None:
     except Exception as exc:
         logger.error("[demo] Failed to provision demo principal: %s", exc)
         db.rollback()
+    finally:
+        db.close()
+
+
+# ── LLM provider integration ─────────────────────────────────────────────────
+# The provider layer never sees the Principal object directly (it's a service,
+# not a request handler). These helpers read the contextvar set by the demo
+# middleware, so every call site looks the same regardless of whether it's a
+# demo request or not — inert when the contextvar is empty.
+
+def current_demo_ctx() -> Optional[dict]:
+    """Return {'principal_id': str, 'jti': str} for the in-flight demo request,
+    or None for every non-demo call site (which is 100% of traffic on non-demo
+    installs)."""
+    return demo_request_ctx.get()
+
+
+def maybe_override_model(provider_type: str, current_model: str) -> str:
+    """Called by each LLM provider before dispatching a completion. Returns
+    the demo-preferred model when the current request is from a demo
+    principal; otherwise returns current_model unchanged. Zero-cost no-op
+    for non-demo requests."""
+    if current_demo_ctx() is None:
+        return current_model
+    return override_model_for_demo(provider_type, current_model)
+
+
+def maybe_check_cap(estimated_cost_usd: float = 0.01) -> CapCheckResult:
+    """Pre-call cap check. Returns an ok=True result for non-demo requests
+    (they're never capped). For demo, checks the daily + session budget.
+    Callers should raise an HTTP-friendly exception when ok=False."""
+    ctx = current_demo_ctx()
+    if ctx is None:
+        return CapCheckResult(ok=True)
+    return check_llm_cap(ctx["principal_id"], ctx.get("jti"), estimated_cost_usd)
+
+
+def maybe_record_usage(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Post-call usage recording. No-op for non-demo requests. Returns the
+    computed USD cost (0.0 for non-demo)."""
+    ctx = current_demo_ctx()
+    if ctx is None:
+        return 0.0
+    cost = record_llm_usage(
+        principal_id=ctx["principal_id"],
+        jti=ctx.get("jti"),
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+    # Also write a durable audit row so operators can see spend history
+    # even after the Redis daily counter has rolled over.
+    try:
+        _record_usage_row(ctx["principal_id"], model, input_tokens, output_tokens, cost)
+    except Exception as exc:
+        logger.warning("[demo] Failed to write llm_usage audit row: %s", exc)
+    return cost
+
+
+def _record_usage_row(principal_id: str, model: str,
+                      input_tokens: int, output_tokens: int, cost_usd: float) -> None:
+    """Upsert one row per (principal_id, date) — cumulative counters. Rolls
+    call_count / tokens / cost_usd into the row for the day. Called at most
+    a few times per second per demo user; low contention risk."""
+    from sqlalchemy import text
+    from agentic_os.db.database import SessionLocal
+    db = SessionLocal()
+    try:
+        db.execute(
+            text("""
+                INSERT INTO llm_usage (principal_id, usage_date, model, input_tokens,
+                                       output_tokens, cost_usd, call_count)
+                VALUES (:pid, :d, :model, :itok, :otok, :cost, 1)
+                ON CONFLICT (principal_id, usage_date, model) DO UPDATE
+                  SET input_tokens  = llm_usage.input_tokens  + EXCLUDED.input_tokens,
+                      output_tokens = llm_usage.output_tokens + EXCLUDED.output_tokens,
+                      cost_usd      = llm_usage.cost_usd      + EXCLUDED.cost_usd,
+                      call_count    = llm_usage.call_count    + 1
+            """),
+            {"pid": principal_id, "d": date.today().isoformat(), "model": model,
+             "itok": input_tokens, "otok": output_tokens, "cost": cost_usd},
+        )
+        db.commit()
     finally:
         db.close()
 

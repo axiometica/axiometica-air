@@ -4,7 +4,7 @@ export interface CurrentUser {
   id: string
   name: string
   email: string | null
-  role: 'admin' | 'itom_admin' | 'operator' | 'viewer' | 'automation'
+  role: 'admin' | 'itom_admin' | 'operator' | 'viewer' | 'automation' | 'demo'
 }
 
 const TOKEN_KEY = 'ap_token'
@@ -77,6 +77,11 @@ export function useCurrentUser() {
   const isITOMAdmin  = user?.role === 'admin' || user?.role === 'itom_admin'
   const isOperator   = user?.role === 'admin' || user?.role === 'itom_admin' || user?.role === 'operator'
   const isViewer     = !!user
+  // Demo role — read-only across the platform except for chat (server-side
+  // 20/day quota). UI uses this to hide destructive controls and show the
+  // demo banner. Never trust this alone; the backend middleware is the
+  // real enforcement.
+  const isDemo       = user?.role === 'demo'
 
-  return { user, loading, logout, refetch: fetchMe, isAdmin, isITOMAdmin, isOperator, isViewer }
+  return { user, loading, logout, refetch: fetchMe, isAdmin, isITOMAdmin, isOperator, isViewer, isDemo }
 }

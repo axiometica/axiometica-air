@@ -30,11 +30,12 @@ import EventTypesPage from './components/EventTypesPage'
 import ChatPanel from './components/ChatPanel'
 import { useCurrentUser } from './hooks/useCurrentUser'
 import ErrorBoundary from './components/ErrorBoundary'
+import DemoBanner from './components/DemoBanner'
 
 type View = 'dashboard' | 'incident' | 'change' | 'details' | 'approvals' | 'policies' | 'admin' | 'settings' | 'runbooks' | 'runbook-editor' | 'runbook-browser' | 'approved-actions' | 'action-editor' | 'events' | 'incidents' | 'cmdb' | 'monitoring' | 'connectors' | 'users' | 'storms' | 'platform-intelligence' | 'event-types'
 
 export default function App() {
-  const { user, loading: authLoading, logout, refetch, isAdmin, isITOMAdmin } = useCurrentUser()
+  const { user, loading: authLoading, logout, refetch, isAdmin, isITOMAdmin, isDemo } = useCurrentUser()
   const [view, setView] = useState<View>('dashboard')
   const [detailsOrigin, setDetailsOrigin] = useState<View>('dashboard')
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null)
@@ -124,6 +125,7 @@ export default function App() {
         user={user}
         onLogout={logout}
       />
+      {isDemo && <DemoBanner onSignOut={logout} />}
 
       <Sidebar
         isOpen={sidebarOpen}

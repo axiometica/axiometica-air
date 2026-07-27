@@ -330,6 +330,64 @@ def _parse_rich_response(text: str) -> Dict[str, str]:
     }
 
 
+# ── Demo-mode hooks ──────────────────────────────────────────────────────────
+# Every provider method that hits the wire calls these helpers to:
+#   1. Substitute the model with a cheaper demo-specific one when the
+#      request is from a demo principal (no-op otherwise).
+#   2. Enforce the per-principal daily/session USD cap (no-op otherwise).
+#   3. Record actual token usage after the call for audit + counter updates.
+# Import is lazy inside the helpers so provider setup on non-demo installs
+# never pays the passlib/redis import cost that demo_mode pulls in.
+
+
+def _demo_effective_model(provider_type: str, configured_model: str) -> str:
+    try:
+        from agentic_os.services.demo_mode import maybe_override_model
+        return maybe_override_model(provider_type, configured_model)
+    except Exception:
+        return configured_model
+
+
+def _demo_precheck() -> bool:
+    """Return True if the call may proceed, False if a demo cap would be
+    exceeded. On False, the provider method should short-circuit and return
+    a placeholder (None or a friendly cap-exceeded string)."""
+    try:
+        from agentic_os.services.demo_mode import maybe_check_cap
+        result = maybe_check_cap(estimated_cost_usd=0.01)
+        return result.ok
+    except Exception:
+        return True   # fail-open on any error in the cap machinery
+
+
+def _demo_record(model: str, input_tokens: int, output_tokens: int) -> None:
+    try:
+        from agentic_os.services.demo_mode import maybe_record_usage
+        maybe_record_usage(model, input_tokens, output_tokens)
+    except Exception:
+        pass
+
+
+def _openai_usage(resp) -> tuple[int, int]:
+    """Extract (input_tokens, output_tokens) from an OpenAI ChatCompletion
+    response. Returns (0, 0) on any failure — demo mode's audit row is
+    best-effort, not load-bearing."""
+    try:
+        u = resp.usage
+        return int(u.prompt_tokens or 0), int(u.completion_tokens or 0)
+    except Exception:
+        return 0, 0
+
+
+def _anthropic_usage(resp) -> tuple[int, int]:
+    """Same as _openai_usage but for Anthropic's Message response shape."""
+    try:
+        u = resp.usage
+        return int(getattr(u, "input_tokens", 0) or 0), int(getattr(u, "output_tokens", 0) or 0)
+    except Exception:
+        return 0, 0
+
+
 class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
@@ -512,11 +570,16 @@ class OpenAIProvider(LLMProvider):
         """General-purpose completion with a custom system prompt."""
         if not self.is_configured():
             return None
+        # Demo-mode pre-check: refuse before hitting the wire if the cap is
+        # exhausted. Non-demo requests skip this entirely (helper returns True).
+        if not _demo_precheck():
+            return "Demo LLM budget exhausted for today. Please try again after UTC midnight."
         try:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=self.api_key, max_retries=3)
+            effective_model = _demo_effective_model("openai", self.model)
             resp = await client.chat.completions.create(
-                model=self.model,
+                model=effective_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": user_content},
@@ -524,6 +587,10 @@ class OpenAIProvider(LLMProvider):
                 max_tokens=self._clamp_tokens(max_tokens),
                 temperature=temperature,
             )
+            # Demo-mode post-record: no-op for non-demo, else writes to Redis
+            # counters + llm_usage audit row.
+            in_tok, out_tok = _openai_usage(resp)
+            _demo_record(effective_model, in_tok, out_tok)
             return resp.choices[0].message.content.strip()
         except Exception as e:
             logger.error(f"OpenAI generate_agent_completion failed: {e}", exc_info=True)
@@ -540,11 +607,17 @@ class OpenAIProvider(LLMProvider):
         if not self.is_configured():
             yield "LLM is not configured. Go to Settings → LLM to add an API key."
             return
+        if not _demo_precheck():
+            yield "Demo LLM budget exhausted for today. Please try again after UTC midnight."
+            return
         try:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=self.api_key, max_retries=3)
+            effective_model = _demo_effective_model("openai", self.model)
+            # stream_options=include_usage makes the final chunk carry the
+            # complete token counts — required for post-call cost recording.
             stream = await client.chat.completions.create(
-                model=self.model,
+                model=effective_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": user_content},
@@ -552,11 +625,24 @@ class OpenAIProvider(LLMProvider):
                 max_tokens=self._clamp_tokens(max_tokens),
                 temperature=temperature,
                 stream=True,
+                stream_options={"include_usage": True},
             )
+            final_usage = None
             async for chunk in stream:
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
+                # Usage-only chunks have empty choices; regular chunks have
+                # content. Both are streamed by OpenAI when include_usage=True.
+                if getattr(chunk, "usage", None):
+                    final_usage = chunk.usage
+                if chunk.choices:
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        yield delta
+            if final_usage:
+                _demo_record(
+                    effective_model,
+                    int(getattr(final_usage, "prompt_tokens", 0) or 0),
+                    int(getattr(final_usage, "completion_tokens", 0) or 0),
+                )
         except Exception as e:
             logger.error(f"OpenAI stream_agent_completion failed: {e}", exc_info=True)
             yield "\n[Stream error — please try again]"
@@ -656,15 +742,20 @@ class AnthropicProvider(LLMProvider):
         """General-purpose completion with a custom system prompt."""
         if not self.is_configured():
             return None
+        if not _demo_precheck():
+            return "Demo LLM budget exhausted for today. Please try again after UTC midnight."
         try:
             from anthropic import AsyncAnthropic
             client = AsyncAnthropic(api_key=self.api_key, max_retries=3)
+            effective_model = _demo_effective_model("anthropic", self.model)
             message = await client.messages.create(
-                model=self.model,
+                model=effective_model,
                 max_tokens=self._clamp_tokens(max_tokens),
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_content}],
             )
+            in_tok, out_tok = _anthropic_usage(message)
+            _demo_record(effective_model, in_tok, out_tok)
             return message.content[0].text.strip()
         except Exception as e:
             logger.error(f"Anthropic generate_agent_completion failed: {e}", exc_info=True)
@@ -681,17 +772,28 @@ class AnthropicProvider(LLMProvider):
         if not self.is_configured():
             yield "LLM is not configured. Go to Settings → LLM to add an API key."
             return
+        if not _demo_precheck():
+            yield "Demo LLM budget exhausted for today. Please try again after UTC midnight."
+            return
         try:
             from anthropic import AsyncAnthropic
             client = AsyncAnthropic(api_key=self.api_key, max_retries=3)
+            effective_model = _demo_effective_model("anthropic", self.model)
             async with client.messages.stream(
-                model=self.model,
+                model=effective_model,
                 max_tokens=self._clamp_tokens(max_tokens),
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_content}],
             ) as stream:
                 async for text in stream.text_stream:
                     yield text
+                # Final message includes usage counts once the stream ends.
+                try:
+                    final = await stream.get_final_message()
+                    in_tok, out_tok = _anthropic_usage(final)
+                    _demo_record(effective_model, in_tok, out_tok)
+                except Exception:
+                    pass
         except Exception as e:
             logger.error(f"Anthropic stream_agent_completion failed: {e}", exc_info=True)
             yield "\n[Stream error — please try again]"
