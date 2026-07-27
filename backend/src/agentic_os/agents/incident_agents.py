@@ -501,9 +501,11 @@ class RiskAssessorAgent(Agent):
 
         try:
             db = SessionLocal()
-            repo = RiskWeightConfigRepository(db)
-            config = repo.get_by_key("default")
-            db.close()
+            try:
+                repo = RiskWeightConfigRepository(db)
+                config = repo.get_by_key("default")
+            finally:
+                db.close()
 
             if config:
                 self._weights_cache = config.weights
@@ -1423,6 +1425,7 @@ class PolicyBrokerAgent(Agent):
         reasoning += f"  \n"
 
         # Initialize governance broker and check policies
+        db = None
         try:
             db = SessionLocal()
             from agentic_os.db.repositories import PolicyRepository
@@ -1788,7 +1791,6 @@ class PolicyBrokerAgent(Agent):
                 # Record where resume_workflow_task must restart (tool_registry is next step)
                 state.context["resume_from_step"] = "tool_registry"
 
-            db.close()
         except Exception as e:
             logger.error(f"Error evaluating governance policies: {e}")
             reasoning += f"  ⚠️ Policy evaluation error: {e}\n"
@@ -1807,6 +1809,12 @@ class PolicyBrokerAgent(Agent):
             state.context["resume_from_step"] = "tool_registry"
             # Persist typed context with the safe-default governance
             state = self._set_typed_context(state, ctx)
+        finally:
+            if db:
+                try:
+                    db.close()
+                except Exception:
+                    pass
 
         state = self._add_trace(state, reasoning)
         return state
@@ -1978,6 +1986,7 @@ class ToolRegistryAgent(Agent):
         # Check uses a POSITIVE assertion (approved record must exist) rather than the
         # absence of a pending record — the old negative check passed whenever no record
         # existed at all, which is exactly the missing-record bypass that caused this bug.
+        db = None
         try:
             db = SessionLocal()
             broker = GovernanceBroker(db)
@@ -1985,7 +1994,6 @@ class ToolRegistryAgent(Agent):
 
             if approval_required:
                 decision = broker.get_approval_decision(state.workflow_id)
-                db.close()
 
                 if decision not in ("approved", "diagnostics_only"):
                     reasoning += f"  \n"
@@ -1998,7 +2006,6 @@ class ToolRegistryAgent(Agent):
                 # Propagate execution mode so runbook execution knows what to run
                 diagnostics_only_mode = (decision == "diagnostics_only")
             else:
-                db.close()
                 diagnostics_only_mode = False
         except Exception as e:
             logger.error(f"Error checking approval status: {e}", exc_info=True)
@@ -2009,6 +2016,12 @@ class ToolRegistryAgent(Agent):
                 state = self._add_trace(state, reasoning)
                 return state
             diagnostics_only_mode = False
+        finally:
+            if db:
+                try:
+                    db.close()
+                except Exception:
+                    pass
 
         # BLAST RADIUS GATE: enforce the policy's max_blast_radius constraint.
         # blast_radius_limit is set by PolicyBroker from constraints.max_blast_radius
