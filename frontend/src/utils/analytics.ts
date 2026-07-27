@@ -4,25 +4,31 @@
  * ANALYTICS_HOSTS list, so bundling the code has zero effect on any
  * self-hosted install.
  *
- * Umami itself runs as a separate container on the same host, served at
- * `/analytics/`. The tracking snippet is small (~2KB), respects DNT,
- * uses no cookies, and doesn't send PII.
- *
- * To enable analytics on a new host: add its hostname to ANALYTICS_HOSTS
- * below AND deploy an Umami container reachable at /analytics/ on that
- * host (see docs/DEMO_DEPLOY.md — TODO).
+ * Umami runs on its OWN subdomain (analytics.axiometica.com), not as a
+ * sub-path of the platform. Reason: Umami's Next.js image references
+ * assets at root (`/_next/...`) and its dashboard calls `/api/...` which
+ * would collide with the platform's own `/api`. Serving Umami at its
+ * own subdomain avoids all rewriting and CORS-adjacent headaches. The
+ * tracking snippet still runs on the platform's page and posts events
+ * cross-origin to the umami subdomain.
  */
 
 // Hosts where analytics should load. Additive; blank list = disabled everywhere.
 const ANALYTICS_HOSTS = new Set([
   'instance.axiometica.com',   // Oracle demo instance
+  'demo.axiometica.com',       // Oracle demo marketing gateway
 ])
 
+// Umami install this deployment reports to. Absolute origin — CORS is
+// handled by Umami's script (it POSTs with mode: 'no-cors' to the URL
+// under data-host-url). Leave the trailing bit off; the tracker appends
+// /api/send itself.
+const UMAMI_ORIGIN = 'https://analytics.axiometica.com'
+
 // Website id in the Umami database — configured once when the site is
-// created inside the Umami UI. Same value across all analytics-enabled
-// hosts (they share one Umami instance if desired, or each host gets its
-// own id). Left as a placeholder string until the Umami site is created;
-// the loader still fires but Umami will reject unknown ids silently.
+// created inside the Umami UI. Left as a placeholder string until the
+// Umami site is created; the loader still fires but Umami rejects
+// unknown ids silently and the deployment keeps working.
 const UMAMI_WEBSITE_ID = 'REPLACE_WITH_UMAMI_SITE_ID'
 
 export function initAnalytics(): void {
@@ -33,17 +39,13 @@ export function initAnalytics(): void {
   const script = document.createElement('script')
   script.async = true
   script.defer = true
-  // Same-origin path — Umami is served through the platform's own nginx
-  // under /analytics/ (see nginx.prod.conf). Same-origin avoids CORS and
-  // works even when the demo is behind a strict CSP.
-  script.src = '/analytics/script.js'
+  script.src = `${UMAMI_ORIGIN}/script.js`
   script.setAttribute('data-website-id', UMAMI_WEBSITE_ID)
-  // Where the tracker POSTs event payloads. Nginx strips the /analytics/
-  // prefix so both the script fetch and the send-event POST go to Umami's
-  // root path. Without this attribute the tracker POSTs to /api/send at
-  // the same origin, which would hit the platform's own /api router and
-  // return 404 (no such endpoint) — silently killing all analytics.
-  script.setAttribute('data-host-url', '/analytics')
+  // Explicit host-url so tracker knows where to POST events. Without
+  // this the tracker defaults to the script's src origin, which happens
+  // to be right here, but being explicit is more resilient to any
+  // future refactor of where the script lives.
+  script.setAttribute('data-host-url', UMAMI_ORIGIN)
   script.setAttribute('data-umami', 'true')
   document.head.appendChild(script)
 }
