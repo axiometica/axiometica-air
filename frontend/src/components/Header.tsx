@@ -22,6 +22,7 @@ const ROLE_CONFIG: Record<string, { label: string; bg: string; color: string }> 
   operator:   { label: 'Operator',   bg: 'rgba(16,185,129,0.18)', color: '#34d399' },
   viewer:     { label: 'Viewer',     bg: 'rgba(107,114,128,0.2)', color: '#9ca3af' },
   automation: { label: 'Automation', bg: 'rgba(245,158,11,0.18)', color: '#fbbf24' },
+  demo:       { label: 'Demo',       bg: 'rgba(251,191,36,0.18)', color: '#fbbf24' },
 }
 
 // ── Self-service Change Password modal ───────────────────────────────────────

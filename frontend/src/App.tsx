@@ -177,7 +177,7 @@ export default function App() {
           <ApprovalQueue onApproved={() => {}} />
         )}
 
-        {view === 'policies' && isITOMAdmin && (
+        {view === 'policies' && (isITOMAdmin || isDemo) && (
           <PolicyList darkMode={darkMode} />
         )}
 
@@ -185,7 +185,7 @@ export default function App() {
           <RunbookBrowser />
         )}
 
-        {view === 'runbooks' && isITOMAdmin && (
+        {view === 'runbooks' && (isITOMAdmin || isDemo) && (
           <RunbookList
             darkMode={darkMode}
             onEdit={(id) => { setSelectedRunbookId(id); setView('runbook-editor') }}
@@ -193,7 +193,7 @@ export default function App() {
           />
         )}
 
-        {view === 'runbook-editor' && isITOMAdmin && (
+        {view === 'runbook-editor' && (isITOMAdmin || isDemo) && (
           <RunbookEditor
             darkMode={darkMode}
             runbookId={selectedRunbookId || undefined}
@@ -202,14 +202,14 @@ export default function App() {
           />
         )}
 
-        {view === 'approved-actions' && isITOMAdmin && (
+        {view === 'approved-actions' && (isITOMAdmin || isDemo) && (
           <ApprovedActionsList
             onEdit={(id) => { setSelectedActionId(id); setView('action-editor') }}
             onNew={() => { setSelectedActionId(null); setView('action-editor') }}
           />
         )}
 
-        {view === 'action-editor' && isITOMAdmin && (
+        {view === 'action-editor' && (isITOMAdmin || isDemo) && (
           <ActionEditor
             actionId={selectedActionId}
             onBack={() => setView('approved-actions')}
@@ -221,7 +221,7 @@ export default function App() {
           <AdminPanel darkMode={darkMode} />
         )}
 
-        {view === 'settings' && isAdmin && (
+        {view === 'settings' && (isAdmin || isDemo) && (
           <Settings />
         )}
 
@@ -240,11 +240,11 @@ export default function App() {
           <CMDBPage darkMode={darkMode} />
         )}
 
-        {view === 'monitoring' && isITOMAdmin && (
+        {view === 'monitoring' && (isITOMAdmin || isDemo) && (
           <MonitoringSetup />
         )}
 
-        {view === 'connectors' && isITOMAdmin && (
+        {view === 'connectors' && (isITOMAdmin || isDemo) && (
           <ConnectorHub darkMode={darkMode} />
         )}
 
@@ -256,11 +256,11 @@ export default function App() {
           <StormsDashboard />
         )}
 
-        {view === 'platform-intelligence' && isITOMAdmin && (
+        {view === 'platform-intelligence' && (isITOMAdmin || isDemo) && (
           <PlatformIntelligencePage darkMode={darkMode} />
         )}
 
-        {view === 'event-types' && isITOMAdmin && (
+        {view === 'event-types' && (isITOMAdmin || isDemo) && (
           <EventTypesPage />
         )}
         </ErrorBoundary>

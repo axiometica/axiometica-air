@@ -209,8 +209,15 @@ export default function Login({ onLogin }: LoginProps) {
           {/* Demo credentials — only rendered when this instance advertises
               itself as a public demo. Hidden on all normal installs. The
               button below one-clicks the demo login so a visitor doesn't
-              have to copy/paste credentials. */}
-          {window.location.hostname === 'instance.axiometica.com' && (
+              have to copy/paste credentials.
+
+              Both hostnames are checked: instance.axiometica.com is where
+              the platform login lives, but visitors are more likely to land
+              on demo.axiometica.com first (the marketing gateway) and be
+              redirected here — so the button needs to show for anyone whose
+              path started at either hostname. */}
+          {(window.location.hostname === 'instance.axiometica.com'
+             || window.location.hostname === 'demo.axiometica.com') && (
             <div style={{
               marginTop: 18, padding: 12, borderRadius: 8,
               background: '#0d1117', border: '1px solid #3d4557',
