@@ -265,7 +265,7 @@ export default function EventTypesPage() {
     setError(null)
     try {
       const [etRes, domRes] = await Promise.all([
-        fetch('/api/event-types', { headers: authHeaders() }),
+        fetch('/api/event-types?enabled_only=false', { headers: authHeaders() }),
         fetch('/api/event-types/domains', { headers: authHeaders() }),
       ])
       const etData  = etRes.ok  ? await etRes.json()  : []
