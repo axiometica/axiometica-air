@@ -107,6 +107,13 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
   const [deletingId, setDeletingId]     = useState<string | null>(null)
   const [confirmId, setConfirmId]       = useState<string | null>(null)
   const [showAIBuilder, setShowAIBuilder] = useState(false)
+  // Populated when a delete is refused because the tool is used by one or
+  // more enabled runbooks. Keyed by action_id so the panel renders next to
+  // the row that was clicked. Cleared on retry / dismiss / row change.
+  const [deleteBlockers, setDeleteBlockers] = useState<
+    { actionId: string; toolName: string; message: string;
+      blockers: { id: string; name: string; section: string }[] } | null
+  >(null)
   const [validating, setValidating]       = useState(false)
   const [validationReport, setValidationReport] = useState<null | {
     checked: number; ok: number; broken: number;
@@ -144,11 +151,27 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
     if (confirmId !== id) { setConfirmId(id); return }
     try {
       setDeletingId(id)
+      setDeleteBlockers(null)
       await axios.delete(`/api/approved-actions/${id}`)
       setActions(prev => prev.filter(a => a.action_id !== id))
       setConfirmId(null)
-    } catch {
-      setError('Failed to delete action')
+    } catch (err: any) {
+      // Backend returns 409 with {message, blockers[]} when the tool is used
+      // by an enabled runbook. Surface that inline so the operator knows
+      // exactly which runbooks to fix — a generic toast leaves them guessing.
+      const detail = err?.response?.data?.detail
+      if (err?.response?.status === 409 && detail && typeof detail === 'object') {
+        const action = actions.find(a => a.action_id === id)
+        setDeleteBlockers({
+          actionId: id,
+          toolName: action?.tool_name ?? '',
+          message: detail.message || 'Delete blocked',
+          blockers: detail.blockers || [],
+        })
+        setConfirmId(null)   // exit the confirm state, force reconsideration
+      } else {
+        setError(typeof detail === 'string' ? detail : 'Failed to delete action')
+      }
     } finally {
       setDeletingId(null)
     }
@@ -357,6 +380,43 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-sm mb-4" style={{ color: '#a0aec0' }}>
           <IconAlertTriangle size={15} className="text-warning-500 flex-shrink-0" />
           {error}
+        </div>
+      )}
+
+      {/* Delete-blocked panel — shown when a delete is refused because the
+          tool is still used by one or more enabled runbooks. Lists them so
+          the operator knows exactly what to edit / disable. */}
+      {deleteBlockers && (
+        <div style={{
+          marginBottom: 16, padding: 14, borderRadius: 8,
+          background: '#1a1508', border: '1px solid #78350f',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+            <div style={{ color: '#fbbf24', fontWeight: 600, fontSize: '0.9rem' }}>
+              Cannot delete <code style={{ color: '#e8eef5' }}>{deleteBlockers.toolName}</code>
+              {' '}— used by {deleteBlockers.blockers.length} enabled runbook
+              {deleteBlockers.blockers.length === 1 ? '' : 's'}
+            </div>
+            <button
+              onClick={() => setDeleteBlockers(null)}
+              style={{
+                background: 'transparent', border: 'none', color: '#7a8ba3',
+                cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1, padding: '0 4px',
+              }}
+              aria-label="Dismiss"
+            >×</button>
+          </div>
+          <ul style={{ color: '#e8eef5', fontSize: '0.85rem', margin: '0 0 8px 0', paddingLeft: 20 }}>
+            {deleteBlockers.blockers.map(b => (
+              <li key={b.id} style={{ marginBottom: 4 }}>
+                <span style={{ fontWeight: 500 }}>{b.name}</span>
+                <span style={{ color: '#7a8ba3' }}> — used in {b.section}</span>
+              </li>
+            ))}
+          </ul>
+          <div style={{ color: '#a0aec0', fontSize: '0.8rem' }}>
+            Remove the tool from those runbooks (or disable them) and try again.
+          </div>
         </div>
       )}
 
