@@ -605,12 +605,8 @@ async def submit_monitoring_event(
                     FROM workflow_states
                     WHERE workflow_type = 'incident'
                       AND context -> 'alert_payload' ->> 'resource_name' = :resource_name
+                      AND context -> 'alert_payload' ->> 'type' = :event_type
                       AND (
-                          -- Any in-flight incident for this resource suppresses a new one.
-                          -- We match on resource_name only (not event_type) so that multiple
-                          -- anomaly types from the same container (e.g. high_cpu + high_syscall
-                          -- both caused by the same 'yes' process) are linked to the same
-                          -- incident rather than opening duplicates.
                           lifecycle_state NOT IN ('failed','resolved','closed','rejected')
                           OR
                           -- failed/rejected recently: back-off to prevent spam
@@ -622,6 +618,7 @@ async def submit_monitoring_event(
                     LIMIT 1
                 """), {
                     "resource_name":   event.resource_name,
+                    "event_type":      event.event_type,
                     "cooldown_cutoff": cooldown_cutoff,
                 }).fetchone()
 

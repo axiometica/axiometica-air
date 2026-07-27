@@ -109,10 +109,10 @@ UPDATE approved_actions SET command_variants = (
 
 UPDATE approved_actions SET command_variants = (
   COALESCE(command_variants::jsonb,'{}') || '{
-    "kubernetes": "kubectl exec {pod} -n {namespace} -- ps -fp $(pgrep {process_name}) 2>/dev/null",
-    "vcenter":    "ps -fp $(pgrep {process_name}) 2>/dev/null",
-    "aws_ssm":    "ps -fp $(pgrep {process_name}) 2>/dev/null",
-    "azure":      "ps -fp $(pgrep {process_name}) 2>/dev/null"
+    "kubernetes": "kubectl exec {pod} -n {namespace} -- sh -c ''PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found\"; fi''",
+    "vcenter":    "sh -c ''PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found\"; fi''",
+    "aws_ssm":    "sh -c ''PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found\"; fi''",
+    "azure":      "sh -c ''PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found\"; fi''"
   }'::jsonb )::json WHERE tool_name = 'process_info';
 
 UPDATE approved_actions SET command_variants = (

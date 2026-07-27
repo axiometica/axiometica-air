@@ -68,7 +68,7 @@ NEW_ACTIONS = [
         "tool_name": "host_process_info",
         "name": "Host Process Info",
         "description": "Get PID, status, and resource usage for a named process on a remote host via SSH.",
-        "command": "ssh {host} ps -fp $(pgrep {process_name})",
+        "command": "ssh {host} sh -c 'PID=$(pgrep -f {process_name} | head -1) && (ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \") && cat /proc/\"$PID\"/status 2>/dev/null'",
         "category": "diagnostic", "blast_radius": 1, "requires_approval": False,
         "parameters": [
             {"name": "host",         "type": "string", "required": True},

@@ -155,11 +155,11 @@ VALUES (
   'Process Info',
   'Get detailed information about a named process: PID, CPU, memory, open files, status.',
   'diagnostic', 1, false, true,
-  'docker exec {container} ps -fp $(pgrep {process_name}) 2>/dev/null',
+  'docker exec {container} sh -c ''PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n "$PID" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep "^ *$PID " || ps | grep "^ *$PID "; cat /proc/"$PID"/status 2>/dev/null; else echo "[INFO] Process {process_name} not found"; fi''',
   '{
-    "docker":     "docker exec {container} ps -fp $(pgrep {process_name}) 2>/dev/null",
-    "kubernetes": "kubectl exec {pod} -n {namespace} -- ps -fp $(pgrep {process_name}) 2>/dev/null",
-    "ssh":        "ssh {host} ps -fp $(pgrep {process_name}) 2>/dev/null"
+    "docker":     "docker exec {container} sh -c ''PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found\"; fi''",
+    "kubernetes": "kubectl exec {pod} -n {namespace} -- sh -c ''PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found\"; fi''",
+    "ssh":        "ssh {host} sh -c ''PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found\"; fi''"
   }'::json,
   '[
     {"name":"container",    "type":"string", "required":false, "default":"", "description":"Container / pod name"},

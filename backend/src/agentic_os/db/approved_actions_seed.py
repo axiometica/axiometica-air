@@ -318,14 +318,14 @@ APPROVED_ACTIONS = [
         "tool_name": "get_process_info",
         "name": "Process Detail",
         "description": "Show PID, parent, children, open FDs, start time, and cgroup for a named process.",
-        "command": "docker exec {target} sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -fp \"$PID\" && cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
+        "command": "docker exec {target} sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
         "command_variants": {
-            "docker":     "docker exec {target} sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -fp \"$PID\" && cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
-            "ssh":        "ssh {target} sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -fp \"$PID\" && cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
-            "kubernetes": "kubectl exec {target} -n {namespace} -- sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -fp \"$PID\" && cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
-            "vcenter":    "sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -fp \"$PID\" && cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
-            "aws_ssm":    "sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -fp \"$PID\" && cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
-            "azure":      "sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -fp \"$PID\" && cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
+            "docker":     "docker exec {target} sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
+            "ssh":        "ssh {target} sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
+            "kubernetes": "kubectl exec {target} -n {namespace} -- sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
+            "vcenter":    "sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
+            "aws_ssm":    "sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
+            "azure":      "sh -c 'PID=$(pgrep -f {process_name} 2>/dev/null | head -1); if [ -n \"$PID\" ]; then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/\"$PID\"/status 2>/dev/null; else echo \"[INFO] Process {process_name} not found — may have already exited\"; fi'",
         },
         "category": "diagnostic",
         "blast_radius": 1,
@@ -1076,7 +1076,7 @@ APPROVED_ACTIONS = [
         "name": "Host Process Info",
         "description": "Get PID, status, and resource usage for a named process on a remote host via SSH.",
         # $() and && must be in the remote shell — without sh -c they execute locally.
-        "command": "ssh {host} sh -c 'PID=$(pgrep -f {process_name} | head -1) && ps -fp \"$PID\" && cat /proc/\"$PID\"/status 2>/dev/null'",
+        "command": "ssh {host} sh -c 'PID=$(pgrep -f {process_name} | head -1) && (ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \") && cat /proc/\"$PID\"/status 2>/dev/null'",
         "category": "diagnostic",
         "blast_radius": 1,
         "requires_approval": False,
@@ -2045,7 +2045,7 @@ RUNBOOK_TOOLS = [
         'command': '',
         'command_variants': {   'docker': "docker exec {container} sh -c 'PID=$(pgrep -f "
                                           '{process_name} 2>/dev/null | head -1); if [ -n "$PID" ]; '
-                                          'then ps -fp "$PID" && cat /proc/"$PID"/status 2>/dev/null; '
+                                          'then ps -o pid,ppid,user,args 2>/dev/null | grep \"^ *$PID \" || ps | grep \"^ *$PID \"; cat /proc/"$PID"/status 2>/dev/null; '
                                           'else echo "[INFO] Process {process_name} not found — may '
                                           'have already exited"; fi\''},
         'category': 'diagnostic',
