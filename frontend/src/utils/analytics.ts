@@ -34,10 +34,16 @@ export function initAnalytics(): void {
   script.async = true
   script.defer = true
   // Same-origin path — Umami is served through the platform's own nginx
-  // under /analytics/ (see nginx demo overlay). Same-origin avoids CORS
-  // and works even when the demo is behind a strict CSP.
+  // under /analytics/ (see nginx.prod.conf). Same-origin avoids CORS and
+  // works even when the demo is behind a strict CSP.
   script.src = '/analytics/script.js'
   script.setAttribute('data-website-id', UMAMI_WEBSITE_ID)
+  // Where the tracker POSTs event payloads. Nginx strips the /analytics/
+  // prefix so both the script fetch and the send-event POST go to Umami's
+  // root path. Without this attribute the tracker POSTs to /api/send at
+  // the same origin, which would hit the platform's own /api router and
+  // return 404 (no such endpoint) — silently killing all analytics.
+  script.setAttribute('data-host-url', '/analytics')
   script.setAttribute('data-umami', 'true')
   document.head.appendChild(script)
 }
