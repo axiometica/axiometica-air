@@ -25,11 +25,11 @@ const ANALYTICS_HOSTS = new Set([
 // /api/send itself.
 const UMAMI_ORIGIN = 'https://analytics.axiometica.com'
 
-// Website id in the Umami database — configured once when the site is
-// created inside the Umami UI. Left as a placeholder string until the
-// Umami site is created; the loader still fires but Umami rejects
-// unknown ids silently and the deployment keeps working.
-const UMAMI_WEBSITE_ID = 'REPLACE_WITH_UMAMI_SITE_ID'
+// Website id in the Umami database — one per tracked property. Set at
+// analytics.axiometica.com > Websites > "Axiometica AIR Demo". If the
+// Umami install is redeployed and this id no longer exists, the tracker
+// keeps firing but events are silently rejected — nothing else breaks.
+const UMAMI_WEBSITE_ID = 'b7fc29cd-21c1-4c12-b7f7-84b38e7f0db8'
 
 export function initAnalytics(): void {
   if (typeof window === 'undefined') return
