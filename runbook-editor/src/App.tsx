@@ -18,6 +18,19 @@ const nodeTypes = { step: StepNode };
 let nodeIdCounter = 10;
 const newId = (type: StepType) => `${type}_${++nodeIdCounter}`;
 
+// ── Edge visuals ─────────────────────────────────────────────────────────────
+// Kept as named constants so every branch that produces or restyles an edge
+// stays in sync. Previous values (#3d4f6e / #2d3450 at strokeWidth 2) were
+// visibly too dark against the near-black canvas — sequential lines faded to
+// the edge of readability, and cross-graph connections at 0.1 opacity during
+// execution replay were effectively invisible.
+const EDGE_SEQ_COLOR   = '#7a8ba3';   // sequential (unstyled) edge — bumped from #3d4f6e/#2d3450
+const EDGE_TRUE_COLOR  = '#10b981';   // decision "true" branch (green)
+const EDGE_FALSE_COLOR = '#f43f5e';   // decision "false" branch (pink dashed)
+const EDGE_WIDTH       = 2.5;         // baseline stroke width — bumped from 2
+const EDGE_WIDTH_ACTIVE = 3.5;        // executing edge — bumped from 3
+const EDGE_OPACITY_DIM  = 0.55;       // non-active during execution — bumped from 0.1/0.35
+
 // ── Approved action type ──────────────────────────────────────────────────────
 
 export interface OutputField {
@@ -328,17 +341,17 @@ function parseRunbookJSON(text: string): ImportResult {
       const eid = `e-${prevId}-${step.id}`;
       if (!seen.has(eid)) {
         seen.add(eid);
-        newEdges.push({ id: eid, source: prevId, target: step.id, style: { stroke: '#3d4f6e', strokeWidth: 2 } });
+        newEdges.push({ id: eid, source: prevId, target: step.id, style: { stroke: EDGE_SEQ_COLOR, strokeWidth: EDGE_WIDTH } });
       }
     }
     if (step.type === 'decision') {
       if (step.on_true && stepIds.has(step.on_true)) {
         const id = `e-${step.id}-true`;
-        if (!seen.has(id)) { seen.add(id); newEdges.push({ id, source: step.id, target: step.on_true, sourceHandle: 'true', style: { stroke: '#10b981', strokeWidth: 2 }, label: 'true', labelStyle: { fill: '#10b981', fontSize: 10 }, labelBgStyle: { fill: '#0d3025' } }); }
+        if (!seen.has(id)) { seen.add(id); newEdges.push({ id, source: step.id, target: step.on_true, sourceHandle: 'true', style: { stroke: EDGE_TRUE_COLOR, strokeWidth: EDGE_WIDTH }, label: 'true', labelStyle: { fill: EDGE_TRUE_COLOR, fontSize: 10 }, labelBgStyle: { fill: '#0d3025' } }); }
       }
       if (step.on_false && stepIds.has(step.on_false)) {
         const id = `e-${step.id}-false`;
-        if (!seen.has(id)) { seen.add(id); newEdges.push({ id, source: step.id, target: step.on_false, sourceHandle: 'false', style: { stroke: '#f43f5e', strokeWidth: 2.5, strokeDasharray: '8 4' }, label: 'false', labelStyle: { fill: '#f43f5e', fontSize: 10 }, labelBgStyle: { fill: '#3d0a14' } }); }
+        if (!seen.has(id)) { seen.add(id); newEdges.push({ id, source: step.id, target: step.on_false, sourceHandle: 'false', style: { stroke: EDGE_FALSE_COLOR, strokeWidth: EDGE_WIDTH + 0.5, strokeDasharray: '8 4' }, label: 'false', labelStyle: { fill: EDGE_FALSE_COLOR, fontSize: 10 }, labelBgStyle: { fill: '#3d0a14' } }); }
       }
     }
   });
@@ -346,7 +359,7 @@ function parseRunbookJSON(text: string): ImportResult {
     const lastStep = json.steps[json.steps.length - 1];
     if (lastStep.type !== 'decision') {
       const eid = `e-${lastStep.id}-end`;
-      if (!seen.has(eid)) newEdges.push({ id: eid, source: lastStep.id, target: 'end', style: { stroke: '#10b981', strokeWidth: 2 } });
+      if (!seen.has(eid)) newEdges.push({ id: eid, source: lastStep.id, target: 'end', style: { stroke: EDGE_TRUE_COLOR, strokeWidth: EDGE_WIDTH } });
     }
   }
 
@@ -383,7 +396,7 @@ function runSimulation(
 ) {
   const steps = nodes.filter(n => !['start', 'end'].includes(n.data.stepType));
   setNodes((ns: Node<RunbookStepData>[]) => ns.map(n => ({ ...n, data: { ...n.data, status: ['start','end'].includes(n.data.stepType) ? undefined : 'pending' as const, liveOutput: {} } })));
-  setEdges((es: Edge[]) => es.map(e => ({ ...e, animated: false, style: { ...e.style, opacity: 0.35, strokeWidth: 1.5 } })));
+  setEdges((es: Edge[]) => es.map(e => ({ ...e, animated: false, style: { ...e.style, opacity: EDGE_OPACITY_DIM, strokeWidth: EDGE_WIDTH } })));
   let delay = 0;
   steps.forEach((node, idx) => {
     delay += 550;
@@ -413,10 +426,10 @@ function runSimulation(
         setEdges((es: Edge[]) => es.map(e => {
           if (e.source !== node.id) return e;
           const isActive = e.sourceHandle === activeHandle;
-          return { ...e, animated: isActive, style: { ...e.style, opacity: isActive ? 1 : 0.1, strokeWidth: isActive ? 3 : 1 } };
+          return { ...e, animated: isActive, style: { ...e.style, opacity: isActive ? 1 : EDGE_OPACITY_DIM, strokeWidth: isActive ? EDGE_WIDTH_ACTIVE : EDGE_WIDTH } };
         }));
       } else if (status === 'success') {
-        setEdges((es: Edge[]) => es.map(e => e.target !== node.id ? e : { ...e, animated: true, style: { ...e.style, opacity: 1, strokeWidth: 2.5 } }));
+        setEdges((es: Edge[]) => es.map(e => e.target !== node.id ? e : { ...e, animated: true, style: { ...e.style, opacity: 1, strokeWidth: EDGE_WIDTH_ACTIVE } }));
       }
       if (d.stepType === 'verification') logMsg = `Checked ${d.metric} ${d.check} ${d.value} — PASSED`;
       setNodes((ns: Node<RunbookStepData>[]) => ns.map(n => n.id !== node.id ? n : { ...n, data: { ...n.data, status, liveOutput } }));
@@ -615,7 +628,7 @@ export default function App() {
               const id = e.id || `e-${e.source}-${e.target}${sh ? '-' + sh : ''}`;
               return {
                 ...e, id, sourceHandle: sh,
-                style: { stroke: sh === 'true' ? '#10b981' : sh === 'false' ? '#f43f5e' : '#3d4f6e', strokeWidth: sh === 'false' ? 2.5 : 2, strokeDasharray: sh === 'false' ? '8 4' : undefined },
+                style: { stroke: sh === 'true' ? EDGE_TRUE_COLOR : sh === 'false' ? EDGE_FALSE_COLOR : EDGE_SEQ_COLOR, strokeWidth: sh === 'false' ? EDGE_WIDTH + 0.5 : EDGE_WIDTH, strokeDasharray: sh === 'false' ? '8 4' : undefined },
                 label:        sh === 'true' ? 'true' : sh === 'false' ? 'false' : '',
                 labelStyle:   { fill: sh === 'true' ? '#10b981' : sh === 'false' ? '#f43f5e' : '#7c85a0', fontSize: 10 },
                 labelBgStyle: { fill: sh === 'true' ? '#0d3025' : sh === 'false' ? '#3d0a14' : '#13161f' },
@@ -889,7 +902,7 @@ export default function App() {
 
   const resetSim = useCallback(() => {
     setNodes((ns: any[]) => ns.map((n: any) => ({ ...n, data: { ...n.data, status: undefined, liveOutput: {} } })));
-    setEdges((es: Edge[]) => es.map(e => ({ ...e, animated: false, style: { ...e.style, opacity: 1, strokeWidth: 2 } })));
+    setEdges((es: Edge[]) => es.map(e => ({ ...e, animated: false, style: { ...e.style, opacity: 1, strokeWidth: EDGE_WIDTH } })));
     setSimLogs([]); setSimDone(false); setSimRunning(false);
   }, [setNodes, setEdges]);
 
@@ -1014,8 +1027,8 @@ export default function App() {
 
   const onConnect = useCallback((params: Connection) => {
     pushSnapshotRef.current();
-    const color = params.sourceHandle === 'true' ? '#10b981' : params.sourceHandle === 'false' ? '#f43f5e' : '#2d3450';
-    setEdges(es => addEdge({ ...params, style: { stroke: color, strokeWidth: 2, strokeDasharray: params.sourceHandle === 'false' ? '5 3' : undefined }, label: params.sourceHandle === 'true' ? 'true' : params.sourceHandle === 'false' ? 'false' : '', labelStyle: { fill: color, fontSize: 10 }, labelBgStyle: { fill: params.sourceHandle === 'true' ? '#0d3025' : params.sourceHandle === 'false' ? '#3d0a14' : '#13161f' } }, es));
+    const color = params.sourceHandle === 'true' ? EDGE_TRUE_COLOR : params.sourceHandle === 'false' ? EDGE_FALSE_COLOR : EDGE_SEQ_COLOR;
+    setEdges(es => addEdge({ ...params, style: { stroke: color, strokeWidth: EDGE_WIDTH, strokeDasharray: params.sourceHandle === 'false' ? '5 3' : undefined }, label: params.sourceHandle === 'true' ? 'true' : params.sourceHandle === 'false' ? 'false' : '', labelStyle: { fill: color, fontSize: 10 }, labelBgStyle: { fill: params.sourceHandle === 'true' ? '#0d3025' : params.sourceHandle === 'false' ? '#3d0a14' : '#13161f' } }, es));
   }, [setEdges]);
 
   const onNodeClick  = useCallback((_: any, node: Node) => {
@@ -1106,7 +1119,7 @@ export default function App() {
         if (json.graph_edges && Array.isArray(json.graph_edges)) {
           const styledEdges: Edge[] = (json.graph_edges as any[]).map(e => ({
             ...e,
-            style: { stroke: '#10b981', strokeWidth: 2 },
+            style: { stroke: EDGE_TRUE_COLOR, strokeWidth: EDGE_WIDTH },
             animated: false,
           }));
           const finalNodes = json.graph_positions
@@ -1204,12 +1217,12 @@ export default function App() {
           id,
           sourceHandle: sh,
           style: {
-            stroke: sh === 'true' ? '#10b981' : sh === 'false' ? '#f43f5e' : '#2d3450',
-            strokeWidth: 2,
+            stroke: sh === 'true' ? EDGE_TRUE_COLOR : sh === 'false' ? EDGE_FALSE_COLOR : EDGE_SEQ_COLOR,
+            strokeWidth: sh === 'false' ? EDGE_WIDTH + 0.5 : EDGE_WIDTH,
             strokeDasharray: sh === 'false' ? '5 3' : undefined,
           },
           label:        sh === 'true' ? 'true' : sh === 'false' ? 'false' : '',
-          labelStyle:   { fill: sh === 'true' ? '#10b981' : sh === 'false' ? '#f43f5e' : '#7c85a0', fontSize: 10 },
+          labelStyle:   { fill: sh === 'true' ? EDGE_TRUE_COLOR : sh === 'false' ? EDGE_FALSE_COLOR : '#a0aec0', fontSize: 10 },
           labelBgStyle: { fill: sh === 'true' ? '#0d3025' : sh === 'false' ? '#3d0a14' : '#13161f' },
         };
       });
@@ -1519,7 +1532,7 @@ export default function App() {
                 onDrop={onDrop} onDragOver={onDragOver} onInit={setRfInstance}
                 nodeTypes={nodeTypes}
                 style={{ background: '#0d0f14' }}
-                defaultEdgeOptions={{ style: { stroke: '#3d4f6e', strokeWidth: 2 } }}
+                defaultEdgeOptions={{ style: { stroke: EDGE_SEQ_COLOR, strokeWidth: EDGE_WIDTH } }}
               >
                 <Background variant={BackgroundVariant.Dots} color="#1e2231" gap={24} size={1} />
                 <Controls style={{ background: '#13161f', border: '1px solid #1e2231', borderRadius: 8 }} />
