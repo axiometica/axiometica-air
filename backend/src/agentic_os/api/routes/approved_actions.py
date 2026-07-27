@@ -18,6 +18,7 @@ import json
 
 from agentic_os.db.database import get_session
 from agentic_os.db.repositories import ApprovedActionRepository
+from agentic_os.db.models import RunbookModel
 
 router = APIRouter(prefix="/approved-actions", tags=["approved-actions"])
 
@@ -232,6 +233,32 @@ def update_action(
     return repo.to_dict(updated)
 
 
+def _runbooks_referencing_tool(db: Session, tool_name: str) -> list[dict]:
+    """Return the enabled runbooks that reference `tool_name` in any of their
+    step arrays (diagnostics / actions / verification_steps). Each result is
+    {id, name, section} where section names which step array matched, so the
+    UI can point the operator at what to edit."""
+    matches: list[dict] = []
+    runbooks = db.query(RunbookModel).filter(RunbookModel.enabled == True).all()  # noqa: E712
+    for rb in runbooks:
+        sections = {
+            "diagnostics":        rb.diagnostics        or [],
+            "actions":            rb.actions            or [],
+            "verification_steps": rb.verification_steps or [],
+        }
+        for section, steps in sections.items():
+            if not isinstance(steps, list):
+                continue
+            for step in steps:
+                if isinstance(step, dict) and step.get("tool") == tool_name:
+                    matches.append({"id": str(rb.id), "name": rb.name, "section": section})
+                    break
+            else:
+                continue
+            break  # one match per runbook is enough
+    return matches
+
+
 @router.delete("/{action_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_action(action_id: UUID, db: Session = Depends(get_session)):
     repo = ApprovedActionRepository(db)
@@ -241,7 +268,24 @@ def delete_action(action_id: UUID, db: Session = Depends(get_session)):
     if existing.is_builtin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Built-in actions cannot be deleted. Disable the action instead.",
+            detail="Seeded (built-in) actions cannot be deleted. Disable the action instead.",
+        )
+    # Guard: tool must not be referenced by any enabled runbook. This covers
+    # both draft and published runbooks — a draft still slated for execution
+    # would break silently if its tool disappeared underneath it. Disabled
+    # runbooks are treated as safe (they won't be selected by the mechanic).
+    blockers = _runbooks_referencing_tool(db, existing.tool_name)
+    if blockers:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    f"Tool '{existing.tool_name}' is used by "
+                    f"{len(blockers)} enabled runbook(s). Remove it from those "
+                    f"runbooks (or disable them) before deleting."
+                ),
+                "blockers": blockers,
+            },
         )
     if not repo.delete(action_id):
         raise HTTPException(status_code=404, detail="Action not found")

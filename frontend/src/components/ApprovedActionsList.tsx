@@ -251,7 +251,17 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
       {showAIBuilder && (
         <ToolBuilder
           onClose={() => setShowAIBuilder(false)}
-          onRegistered={() => { load(); setShowAIBuilder(false) }}
+          onRegistered={(newId) => {
+            // Close the builder and jump straight into the new tool's
+            // detail view so the operator can enable it, adjust rules, etc.
+            // Fall back to a plain list reload if we didn't get an id back.
+            setShowAIBuilder(false)
+            if (newId) {
+              onEdit(newId)
+            } else {
+              load()
+            }
+          }}
         />
       )}
 

@@ -47,7 +47,10 @@ const inputStyle: React.CSSProperties = {
 
 interface ToolBuilderProps {
   onClose: () => void
-  onRegistered?: () => void
+  // Called after a successful registration. `actionId` is the UUID of the
+  // newly-created tool so the parent can route into its detail view rather
+  // than dropping the operator back on the list.
+  onRegistered?: (actionId?: string) => void
 }
 
 type Step = 'describe' | 'review' | 'done'
@@ -221,7 +224,9 @@ export default function ToolBuilder({ onClose, onRegistered }: ToolBuilderProps)
       })
       setRegisteredName(data.name ?? payload.name ?? 'Tool')
       setStep('done')
-      onRegistered?.()
+      // Prefer action_id (canonical), fall back to id if server uses that key.
+      const newId: string | undefined = data.action_id ?? data.id
+      onRegistered?.(newId)
     } catch (e: any) {
       setRegError(e.message)
     } finally {

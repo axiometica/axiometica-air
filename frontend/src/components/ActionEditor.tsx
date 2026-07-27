@@ -235,6 +235,39 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
     }
   }
 
+  // ── Delete ───────────────────────────────────────────────────────────────
+  // Two-step confirm to prevent accidental clicks. First click opens the
+  // confirm panel below the save bar; second click issues the DELETE.
+  // Backend blocks with 409 if the tool is referenced by any enabled runbook —
+  // that response includes a blockers list we surface inline.
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteBlockers, setDeleteBlockers] = useState<
+    { id: string; name: string; section: string }[] | null
+  >(null)
+
+  const handleDelete = async () => {
+    if (!actionId) return
+    setDeleting(true)
+    setError(null)
+    setDeleteBlockers(null)
+    try {
+      await axios.delete(`/api/approved-actions/${actionId}`)
+      onSaved()   // returns to list; caller reloads
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail
+      if (err?.response?.status === 409 && detail && typeof detail === 'object') {
+        setDeleteBlockers(detail.blockers || [])
+        setError(detail.message || 'Delete blocked')
+      } else {
+        setError(typeof detail === 'string' ? detail : 'Delete failed')
+      }
+      setConfirmDelete(false)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -1050,9 +1083,33 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
 
       {/* ── Save bar ────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between pt-4 border-t border-slate-700/50 mt-8">
-        <button onClick={onBack} className="btn btn-secondary">
-          Cancel
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={onBack} className="btn btn-secondary">
+            Cancel
+          </button>
+          {/* Delete: hidden for new tools (nothing to delete) and seeded tools
+              (backend rejects — surface that up front by hiding the affordance). */}
+          {!isNew && !isBuiltin && (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleting}
+              style={{
+                padding: '0.5rem 0.9rem',
+                borderRadius: 6,
+                border: '1px solid #7f1d1d',
+                background: 'transparent',
+                color: '#fca5a5',
+                fontSize: '0.85rem',
+                cursor: deleting ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <IconTrash size={14} /> Delete Tool
+            </button>
+          )}
+        </div>
         <button
           onClick={handleSave}
           disabled={saving || success}
@@ -1069,6 +1126,68 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
           )}
         </button>
       </div>
+
+      {/* ── Delete confirm / blockers panel ─────────────────────────────────── */}
+      {confirmDelete && (
+        <div style={{
+          marginTop: 16, padding: 16, borderRadius: 8,
+          background: '#1a0f0f', border: '1px solid #7f1d1d',
+        }}>
+          <div style={{ color: '#fca5a5', fontWeight: 600, marginBottom: 8 }}>
+            Delete this tool permanently?
+          </div>
+          <div style={{ color: '#a0aec0', fontSize: '0.85rem', marginBottom: 12 }}>
+            This cannot be undone. Any runbook that references <code style={{ color: '#e8eef5' }}>{toolName}</code> will
+            need to be updated. Seeded tools cannot be deleted.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              style={{
+                padding: '0.45rem 0.9rem', borderRadius: 6,
+                background: '#7f1d1d', color: '#fff', border: 'none',
+                fontSize: '0.85rem', cursor: deleting ? 'wait' : 'pointer',
+              }}
+            >
+              {deleting ? 'Deleting…' : 'Yes, delete permanently'}
+            </button>
+            <button
+              onClick={() => { setConfirmDelete(false); setDeleteBlockers(null) }}
+              disabled={deleting}
+              style={{
+                padding: '0.45rem 0.9rem', borderRadius: 6,
+                background: 'transparent', color: '#a0aec0',
+                border: '1px solid #3d4557', fontSize: '0.85rem',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {deleteBlockers && deleteBlockers.length > 0 && (
+        <div style={{
+          marginTop: 12, padding: 14, borderRadius: 8,
+          background: '#1a1508', border: '1px solid #78350f',
+        }}>
+          <div style={{ color: '#fbbf24', fontWeight: 600, marginBottom: 8, fontSize: '0.9rem' }}>
+            Blocked by {deleteBlockers.length} enabled runbook{deleteBlockers.length === 1 ? '' : 's'}:
+          </div>
+          <ul style={{ color: '#e8eef5', fontSize: '0.85rem', margin: 0, paddingLeft: 20 }}>
+            {deleteBlockers.map(b => (
+              <li key={b.id} style={{ marginBottom: 4 }}>
+                <span style={{ fontWeight: 500 }}>{b.name}</span>
+                <span style={{ color: '#7a8ba3' }}> — used in {b.section}</span>
+              </li>
+            ))}
+          </ul>
+          <div style={{ color: '#a0aec0', fontSize: '0.8rem', marginTop: 10 }}>
+            Remove the tool from those runbooks (or disable them) and try again.
+          </div>
+        </div>
+      )}
     </div>
   )
 }
