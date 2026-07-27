@@ -205,6 +205,43 @@ export default function Login({ onLogin }: LoginProps) {
           >
             {startingUp ? 'Waiting for server…' : loading ? 'Signing in…' : 'Sign in'}
           </button>
+
+          {/* Demo credentials — only rendered when this instance advertises
+              itself as a public demo. Hidden on all normal installs. The
+              button below one-clicks the demo login so a visitor doesn't
+              have to copy/paste credentials. */}
+          {window.location.hostname === 'instance.axiometica.com' && (
+            <div style={{
+              marginTop: 18, padding: 12, borderRadius: 8,
+              background: '#0d1117', border: '1px solid #3d4557',
+              fontSize: '0.8rem', color: '#a0aec0',
+            }}>
+              <div style={{ color: '#fbbf24', fontWeight: 600, marginBottom: 4 }}>
+                Just exploring? Try the demo account
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                Read-only access to every module. Chat is available (20 messages/day).
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail('demo@axiometica.com')
+                  setPassword('Demo@1234!')
+                  // Let React flush the state then fire login.
+                  setTimeout(() => doLogin('demo@axiometica.com', 'Demo@1234!'), 0)
+                }}
+                disabled={loading}
+                style={{
+                  width: '100%', padding: '0.5rem', borderRadius: 6,
+                  border: '1px solid #78350f', background: 'transparent',
+                  color: '#fbbf24', fontSize: '0.82rem', fontWeight: 500,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Sign in as demo@axiometica.com
+              </button>
+            </div>
+          )}
         </form>
       </div>
 
