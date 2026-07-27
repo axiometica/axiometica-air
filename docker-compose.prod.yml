@@ -49,6 +49,10 @@ services:
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-https://localhost}"
       LOG_FORMAT: json
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      # Read-only demo mode (see services/demo_mode.py). Empty/false on
+      # every install by default; the public Oracle demo instance sets
+      # DEMO_MODE=true in its .env to opt in.
+      DEMO_MODE: "${DEMO_MODE:-false}"
 
   # Nginx (prod) — single container: TLS + built React SPA + API proxy
   #
