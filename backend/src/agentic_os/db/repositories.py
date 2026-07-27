@@ -731,11 +731,24 @@ class ApprovedActionRepository:
         Returns the number of rows inserted or updated.
         """
         from datetime import datetime
-        from agentic_os.db.approved_actions_seed import APPROVED_ACTIONS
+        from agentic_os.db.approved_actions_seed import APPROVED_ACTIONS, REMOVED_TOOLS
 
         now = datetime.utcnow()
         inserted = 0
         updated  = 0
+        removed  = 0
+
+        # Delete rows for tools that once shipped in the seed but have been
+        # retired. Only touches is_builtin=True rows so a user-created tool
+        # that happens to share a retired name isn't wiped. Runs before the
+        # upsert so a retire+recreate-under-same-name isn't a no-op.
+        for retired_name in REMOVED_TOOLS:
+            orphan = self.db.query(ApprovedActionModel).filter_by(
+                tool_name=retired_name, is_builtin=True,
+            ).first()
+            if orphan is not None:
+                self.db.delete(orphan)
+                removed += 1
 
         for item in APPROVED_ACTIONS:
             tool_name = item.get("tool_name")
@@ -773,7 +786,7 @@ class ApprovedActionRepository:
                     updated += 1
 
         self.db.commit()
-        return inserted + updated
+        return inserted + updated + removed
 
     @staticmethod
     def to_dict(a: ApprovedActionModel) -> dict:
