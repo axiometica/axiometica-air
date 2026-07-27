@@ -1081,10 +1081,14 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
         )}
       </Section>
 
-      {/* ── Save bar ────────────────────────────────────────────────────────── */}
+      {/* ── Save bar ─────────────────────────────────────────────────────────
+          All three action buttons (Cancel / Delete / Save) share the same
+          outlined shape — transparent fill, colored border and text as the
+          only differentiator. Keeps the row visually calm and consistent
+          regardless of destructive vs. primary intent. */}
       <div className="flex items-center justify-between pt-4 border-t border-slate-700/50 mt-8">
         <div className="flex items-center gap-2">
-          <button onClick={onBack} className="btn btn-secondary">
+          <button onClick={onBack} style={outlineBtn('#a0aec0', '#3d4557')}>
             Cancel
           </button>
           {/* Delete: hidden for new tools (nothing to delete) and seeded tools
@@ -1093,18 +1097,8 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
             <button
               onClick={() => setConfirmDelete(true)}
               disabled={deleting}
-              style={{
-                padding: '0.5rem 0.9rem',
-                borderRadius: 6,
-                border: '1px solid #7f1d1d',
-                background: 'transparent',
-                color: '#fca5a5',
-                fontSize: '0.85rem',
-                cursor: deleting ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
+              style={{ ...outlineBtn('#fca5a5', '#7f1d1d'), gap: 6,
+                       cursor: deleting ? 'not-allowed' : 'pointer' }}
             >
               <IconTrash size={14} /> Delete Tool
             </button>
@@ -1113,9 +1107,13 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
         <button
           onClick={handleSave}
           disabled={saving || success}
-          className={`btn flex items-center gap-2 ${
-            success ? 'btn-success' : 'btn-primary'
-          } disabled:opacity-60`}
+          style={{ ...outlineBtn(
+                     success ? '#86efac' : '#93c5fd',
+                     success ? '#166534' : '#1e40af',
+                   ),
+                   gap: 6,
+                   cursor: (saving || success) ? 'default' : 'pointer',
+                   opacity: (saving || success) ? 0.85 : 1 }}
         >
           {success ? (
             <><IconCheck size={16} /> Saved!</>
@@ -1127,12 +1125,11 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
         </button>
       </div>
 
-      {/* ── Delete confirm / blockers panel ─────────────────────────────────── */}
+      {/* ── Delete confirm / blockers panel ─────────────────────────────────
+          Panel fill matches the standard surface color (same as Section
+          cards); only the border + heading text carry the alert semantics. */}
       {confirmDelete && (
-        <div style={{
-          marginTop: 16, padding: 16, borderRadius: 8,
-          background: '#1a0f0f', border: '1px solid #7f1d1d',
-        }}>
+        <div style={{ ...standardPanel, marginTop: 16 }}>
           <div style={{ color: '#fca5a5', fontWeight: 600, marginBottom: 8 }}>
             Delete this tool permanently?
           </div>
@@ -1144,23 +1141,15 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
             <button
               onClick={handleDelete}
               disabled={deleting}
-              style={{
-                padding: '0.45rem 0.9rem', borderRadius: 6,
-                background: '#7f1d1d', color: '#fff', border: 'none',
-                fontSize: '0.85rem', cursor: deleting ? 'wait' : 'pointer',
-              }}
+              style={{ ...outlineBtn('#fca5a5', '#7f1d1d'),
+                       cursor: deleting ? 'wait' : 'pointer' }}
             >
               {deleting ? 'Deleting…' : 'Yes, delete permanently'}
             </button>
             <button
               onClick={() => { setConfirmDelete(false); setDeleteBlockers(null) }}
               disabled={deleting}
-              style={{
-                padding: '0.45rem 0.9rem', borderRadius: 6,
-                background: 'transparent', color: '#a0aec0',
-                border: '1px solid #3d4557', fontSize: '0.85rem',
-                cursor: 'pointer',
-              }}
+              style={outlineBtn('#a0aec0', '#3d4557')}
             >
               Cancel
             </button>
@@ -1168,10 +1157,7 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
         </div>
       )}
       {deleteBlockers && deleteBlockers.length > 0 && (
-        <div style={{
-          marginTop: 12, padding: 14, borderRadius: 8,
-          background: '#1a1508', border: '1px solid #78350f',
-        }}>
+        <div style={{ ...standardPanel, marginTop: 12 }}>
           <div style={{ color: '#fbbf24', fontWeight: 600, marginBottom: 8, fontSize: '0.9rem' }}>
             Blocked by {deleteBlockers.length} enabled runbook{deleteBlockers.length === 1 ? '' : 's'}:
           </div>
@@ -1190,6 +1176,32 @@ export default function ActionEditor({ actionId, onBack, onSaved }: Props) {
       )}
     </div>
   )
+}
+
+// ── Shared style helpers ─────────────────────────────────────────────────────
+// Outlined button: transparent fill, colored border + text. All action buttons
+// in the save/delete bar use this so intent (destructive / primary / cancel)
+// is encoded ONLY in the border + text hue, never in the fill.
+const outlineBtn = (textColor: string, borderColor: string): React.CSSProperties => ({
+  padding: '0.5rem 0.9rem',
+  borderRadius: 6,
+  border: `1px solid ${borderColor}`,
+  background: 'transparent',
+  color: textColor,
+  fontSize: '0.85rem',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  fontFamily: 'inherit',
+})
+
+// Standard message panel: same fill as Section cards so the shape reads as a
+// neutral information block. Semantic color goes on the heading, not the box.
+const standardPanel: React.CSSProperties = {
+  padding: 16,
+  borderRadius: 8,
+  background: '#1a1f2e',
+  border: '1px solid #3d4557',
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────

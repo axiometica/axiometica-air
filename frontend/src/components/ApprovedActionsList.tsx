@@ -384,12 +384,12 @@ export default function ApprovedActionsList({ onEdit, onNew }: Props) {
       )}
 
       {/* Delete-blocked panel — shown when a delete is refused because the
-          tool is still used by one or more enabled runbooks. Lists them so
-          the operator knows exactly what to edit / disable. */}
+          tool is still used by one or more enabled runbooks. Standard surface
+          fill; only the heading text carries the alert color. */}
       {deleteBlockers && (
         <div style={{
           marginBottom: 16, padding: 14, borderRadius: 8,
-          background: '#1a1508', border: '1px solid #78350f',
+          background: '#1a1f2e', border: '1px solid #3d4557',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
             <div style={{ color: '#fbbf24', fontWeight: 600, fontSize: '0.9rem' }}>
