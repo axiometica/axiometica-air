@@ -1,8 +1,9 @@
 /**
- * API Interceptor — Wraps fetch to handle authentication errors
+ * API Interceptor — Wraps fetch to handle authentication errors.
  *
- * If the backend returns 401 (Unauthorized) or 403 (Forbidden),
- * this interceptor will trigger session expiry and redirect to login.
+ * 401 (Unauthorized) → session expired → redirect to login.
+ * 403 (Forbidden) → authenticated but not permitted → left for the caller
+ * to handle (e.g. demo-mode "read-only" toast).
  */
 
 import { triggerSessionExpired, getToken } from '../hooks/useCurrentUser'
@@ -47,11 +48,9 @@ export async function apiFetch(url: string, options: FetchOptions = {}) {
       throw new Error('Session expired. Please log in again.')
     }
 
-    if (response.status === 403) {
-      console.warn('[API] Received 403 Forbidden — access revoked')
-      triggerSessionExpired()
-      throw new Error('Access denied. Please log in again.')
-    }
+    // 403 means "authenticated but not permitted" — the session is still
+    // valid, so do NOT redirect to login. Let the caller handle the error
+    // (e.g. show "read-only in demo mode" toast). Only 401 expires the session.
   }
 
   return response

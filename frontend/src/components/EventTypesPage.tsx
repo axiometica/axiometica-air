@@ -311,11 +311,16 @@ export default function EventTypesPage() {
   const handleToggle = async (et: EventType) => {
     setToggling(et.code)
     try {
-      await fetch(`/api/event-types/${et.code}`, {
+      const res = await fetch(`/api/event-types/${et.code}`, {
         method:  'PATCH',
         headers: authHeaders(),
         body:    JSON.stringify({ ...et, enabled: !et.enabled }),
       })
+      if (!res.ok) {
+        const detail = await res.json().then(d => d.detail || 'Toggle failed').catch(() => 'Toggle failed')
+        setError(detail)
+        return
+      }
       await load()
     } finally {
       setToggling(null)
