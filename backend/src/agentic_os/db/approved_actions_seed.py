@@ -1059,14 +1059,21 @@ APPROVED_ACTIONS = [
     {
         "tool_name": "host_disk_usage",
         "name": "Host Disk Usage",
-        "description": "Check disk space and largest directories on a remote host via SSH.",
-        # && and | must be inside the remote sh -c, otherwise they run locally.
-        "command": "ssh {host} sh -c 'df -h && du -sh {path}/* 2>/dev/null | sort -rh | head -20'",
+        "description": "Check disk space and largest directories on the Docker/K8s host or a remote host via SSH.",
+        "command": "df -h {path} && du -sh {path}/* 2>/dev/null | sort -rh | head -20",
+        "command_variants": {
+            "docker":     "df -h {path} && du -sh {path}/* 2>/dev/null | sort -rh | head -20",
+            "ssh":        "ssh {host} sh -c 'df -h {path} && du -sh {path}/* 2>/dev/null | sort -rh | head -20'",
+            "kubernetes": "df -h {path} && du -sh {path}/* 2>/dev/null | sort -rh | head -20",
+            "vcenter":    "df -h {path} && du -sh {path}/* 2>/dev/null | sort -rh | head -20",
+            "aws_ssm":    "df -h {path} && du -sh {path}/* 2>/dev/null | sort -rh | head -20",
+            "azure":      "df -h {path} && du -sh {path}/* 2>/dev/null | sort -rh | head -20",
+        },
         "category": "diagnostic",
         "blast_radius": 1,
         "requires_approval": False,
         "parameters": [
-            {"name": "host", "type": "string", "required": True},
+            {"name": "host", "type": "string", "required": False},
             {"name": "path", "type": "string", "required": False, "default": "/var",
              "description": "Directory to analyse"},
         ],
