@@ -4,6 +4,9 @@ import { IncidentListTable } from './IncidentListTable'
 import ApprovalModal from './ApprovalModal'
 import { useIncidentListTable } from '../hooks/useIncidentListTable'
 import { useIncidentActions } from '../hooks/useIncidentActions'
+import { useCurrentUser } from '../hooks/useCurrentUser'
+import { triggerDemoIncidents } from '../services/api'
+import DemoProgressModal from './DemoProgressModal'
 import { Workflow } from '../types'
 import {
   IconArrowLeft,
@@ -37,8 +40,12 @@ export default function IncidentList({ onViewWorkflow, onBack, darkMode = true }
   })
   const [searchInput, setSearchInput] = useState('')
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [demoTriggered, setDemoTriggered] = useState(() => sessionStorage.getItem('demoTriggered') === 'true')
+  const [demoModalOpen, setDemoModalOpen] = useState(false)
+  const [demoError, setDemoError] = useState<string | null>(null)
 
   // Hooks
+  const { isDemo } = useCurrentUser()
   const {
     incidents,
     loading,
@@ -82,6 +89,19 @@ export default function IncidentList({ onViewWorkflow, onBack, darkMode = true }
 
   const handleRefresh = async () => {
     refetch()
+  }
+
+  const handleDemoTrigger = async () => {
+    setDemoError(null)
+    try {
+      await triggerDemoIncidents()
+      sessionStorage.setItem('demoTriggered', 'true')
+      setDemoTriggered(true)
+      setDemoModalOpen(true)
+    } catch (err: any) {
+      setDemoError(err.response?.data?.detail || 'Failed to trigger incidents')
+      setTimeout(() => setDemoError(null), 5000)
+    }
   }
 
   // Update filters when dropdown changes
@@ -189,7 +209,51 @@ export default function IncidentList({ onViewWorkflow, onBack, darkMode = true }
             </button>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            {demoError && (
+              <span style={{ fontSize: '0.8rem', color: '#f87171', fontWeight: 500 }}>
+                {demoError}
+              </span>
+            )}
+            {isDemo && (
+              <button
+                onClick={handleDemoTrigger}
+                disabled={demoTriggered}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.5rem 1rem',
+                  backgroundColor: demoTriggered ? '#1a1f2e' : '#7c3aed',
+                  color: '#e8eef5',
+                  border: `1px solid ${demoTriggered ? '#3d4557' : '#7c3aed'}`,
+                  borderRadius: '6px',
+                  cursor: demoTriggered ? 'not-allowed' : 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  transition: 'all 150ms ease',
+                  opacity: demoTriggered ? 0.45 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!demoTriggered) {
+                    const el = e.currentTarget
+                    el.style.backgroundColor = '#6d28d9'
+                    el.style.borderColor = '#6d28d9'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!demoTriggered) {
+                    const el = e.currentTarget
+                    el.style.backgroundColor = '#7c3aed'
+                    el.style.borderColor = '#7c3aed'
+                  }
+                }}
+                title={demoTriggered ? 'Demo incidents already triggered this session' : 'Trigger 7 demo incidents through the full AI pipeline'}
+              >
+                <IconAlertCircle size={16} />
+                {demoTriggered ? 'Demo Triggered' : 'Trigger Demo Incidents'}
+              </button>
+            )}
             <button
               onClick={handleRefresh}
               disabled={loading}
@@ -700,6 +764,12 @@ export default function IncidentList({ onViewWorkflow, onBack, darkMode = true }
           onClose={() => { setApprovalTarget(null); clearError() }}
         />
       )}
+
+      {/* ── Demo Progress Modal ── */}
+      <DemoProgressModal
+        open={demoModalOpen}
+        onClose={() => { setDemoModalOpen(false); refetch() }}
+      />
     </div>
   )
 }

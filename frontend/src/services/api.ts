@@ -1507,3 +1507,17 @@ export const testSyntheticScript = (payload: {
 }) =>
   axios.post<{ status: string; output: string }>(`${API_BASE_URL}/synthetics/test`, payload)
 
+// ── Demo ──────────────────────────────────────────────────────────────────────
+
+export interface DemoTriggerResult {
+  event_type: string
+  resource: string
+  qualified?: boolean
+  workflow_id?: string
+  status: string
+  detail?: string
+}
+
+export const triggerDemoIncidents = () =>
+  axios.post<{ triggered: number; results: DemoTriggerResult[] }>(`${API_BASE_URL}/demo/trigger-incidents`)
+

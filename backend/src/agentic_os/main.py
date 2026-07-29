@@ -99,6 +99,7 @@ from agentic_os.api.routes import platform_intelligence
 from agentic_os.api.routes import chat as chat_routes
 from agentic_os.api.routes import slack_webhook
 from agentic_os.api.routes import synthetics as synthetics_routes
+from agentic_os.api.routes import demo as demo_routes
 from agentic_os.api.ws import websocket_endpoint, global_events_endpoint
 from agentic_os.services.neo4j_init import seed_neo4j_database
 
@@ -257,6 +258,10 @@ async def lifespan(app: FastAPI):
     _socket_task = asyncio.create_task(slack_webhook.start_socket_mode())
     logger.info("✓ Slack Socket Mode task started")
 
+    # Start demo cleanup loop (no-op if DEMO_MODE is off)
+    from agentic_os.api.routes.demo import start_cleanup_loop, stop_cleanup_loop
+    start_cleanup_loop()
+
     yield
 
     # Shutdown
@@ -268,6 +273,8 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     logger.info("✓ Slack Socket Mode listener stopped")
+
+    stop_cleanup_loop()
 
     await event_bus.disconnect()
     logger.info("✓ Event bus disconnected")
@@ -354,6 +361,7 @@ app.include_router(monitoring_events.router,  prefix="/api", tags=["Monitoring E
 app.include_router(monitoring_checks.router,  prefix="/api", tags=["Monitoring Checks"],  dependencies=_any)
 app.include_router(log_monitors.router,       prefix="/api", tags=["Log Monitors"],       dependencies=_any)
 app.include_router(synthetics_routes.router,  prefix="/api", tags=["Synthetics"],          dependencies=_any)
+app.include_router(demo_routes.router,        prefix="/api", tags=["Demo"],                dependencies=_any)
 app.include_router(storms.router,             prefix="/api", tags=["Storms"],              dependencies=_any)
 app.include_router(platform_intelligence.router, prefix="/api", tags=["Platform Intelligence"], dependencies=_itom_up)
 app.include_router(chat_routes.router,            prefix="/api", tags=["Operator Chat"],         dependencies=_any)

@@ -1,31 +1,20 @@
-/**
- * DemoBanner
- *
- * Rendered by App.tsx immediately below the Header when the current user
- * has role='demo'. Signals to the visitor that this is a public demo
- * account with read-only permissions across most of the platform. Kept
- * short so it doesn't eat vertical space on already-dense pages.
- *
- * The banner is purely informational — it does NOT enforce any restriction.
- * All enforcement lives in the backend middleware and the demo-aware Save
- * buttons. If a bug ever exposed the banner to a non-demo user, the worst
- * that happens is they see a message that doesn't apply to them.
- */
+import { useState } from 'react'
 
 interface Props {
   onSignOut?: () => void
 }
 
 export default function DemoBanner({ onSignOut }: Props) {
+  const [dismissed, setDismissed] = useState(false)
+
+  if (dismissed) return null
+
   return (
     <div
       style={{
-        // Full-width strip, dark gold/amber to match the "you're in a
-        // special mode" feel without alarming. Uses the DS token palette
-        // colours so it looks native to the rest of the shell.
-        background: '#3a2f0f',
-        borderBottom: '1px solid #78350f',
-        color: '#fbbf24',
+        background: 'rgba(30, 20, 50, 0.92)',
+        borderBottom: '1px solid rgba(124, 58, 237, 0.3)',
+        color: 'rgba(255, 255, 255, 0.8)',
         padding: '10px 20px',
         fontSize: '0.85rem',
         display: 'flex',
@@ -35,29 +24,44 @@ export default function DemoBanner({ onSignOut }: Props) {
         flexWrap: 'wrap',
       }}
     >
-      <span style={{ fontWeight: 600 }}>Demo Mode</span>
-      <span style={{ color: '#e8eef5' }}>·</span>
-      <span style={{ color: '#e8eef5' }}>
-        This is a public read-only demo. Chat is available (20 messages/day).
-        Sign in with a real account to make changes.
-      </span>
-      {onSignOut && (
-        <button
-          onClick={onSignOut}
-          style={{
-            marginLeft: 8,
-            padding: '3px 10px',
-            borderRadius: 4,
-            border: '1px solid #78350f',
-            background: 'transparent',
-            color: '#fbbf24',
-            fontSize: '0.78rem',
-            cursor: 'pointer',
-          }}
+      <span style={{ fontWeight: 600, color: '#a78bfa' }}>Demo Mode</span>
+      <span style={{ opacity: 0.5 }}>·</span>
+      <span>
+        This is a public read-only demo. For a full demo sign up at{' '}
+        <a
+          href="https://www.axiometica.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: '#a78bfa', textDecoration: 'underline' }}
         >
-          Sign out
-        </button>
-      )}
+          www.axiometica.com
+        </a>
+        {' '}or get it on{' '}
+        <a
+          href="https://github.com/axiometica/axiometica-air"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: '#a78bfa', textDecoration: 'underline' }}
+        >
+          GitHub
+        </a>
+      </span>
+      <button
+        onClick={() => setDismissed(true)}
+        style={{
+          marginLeft: 8,
+          padding: 0,
+          border: 'none',
+          background: 'transparent',
+          color: 'rgba(255, 255, 255, 0.5)',
+          fontSize: '1.1rem',
+          cursor: 'pointer',
+          lineHeight: 1,
+        }}
+        title="Dismiss"
+      >
+        ×
+      </button>
     </div>
   )
 }

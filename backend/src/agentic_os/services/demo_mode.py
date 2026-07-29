@@ -81,6 +81,7 @@ DEMO_WRITE_ALLOWED_PREFIXES: tuple[str, ...] = (
     "/api/auth/login",
     "/api/auth/logout",
     "/api/chat",
+    "/api/demo",
 )
 
 # Reads are permissive by default (demo needs to see the platform). If we ever

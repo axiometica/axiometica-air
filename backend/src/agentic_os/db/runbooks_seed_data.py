@@ -802,17 +802,20 @@ RUNBOOKS = [
         # Graph: Top Syscall Processes → DECISION(syscall_count>10000) → Kill|end
         #        → Verify Syscall Normal → Notify
         "diagnostics": [
-            _diag(1, "Top Syscall Processes",
-                  "Trace syscalls to identify the process with highest syscall count",
-                  "trace_syscalls", {"process_name": ""}),
+            _diag(1, "List Top Processes",
+                  "Identify highest-resource processes to compare against anomaly process",
+                  "top_processes", {"sort": "cpu", "limit": "5"}),
+            _diag(2, "Trace Anomaly Process Syscalls",
+                  "Trace syscalls for the specific anomaly process from the event",
+                  "trace_syscalls", {"process_name": "{process_name}"}),
         ],
         "actions": [
-            _action(1, "Kill High Syscall Process",
-                    "Terminate the process identified as causing excessive syscalls",
-                    "process_kill", {"pid": "{{top_syscall_pid}}"}),
+            _action(1, "Kill Anomaly Process",
+                    "Terminate the specific anomaly process from the event, not whatever is top",
+                    "process_kill", {"process_name": "{process_name}", "signal": "SIGKILL"}),
             _action(2, "Notify Resolution",
                     "Send notification that syscall remediation is complete",
-                    "send_alert", {"message": "Syscall remediation complete. Syscall count now: {{syscall_after}}", "severity": "info"}),
+                    "send_alert", {"message": "Syscall remediation complete for process {process_name}. Syscall count now: {{syscall_after}}", "severity": "info"}),
         ],
         "verification_steps": [
             _verify(1, "Verify Syscall Normal",
@@ -849,11 +852,11 @@ RUNBOOKS = [
             # means the same thing on the way in as on the way out.
             "steps": [
                 {"id": "diag_top_proc", "name": "Identify Top Process", "tool": "top_processes", "type": "diagnostic", "args": {"sort": "cpu", "limit": "5"}, "output_capture": {"top_process_name": "$.top_process"}},
-                {"id": "diag_syscall", "name": "Top Syscall Processes", "tool": "trace_syscalls", "type": "diagnostic", "args": {"process_name": "{{top_process_name}}"}, "output_capture": {"top_syscall_pid": "$.pid", "top_syscall_count": "$.top_syscall_count"}},
-                {"id": "dec_high_syscall", "type": "decision", "condition": "top_syscall_count > 10000", "on_true": "action_kill", "on_false": "end"},
-                {"id": "action_kill", "name": "Kill High Syscall Process", "tool": "process_kill", "type": "action", "args": {"process_name": "{{top_process_name}}"}},
+                {"id": "diag_syscall", "name": "Trace Anomaly Process", "tool": "trace_syscalls", "type": "diagnostic", "args": {"process_name": "{process_name}"}, "output_capture": {"top_syscall_pid": "$.pid", "top_syscall_count": "$.top_syscall_count"}},
+                {"id": "dec_high_syscall", "type": "decision", "condition": "top_syscall_count > 10000", "on_true": "action_kill", "on_false": "incident_update_resolve"},
+                {"id": "action_kill", "name": "Kill Anomaly Process", "tool": "process_kill", "type": "action", "args": {"process_name": "{process_name}"}},
                 {"id": "wait_after_kill", "name": "Wait for Process Termination", "type": "wait", "duration_seconds": 10},
-                {"id": "verify_syscall", "name": "Verify Syscall Normal", "tool": "trace_syscalls", "type": "verification", "args": {"process_name": "{{top_process_name}}"}, "output_capture": {"syscall_after": "$.top_syscall_count"}, "metric": "syscall_after", "check": "less_than", "value": 10000},
+                {"id": "verify_syscall", "name": "Verify Syscall Normal", "tool": "trace_syscalls", "type": "verification", "args": {"process_name": "{process_name}"}, "output_capture": {"syscall_after": "$.top_syscall_count"}, "metric": "syscall_after", "check": "less_than", "value": 10000},
                 {"id": "notify_done", "name": "Notify Resolution", "tool": "send_alert", "type": "notify", "args": {"message": "Syscall remediation complete. Syscall count now: {{syscall_after}}", "severity": "info"}},
                 {"id": "incident_update_resolve", "name": "Mark Resolved", "type": "incident_update", "state": "resolved"},
             ],
@@ -862,7 +865,7 @@ RUNBOOKS = [
                 {"source": "diag_top_proc",  "target": "diag_syscall",    "sourceHandle": None},
                 {"source": "diag_syscall",   "target": "dec_high_syscall","sourceHandle": None},
                 {"source": "dec_high_syscall","target": "action_kill",    "sourceHandle": "true"},
-                {"source": "dec_high_syscall","target": "end",            "sourceHandle": "false"},
+                {"source": "dec_high_syscall","target": "incident_update_resolve", "sourceHandle": "false"},
                 {"source": "action_kill",    "target": "wait_after_kill", "sourceHandle": None},
                 {"source": "wait_after_kill","target": "verify_syscall",  "sourceHandle": None},
                 {"source": "verify_syscall", "target": "incident_update_resolve", "sourceHandle": None},

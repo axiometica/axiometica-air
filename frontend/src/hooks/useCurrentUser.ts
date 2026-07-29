@@ -65,6 +65,7 @@ export function useCurrentUser() {
       await fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
     }
     clearToken()
+    sessionStorage.removeItem('demoTriggered')
     setUser(null)
   }, [])
 
