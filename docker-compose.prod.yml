@@ -3,11 +3,7 @@
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-#     up -d --build --scale frontend=0
-#
-#   --build          rebuilds the nginx prod image (React app baked in)
-#   --scale frontend=0  drops the standalone frontend container (nginx serves
-#                        the pre-built SPA directly — one fewer container)
+#     up -d --build
 #
 # IMPORTANT — PORT LOCKING:
 #   Docker Compose merge concatenates port/volume arrays; it cannot REMOVE
@@ -18,7 +14,7 @@
 #   Linux (ufw):
 #     sudo ufw allow 80/tcp
 #     sudo ufw allow 443/tcp
-#     sudo ufw deny 3000/tcp   # frontend — nginx only (scaled to 0 in prod)
+#     sudo ufw deny 3000/tcp   # frontend — internal only
 #     sudo ufw deny 5432/tcp   # postgres
 #     sudo ufw deny 6379/tcp   # redis
 #     sudo ufw deny 7474/tcp   # neo4j http
@@ -30,10 +26,8 @@
 #   only 80 and 443 to the internet.
 #
 # What this file changes vs docker-compose.yml:
-#   • nginx: rebuilt from nginx/Dockerfile.prod — multi-stage build that bakes
-#            the React app into the nginx image (TLS + static files + API proxy
-#            all in one container — no separate frontend hop)
-#   • frontend: scaled to 0 via --scale frontend=0 on the CLI
+#   • nginx: rebuilt from nginx/Dockerfile.prod — TLS termination + reverse
+#            proxy only (no static files — proxies to frontend container)
 #   • backend: ALLOWED_ORIGINS set to HTTPS-only, LOG_FORMAT forced to json
 #   • Dev source bind-mounts are NOT applied — they live in
 #     docker-compose.override.yml which is only auto-loaded by bare `docker compose up`
@@ -54,26 +48,19 @@ services:
       # DEMO_MODE=true in its .env to opt in.
       DEMO_MODE: "${DEMO_MODE:-false}"
 
-  # Nginx (prod) — single container: TLS + built React SPA + API proxy
-  #
-  # Replaces the two-container dev setup (outer nginx TLS proxy → frontend nginx).
-  # Built from nginx/Dockerfile.prod which is a multi-stage build:
-  #   Stage 1 (node:20-alpine): npm ci && npm run build  →  dist/
-  #   Stage 2 (nginx:alpine):   serves dist/ with TLS, proxies /api and /ws to backend
-  #
-  # The context is the project root so the Dockerfile can COPY both
-  # frontend/ (source) and nginx/ (entrypoint + config).
+  # Nginx (prod) — TLS termination + reverse proxy to frontend and backend.
+  # No static files baked in — the frontend container serves all static content.
+  # The demo overlay can inject additional location blocks by mounting files
+  # into /etc/nginx/locations.d/ (e.g. /register → demo-gateway).
   nginx:
     build:
-      context: .
-      dockerfile: nginx/Dockerfile.prod
+      context: ./nginx
+      dockerfile: Dockerfile.prod
     volumes:
-      # Replace with your CA-signed cert before going live.
-      # See nginx/entrypoint.sh for Let's Encrypt / Certbot instructions.
       - ./nginx/certs:/etc/nginx/certs
     depends_on:
+      - frontend
       - backend
-      # (frontend is scaled to 0 — no longer a dependency)
 
   # celery_worker and watcher no longer need volume overrides here — dev source
   # mounts were moved to docker-compose.override.yml which is NOT applied when

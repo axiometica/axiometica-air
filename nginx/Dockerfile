@@ -11,12 +11,15 @@ RUN apk add --no-cache openssl
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Empty directory for optional location overrides (demo overlay mounts here)
+RUN mkdir -p /etc/nginx/locations.d
+
 # Copy entrypoint script that generates self-signed TLS cert on first start
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Ensure nginx worker processes own the content directory
-RUN chown -R nginx:nginx /usr/share/nginx/html /etc/nginx/conf.d
+RUN chown -R nginx:nginx /usr/share/nginx/html /etc/nginx/conf.d /etc/nginx/locations.d
 
 EXPOSE 80 443
 
