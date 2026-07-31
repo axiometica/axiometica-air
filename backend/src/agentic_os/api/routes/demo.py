@@ -43,9 +43,9 @@ ANOMALY_FOR_EVENT = {
 }
 
 CLEANUP_COMMANDS = [
-    {"container": "agentic_os_neo4j",  "command": "sh -c 'ps -o pid,comm | grep yes | while read pid name; do kill -9 $pid 2>/dev/null; done; true'", "mode": "container", "timeout": 10},
-    {"container": "umami",             "command": "sh -c 'ps -o pid,comm | grep yes | while read pid name; do kill -9 $pid 2>/dev/null; done; true'", "mode": "container", "timeout": 10},
-    {"container": "agentic_os_flower", "command": "sh -c 'ps -o pid,comm | grep yes | while read pid name; do kill -9 $pid 2>/dev/null; done; true'", "mode": "container", "timeout": 10},
+    {"container": "agentic_os_neo4j",  "command": "sh -c 'ps -o pid,stat,comm | grep yes | grep -v grep | while read pid state name; do test $state != Z && kill -9 $pid 2>/dev/null; done; true'", "mode": "container", "timeout": 10},
+    {"container": "umami",             "command": "sh -c 'ps -o pid,stat,comm | grep yes | grep -v grep | while read pid state name; do test $state != Z && kill -9 $pid 2>/dev/null; done; true'", "mode": "container", "timeout": 10},
+    {"container": "agentic_os_flower", "command": "sh -c 'ps -o pid,stat,comm | grep yes | grep -v grep | while read pid state name; do test $state != Z && kill -9 $pid 2>/dev/null; done; true'", "mode": "container", "timeout": 10},
     {"container": "umami_db",          "command": "sh -c 'rm -f /tmp/fillup /tmp/diskfill /tmp/diskfill_demo 2>/dev/null; true'", "mode": "container", "timeout": 5},
 ]
 

@@ -149,11 +149,12 @@ class KubernetesAdapter(ExecutionAdapter):
 
     def kill_process(self, target: str, process_name: str,
                      signal: str = "SIGKILL") -> ExecResult:
-        """Kill process inside the pod. Uses ps+kill for BusyBox compatibility."""
+        """Kill process inside the pod. Filters zombies for BusyBox compat."""
         sig_num = signal.replace("SIG", "")
         kill_sh = (
-            f"ps -o pid,comm | grep '{process_name}' | grep -v grep "
-            f"| while read pid name; do kill -{sig_num} $pid 2>/dev/null "
+            f"ps -o pid,stat,comm | awk -v p='{process_name}' "
+            f"'$3==p && $2!~/Z/{{print $1}}' "
+            f"| while read pid; do kill -{sig_num} $pid 2>/dev/null "
             f"&& echo killed_$pid; done"
         )
         return self.exec(target, kill_sh, timeout=10)

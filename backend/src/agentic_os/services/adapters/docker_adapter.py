@@ -54,11 +54,13 @@ class DockerAdapter(ExecutionAdapter):
     def kill_process(self, target: str, process_name: str,
                      signal: str = "SIGKILL") -> ExecResult:
         sig_num = signal.replace("SIG", "")
-        # Use ps+kill directly — BusyBox pkill silently ignores text signal
-        # names (e.g. -KILL) and returns exit 0 without killing anything.
+        # ps+kill with zombie filter — BusyBox pkill silently ignores text
+        # signal names, and killing a zombie is a no-op that fakes success.
+        # Use "stat" not "s" — BusyBox only supports "stat".
         kill_sh = (
-            f"ps -o pid,comm | grep '{process_name}' | grep -v grep "
-            f"| while read pid name; do kill -{sig_num} $pid 2>/dev/null "
+            f"ps -o pid,stat,comm | awk -v p='{process_name}' "
+            f"'$3==p && $2!~/Z/{{print $1}}' "
+            f"| while read pid; do kill -{sig_num} $pid 2>/dev/null "
             f"&& echo killed_$pid; done"
         )
         cmd = ["docker", "exec", target, "sh", "-c", kill_sh]

@@ -88,6 +88,7 @@ services:
   neo4j:
     image: neo4j:5-community
     container_name: agentic_os_neo4j
+    init: true
     restart: unless-stopped                                          # Fix 1
     ports:
       - "127.0.0.1:7687:7687"
@@ -353,6 +354,7 @@ services:
   flower:
     image: mher/flower:2.0.1
     container_name: agentic_os_flower
+    init: true
     restart: unless-stopped                                          # Fix 1
     command: >
       celery --broker=redis://:${REDIS_PASSWORD:-localdev}@redis:6379/0
