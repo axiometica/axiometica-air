@@ -498,6 +498,11 @@ async def submit_monitoring_event(
         import logging
         logger = logging.getLogger(__name__)
 
+        # Normalize event_type so alias variants (e.g. "high_syscall_intensity"
+        # vs "infrastructure.compute.syscall_intensity_high") dedup correctly.
+        from agentic_os.connectors.event_type_utils import normalize_event_type
+        event.event_type = normalize_event_type(event.event_type)
+
         # ── CONDITION-STATE DEDUPLICATION ────────────────────────────────────
         # If (resource_name, event_type) is already open we have already recorded
         # this condition.  Return the original event idempotently — no new row,
