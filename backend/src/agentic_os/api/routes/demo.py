@@ -253,9 +253,10 @@ async def _fire_events_background():
 
     logger.info("[DEMO] Batch complete: %d/%d incidents triggered", triggered, len(DEMO_EVENTS))
 
-    # Clean up anomaly processes immediately so the watcher doesn't keep
-    # detecting them and filing duplicate incidents.
-    await asyncio.sleep(15)
+    # Wait for the pipeline to finish remediating before cleaning up
+    # leftover anomaly processes. Too early and the pipeline finds
+    # zombies instead of live processes to kill.
+    await asyncio.sleep(180)
     logger.info("[DEMO] Running post-trigger cleanup")
     for cmd in CLEANUP_COMMANDS:
         try:
