@@ -2158,6 +2158,9 @@ class ToolRegistryAgent(Agent):
             # discovered the offending process.  When True, process_kill always uses
             # the discovered process — even if the runbook has a different static default.
             _process_discovered_by_diag = False
+            # Preserve alert-provided anomaly_process — diagnostics should only
+            # override when the alert didn't already identify the culprit.
+            _alert_anomaly_process = anomaly_process
 
             _aborted_early = False
             _step_iter = (
@@ -2570,20 +2573,28 @@ class ToolRegistryAgent(Agent):
                             step_outputs[_step_id] = structured       # str key  (editor format: diag_11.field)
                         logger.info(f"[CHAIN] Step {step_idx} ({step_tool}) output captured: {list(structured.keys())}")
 
-                    # If a diagnostic step discovers a better process name, propagate it
-                    # forward so all remaining steps (including process_kill) use it.
-                    # _process_discovered_by_diag ensures process_kill always uses this
-                    # even if the runbook has a different static default.
+                    # If a diagnostic step discovers a process name, propagate it
+                    # forward — but only when the alert didn't already identify one.
+                    # The alert's anomaly_process is authoritative (watcher detected it);
+                    # diagnostic discovery is a fallback for alerts without one.
                     discovered = step_result.get("top_process") or structured.get("top_process")
                     if discovered and discovered not in ("", "unknown"):
-                        if discovered != anomaly_process:
+                        if _alert_anomaly_process and discovered != _alert_anomaly_process:
                             logger.info(
-                                f"[CHAIN] Step {step_idx} ({step_tool}) identified process: "
-                                f"'{discovered}' (was: '{anomaly_process}') — updating for remaining steps"
+                                f"[CHAIN] Step {step_idx} ({step_tool}) found process: "
+                                f"'{discovered}' but alert already identified "
+                                f"'{_alert_anomaly_process}' — keeping alert value"
                             )
-                            reasoning += f"      → Identified process: '{discovered}' (will be used in subsequent steps)\n"
-                        anomaly_process = discovered
-                        _process_discovered_by_diag = True
+                            reasoning += f"      → Diagnostic found '{discovered}' but alert-identified '{_alert_anomaly_process}' takes precedence\n"
+                        else:
+                            if discovered != anomaly_process:
+                                logger.info(
+                                    f"[CHAIN] Step {step_idx} ({step_tool}) identified process: "
+                                    f"'{discovered}' (was: '{anomaly_process}') — updating for remaining steps"
+                                )
+                                reasoning += f"      → Identified process: '{discovered}' (will be used in subsequent steps)\n"
+                            anomaly_process = discovered
+                            _process_discovered_by_diag = True
 
                 all_results.append({
                     "step": step_idx,
