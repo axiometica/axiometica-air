@@ -53,35 +53,18 @@ class DockerAdapter(ExecutionAdapter):
 
     def kill_process(self, target: str, process_name: str,
                      signal: str = "SIGKILL") -> ExecResult:
-        sig_flag = signal.replace("SIG", "")
-        # Try pkill first; fall back to ps+kill for BusyBox containers
-        # that lack pkill (otherwise the kill silently fails).
-        cmd = ["docker", "exec", target, "pkill", f"-{sig_flag}", process_name]
-        cmd_str = " ".join(cmd)
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
-            # pkill exit 1 = no process found (success), exit 0 = killed
-            if result.returncode in (0, 1) and "not found" not in result.stderr:
-                return ExecResult(
-                    success=True,
-                    stdout=result.stdout.strip(),
-                    stderr=result.stderr.strip(),
-                    returncode=result.returncode,
-                    command=cmd_str,
-                )
-        except Exception:
-            pass
-
-        # Fallback: ps + grep + kill (works on BusyBox/Alpine)
+        sig_num = signal.replace("SIG", "")
+        # Use ps+kill directly — BusyBox pkill silently ignores text signal
+        # names (e.g. -KILL) and returns exit 0 without killing anything.
         kill_sh = (
             f"ps -o pid,comm | grep '{process_name}' | grep -v grep "
-            f"| while read pid name; do kill -{sig_flag} $pid 2>/dev/null "
+            f"| while read pid name; do kill -{sig_num} $pid 2>/dev/null "
             f"&& echo killed_$pid; done"
         )
-        fallback_cmd = ["docker", "exec", target, "sh", "-c", kill_sh]
-        fallback_cmd_str = f"docker exec {target} sh -c '{kill_sh}'"
+        cmd = ["docker", "exec", target, "sh", "-c", kill_sh]
+        cmd_str = f"docker exec {target} sh -c '{kill_sh}'"
         try:
-            result = subprocess.run(fallback_cmd, capture_output=True, text=True, timeout=12)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
             killed_any = "killed_" in result.stdout
             no_procs = not result.stdout.strip()
             return ExecResult(
@@ -89,10 +72,10 @@ class DockerAdapter(ExecutionAdapter):
                 stdout=result.stdout.strip(),
                 stderr=result.stderr.strip(),
                 returncode=result.returncode,
-                command=fallback_cmd_str,
+                command=cmd_str,
             )
         except Exception as exc:
-            return ExecResult.error(str(exc), fallback_cmd_str)
+            return ExecResult.error(str(exc), cmd_str)
 
     def check_process(self, target: str, process_name: str) -> dict:
         result = self.exec(
