@@ -809,6 +809,33 @@ export const updateGeneralSettings = (update: Record<string, any>) =>
   )
 
 // ─────────────────────────────────────────────────────────────────
+// Platform Settings — Automation Control
+// ─────────────────────────────────────────────────────────────────
+
+export interface AutomationSetting {
+  key: string
+  value: number | boolean | string
+  value_type: 'int' | 'float' | 'bool' | 'str'
+  label: string
+  description: string | null
+  updated_at: string | null
+}
+
+export interface AutomationSettingsResponse {
+  category: string
+  settings: AutomationSetting[]
+}
+
+export const getAutomationSettings = () =>
+  axios.get<AutomationSettingsResponse>(`${API_BASE_URL}/settings/automation`)
+
+export const updateAutomationSettings = (update: Record<string, any>) =>
+  axios.put<{ saved: Record<string, any>; message: string }>(
+    `${API_BASE_URL}/settings/automation`,
+    update,
+  )
+
+// ─────────────────────────────────────────────────────────────────
 // Platform Settings — SMTP
 // ─────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 # Axiometica AIR (Autonomous Incident Response) — Administrator Guide
 
-**Version:** 1.2.5 · **Last updated:** July 2026  
+**Version:** 1.6.0 · **Last updated:** July 2026  
 **Audience:** Platform administrators, ITOM admins, infrastructure engineers
 
 ---
@@ -297,13 +297,16 @@ Runs after the final remediation action:
 
 ### 3.6 Confidence Score Lifecycle
 
-Every runbook has a confidence score (0–100%) updated after every execution using a weighted moving average:
+Every runbook has a confidence score updated after every execution using Laplace smoothing with a Bayesian prior (5 virtual observations at 85% success):
 
 ```
-new_score = (old_score × 0.7) + (outcome × 0.3 × 100)
+confidence = (successful_executions + 4.25) / (total_executions + 5)
+             clamped to [0.25, 0.99]
 ```
 
-MechanicAgent uses this as a tiebreaker when multiple runbooks match at the same tier. The Runbook Library card shows the current confidence % and a trend badge (improving / stable / declining) based on the last 10 executions.
+A fresh runbook with no executions starts at ~0.85. Five consecutive successes raise it to ~0.925; five consecutive failures drop it to ~0.425. The score converges on the true success rate as execution count grows, while the prior prevents a single early failure from zeroing out a new runbook.
+
+A **trend indicator** (improving / stable / declining) compares the success rate of the older half vs. the newer half of the last 10 outcomes. MechanicAgent uses the confidence score as a tiebreaker when multiple runbooks match at the same tier. The Runbook Library card shows the current confidence % and trend badge.
 
 ### 3.7 Pipeline Hold for Storm Grouping
 

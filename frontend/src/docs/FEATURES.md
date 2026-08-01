@@ -1,7 +1,7 @@
 # Axiometica AIR — Feature Catalog
 
 **Last updated:** 2026-06-07
-**Platform status:** v1.1.2 — Production Ready
+**Platform status:** v1.6.0 — Production Ready
 
 ---
 
@@ -133,7 +133,7 @@ This provides authoritative confirmation from the monitoring layer — not just 
 
 ## 2. Storm Agent — Correlated Event Detection
 
-The Storm Agent is a meta-orchestrator layer that sits above the standard 7-agent pipeline. Instead of treating every qualified event as an independent incident, it detects when a burst of incidents across multiple resources shares a common root cause — and coordinates their triage as a single unit.
+The Storm Agent is a meta-orchestrator layer that sits above the standard 8-agent pipeline. Instead of treating every qualified event as an independent incident, it detects when a burst of incidents across multiple resources shares a common root cause — and coordinates their triage as a single unit.
 
 ### Detection
 
@@ -526,7 +526,7 @@ Beyond passive resource metrics and single-endpoint health probes, the watcher c
 - **Per-page content assertions:** an optional regex checked against the full combined response body of every request on a page (case-insensitive) — the parsed page/assertion structure is persisted (`pages_json`) so it can be reviewed and edited later without re-uploading the HAR.
 - **Watcher poll-gated scheduling, not Celery:** every enabled monitor is evaluated on each watcher poll cycle, but only actually executes once its own `schedule_mins` (default 15) has elapsed since `last_run_at` — decoupling a monitor's cadence from the watcher's much faster internal poll interval.
 - **Structured per-run output:** each run logs a start/end line per page and a method/path/status/latency line per request, both in the watcher's own logs and via a **Log** button on the monitor row in the UI — no container shell access needed to see why a run failed.
-- **Full incident integration:** consecutive failures (configurable via `WATCHER_SYNTHETIC_MIN_CONSECUTIVE_FAILS`) raise a `synthetic.transaction.failed` event through the same qualification and 7-agent pipeline as every other anomaly type, and auto-clear on the next passing run.
+- **Full incident integration:** consecutive failures (configurable via `WATCHER_SYNTHETIC_MIN_CONSECUTIVE_FAILS`) raise a `synthetic.transaction.failed` event through the same qualification and 8-agent pipeline as every other anomaly type, and auto-clear on the next passing run.
 
 ---
 
@@ -639,7 +639,7 @@ Change management reuses policy governance, runbook execution, typed context, an
 |---|---|
 | **Incident Pipeline** | |
 | Automated incident detection (eBPF watcher) | Implemented |
-| 7-agent incident pipeline (Sentinel through Verifier) | Implemented |
+| 8-agent incident pipeline (Sentinel through Verifier) | Implemented |
 | Typed context schema (IncidentWorkflowContext) | Implemented |
 | Risk scoring (0–100, multi-factor) | Implemented |
 | MechanicAgent 5-tier runbook selection with confidence scoring | Implemented |

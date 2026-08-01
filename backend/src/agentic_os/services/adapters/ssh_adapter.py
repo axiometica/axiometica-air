@@ -12,7 +12,8 @@ Environment variables consumed by AdapterFactory:
   WATCHER_SSH_PASSWORD     password (if no key; stored in memory only)
   WATCHER_SSH_HOSTS_JSON   JSON list of {name, host, port, user, key_path}
                            for multi-host mode
-  WATCHER_SSH_KNOWN_HOSTS  path to known_hosts file (default: auto-accept)
+  WATCHER_SSH_KNOWN_HOSTS       path to known_hosts file (required unless strict mode disabled)
+  WATCHER_SSH_STRICT_HOST_KEYS  "true" (default) or "false" to skip host-key verification
 """
 
 from __future__ import annotations
@@ -111,10 +112,18 @@ class SSHAdapter(ExecutionAdapter):
         target = self._targets[target_name]
         client = paramiko.SSHClient()
 
+        strict = os.environ.get("WATCHER_SSH_STRICT_HOST_KEYS", "true").lower() != "false"
         known_hosts = os.environ.get("WATCHER_SSH_KNOWN_HOSTS", "")
         if known_hosts:
             client.load_host_keys(known_hosts)
+            client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        elif strict:
+            raise RuntimeError(
+                "WATCHER_SSH_KNOWN_HOSTS is not set. Provide a known_hosts file "
+                "or set WATCHER_SSH_STRICT_HOST_KEYS=false to skip host-key verification."
+            )
         else:
+            logger.warning("[SSH] Host-key verification disabled (WATCHER_SSH_STRICT_HOST_KEYS=false)")
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         kwargs: dict = {

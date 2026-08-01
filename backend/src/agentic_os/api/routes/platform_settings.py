@@ -321,7 +321,7 @@ STORM_DEFAULTS: list[dict] = [
         "label": "Storm Detection Enabled",
         "description": (
             "Enable the Storm Agent. When disabled, correlated events are processed "
-            "individually through the standard 7-agent pipeline."
+            "individually through the standard 8-agent pipeline."
         ),
     },
     {
@@ -1357,4 +1357,126 @@ def reset_platform_intelligence_settings(db: Session = Depends(get_session)):
             d["key"].split(".", 1)[1]: _coerce(d["value"], d["value_type"])
             for d in PLATFORM_INTELLIGENCE_DEFAULTS
         },
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Automation Control Settings (Global Kill Switch)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+AUTOMATION_DEFAULTS: list[dict] = [
+    {
+        "key": "automation.global_pause",
+        "value": "false",
+        "value_type": "bool",
+        "label": "Pause All Automation",
+        "description": (
+            "Immediately halt all automated remediation. New incidents are still created "
+            "and triaged, but the pipeline stops before executing any runbook steps. "
+            "Incidents that would have been automated are placed in awaiting_manual state."
+        ),
+    },
+]
+
+
+def seed_automation_defaults(db: Session) -> None:
+    """Insert automation defaults if they don't already exist."""
+    for item in AUTOMATION_DEFAULTS:
+        existing = db.get(PlatformSettingModel, item["key"])
+        if existing is None:
+            db.add(PlatformSettingModel(
+                key=item["key"],
+                value=item["value"],
+                value_type=item["value_type"],
+                category="automation",
+                label=item["label"],
+                description=item["description"],
+            ))
+    db.commit()
+
+
+def is_automation_paused(db: Session) -> bool:
+    """Check whether the global automation kill switch is engaged."""
+    row = db.get(PlatformSettingModel, "automation.global_pause")
+    if row is None:
+        return False
+    return row.value.lower() in ("true", "1", "yes")
+
+
+# ── Pydantic schema ───────────────────────────────────────────────────────────
+
+class AutomationSettingsUpdate(BaseModel):
+    global_pause: Optional[bool] = None
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@public_router.get("/settings/automation")
+def get_automation_settings(db: Session = Depends(get_session)):
+    """Return automation control settings. Public — read-only, non-sensitive config."""
+    rows = db.query(PlatformSettingModel).filter(
+        PlatformSettingModel.category == "automation"
+    ).all()
+
+    if not rows:
+        seed_automation_defaults(db)
+        rows = db.query(PlatformSettingModel).filter(
+            PlatformSettingModel.category == "automation"
+        ).all()
+
+    return {
+        "category": "automation",
+        "settings": [_row_to_dict(r) for r in rows],
+    }
+
+
+@router.put("/settings/automation")
+def update_automation_settings(
+    payload: AutomationSettingsUpdate,
+    db: Session = Depends(get_session),
+):
+    """Update automation control settings. Toggling global_pause takes effect immediately."""
+    field_to_key = {
+        "global_pause": "automation.global_pause",
+    }
+
+    updates = payload.model_dump(exclude_none=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No settings provided")
+
+    applied: dict = {}
+    defaults_index = {d["key"]: d for d in AUTOMATION_DEFAULTS}
+
+    for field, new_value in updates.items():
+        db_key = field_to_key[field]
+        row = db.get(PlatformSettingModel, db_key)
+        if row is None:
+            meta = defaults_index.get(db_key, {})
+            row = PlatformSettingModel(
+                key=db_key,
+                category="automation",
+                value_type=meta.get("value_type", "str"),
+                label=meta.get("label", field),
+                description=meta.get("description", ""),
+            )
+            db.add(row)
+
+        row.value = str(new_value).lower() if isinstance(new_value, bool) else str(new_value)
+        applied[field] = new_value
+
+    db.commit()
+
+    paused = applied.get("global_pause", False)
+    logger.warning(
+        "AUTOMATION KILL SWITCH %s by operator",
+        "ENGAGED" if paused else "RELEASED",
+    )
+
+    return {
+        "saved": applied,
+        "message": (
+            "All automated remediation is now PAUSED. Incidents will queue as awaiting_manual."
+            if paused
+            else "Automated remediation resumed. New incidents will be processed normally."
+        ),
     }

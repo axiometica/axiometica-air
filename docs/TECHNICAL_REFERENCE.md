@@ -1,7 +1,7 @@
 # Axiometica AIR v2 — Complete Technical Reference
 
-> **Version:** v1.1.2 · **Last updated:** 2026-06-07  
-> A single document covering every major subsystem: monitoring, event ingestion, the 7-agent incident pipeline, workflow state, the all-clear mechanism, Celery task execution, event sourcing, WebSocket updates, the database schema, and the frontend data path.
+> **Version:** v1.6.0 · **Last updated:** 2026-06-07  
+> A single document covering every major subsystem: monitoring, event ingestion, the 8-agent incident pipeline, workflow state, the all-clear mechanism, Celery task execution, event sourcing, WebSocket updates, the database schema, and the frontend data path.
 
 ---
 
@@ -18,7 +18,7 @@
    - 4.1 [POST /api/monitoring-events](#41-post-apimonitoring-events)
    - 4.2 [EventQualificationService](#42-eventqualificationservice)
    - 4.3 [Qualification Scoring Factors](#43-qualification-scoring-factors)
-5. [The 7-Agent Incident Pipeline](#5-the-7-agent-incident-pipeline)
+5. [The 8-Agent Incident Pipeline](#5-the-8-agent-incident-pipeline)
    - 5.1 [Typed Context Schema](#51-typed-context-schema)
    - 5.2 [SentinelAgent](#52-sentinelagent)
    - 5.3 [LibrarianAgent](#53-librarianagent)
@@ -431,13 +431,13 @@ qualified   = (final_score ≥ threshold)  AND  (final_score ≥ criticality_flo
 | `high_error_rate` | 0.9× |
 | `log_error` | 0.8× |
 
-> CMDB-dependent factors (CI tier, business criticality, user count, SPOF status, SLA percent, failover) are evaluated in the **RiskAssessorAgent** (step 3 of the 7-agent pipeline) — after the incident is created. They affect the **risk score** displayed on incident cards, not the initial qualification decision.
+> CMDB-dependent factors (CI tier, business criticality, user count, SPOF status, SLA percent, failover) are evaluated in the **RiskAssessorAgent** (step 3 of the 8-agent pipeline) — after the incident is created. They affect the **risk score** displayed on incident cards, not the initial qualification decision.
 
 ---
 
-## 5. The 7-Agent Incident Pipeline
+## 5. The 8-Agent Incident Pipeline
 
-The incident pipeline is a linear sequence of 7 agents. Each agent reads from the typed `IncidentWorkflowContext`, adds its own context layer, and passes the enriched state to the next agent. The workflow engine persists state to PostgreSQL after each step.
+The incident pipeline is a linear sequence of 8 agents. Each agent reads from the typed `IncidentWorkflowContext`, adds its own context layer, and passes the enriched state to the next agent. The workflow engine persists state to PostgreSQL after each step.
 
 ```
 WorkflowState (in Celery task)
@@ -446,13 +446,14 @@ WorkflowState (in Celery task)
 ├── Step 2: LibrarianAgent     → adds ctx.cmdb        (CMDB data, environment)
 ├── Step 3: RiskAssessorAgent  → adds ctx.risk        (score 0-100, priority)
 ├── Step 4: MechanicAgent      → adds ctx.proposal    (runbook, steps, main_args)
-├── Step 5: PolicyBrokerAgent  → adds ctx.governance  (approval decision)
+├── Step 5: RunbookGenerator   → adds ctx.generated_steps (executable steps)
+├── Step 6: PolicyBrokerAgent  → adds ctx.governance  (approval decision)
 │              │
 │     [if approval_required]
 │              └── human_approval step (pause, wait for WebSocket event)
 │
-├── Step 6: ToolRegistryAgent  → runs remediation steps, updates ctx.execution_results
-└── Step 7: VerifierAgent      → adds ctx.verification (pass/fail per check)
+├── Step 7: ToolRegistryAgent  → runs remediation steps, updates ctx.execution_results
+└── Step 8: VerifierAgent      → adds ctx.verification (pass/fail per check)
 ```
 
 ### 5.1 Typed Context Schema
@@ -932,7 +933,7 @@ execute_incident_workflow.delay(str(workflow_id))
 The Celery task fetches the `WorkflowStateModel` from the database, deserializes it into a `WorkflowState` object, loads the workflow definition (from `backend/workflows/incident_v1.yaml`), and calls `WorkflowEngine.execute()`.
 
 **Why Celery:**
-- The 7-agent pipeline can take 10–120+ seconds. Running it synchronously in the API request would time out.
+- The 8-agent pipeline can take 10–120+ seconds. Running it synchronously in the API request would time out.
 - Celery workers are horizontally scalable — add more workers to process more concurrent incidents.
 - Flower provides real-time task monitoring (success/failure counts, ETA, retry state).
 

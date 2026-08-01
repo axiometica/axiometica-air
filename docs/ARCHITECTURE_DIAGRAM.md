@@ -203,7 +203,7 @@ Neo4j CMDB (separate graph database)
 
 ---
 
-## 7-Agent Pipeline Deep Dive
+## 8-Agent Pipeline Deep Dive
 
 ```
 ┌──────────────────────────────────────────────────────────────┐

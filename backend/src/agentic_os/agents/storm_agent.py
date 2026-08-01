@@ -1,7 +1,7 @@
 """
 Storm Agent
 
-Meta-orchestrator that sits ABOVE the 7-agent pipeline.
+Meta-orchestrator that sits ABOVE the 8-agent pipeline.
 Called when a correlated event storm is detected — NOT for individual incidents.
 
 Responsibilities:

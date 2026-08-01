@@ -162,7 +162,7 @@ async def lifespan(app: FastAPI):
         from agentic_os.api.routes.platform_settings import (
             seed_watcher_defaults, seed_storm_defaults,
             seed_general_defaults, seed_smtp_defaults, seed_slack_defaults,
-            seed_platform_intelligence_defaults,
+            seed_platform_intelligence_defaults, seed_automation_defaults,
         )
         _seed_db = SessionLocal()
         seed_watcher_defaults(_seed_db)
@@ -171,8 +171,9 @@ async def lifespan(app: FastAPI):
         seed_smtp_defaults(_seed_db)
         seed_slack_defaults(_seed_db)
         seed_platform_intelligence_defaults(_seed_db)
+        seed_automation_defaults(_seed_db)
         _seed_db.close()
-        logger.info("✓ Platform settings seeded (watcher + storm + general + smtp + slack + platform_intelligence)")
+        logger.info("✓ Platform settings seeded (watcher + storm + general + smtp + slack + platform_intelligence + automation)")
     except Exception as e:
         logger.warning(f"⚠ Platform settings seed failed: {e}")
 

@@ -8,7 +8,7 @@ This directory contains visual assets for the GitHub repository README and docum
 docs/screenshots/
 ├── dashboard.png              # Main incident dashboard with list and metrics
 ├── incident-detail.png        # 5-tab incident detail view
-├── agent-pipeline.png         # 7-agent pipeline flow visualization
+├── agent-pipeline.png         # 8-agent pipeline flow visualization
 ├── runbook-editor.png         # Visual runbook editor with decision nodes
 ├── cmdb-graph.png             # Neo4j force graph showing relationships
 ├── approval-queue.png         # CAB approval queue interface

@@ -1,6 +1,6 @@
 # Visual Runbook Editor
 
-**Version:** v1.2.0 · **Last updated:** June 2026  
+**Version:** v1.6.0 · **Last updated:** June 2026  
 **Audience:** ITOM admins, platform administrators, automation engineers
 
 ---

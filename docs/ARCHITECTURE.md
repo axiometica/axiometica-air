@@ -1,6 +1,6 @@
 # Axiometica AIR — System Architecture
 
-**Last updated:** 2026-06-07 (v1.1.2)
+**Last updated:** 2026-06-07 (v1.6.0)
 
 ---
 
@@ -8,7 +8,7 @@
 
 1. [System Overview](#1-system-overview)
 2. [Storm Agent — Correlated Event Meta-Orchestration](#2-storm-agent--correlated-event-meta-orchestration)
-3. [Incident Pipeline — 7-Agent Sequence](#3-incident-pipeline--7-agent-sequence)
+3. [Incident Pipeline — 8-Agent Sequence](#3-incident-pipeline--8-agent-sequence)
 4. [Watcher All-Clear Mechanism](#4-watcher-all-clear-mechanism)
 5. [Decoupled State Fields](#5-decoupled-state-fields)
 6. [Step Abort Policy](#6-step-abort-policy)
@@ -61,15 +61,16 @@ Axiometica AIR is an enterprise ITSM automation platform for autonomous incident
     (event bus)             │
                    ┌────────┴──────────┐
                    ▼                   ▼
-        StormAgent (meta)         7-Agent Pipeline
+        StormAgent (meta)         8-Agent Pipeline
         ┌───────────────────┐  ┌──────────────────────┐
         │ Storm detection   │  │ SentinelAgent        │
         │ Phase 2 expansion │  │ LibrarianAgent       │
         │ LLM hypothesis    │  │ RiskAssessor         │
         │ Neo4j topology    │  │ MechanicAgent        │
-        │ storm_hold        │  │ PolicyBrokerAgent    │
-        │ awaiting_manual   │  │ ToolRegistryAgent    │
-        └───────────────────┘  │ VerifierAgent        │
+        │ storm_hold        │  │ RunbookGenerator     │
+        │ awaiting_manual   │  │ PolicyBrokerAgent    │
+        └───────────────────┘  │ ToolRegistryAgent    │
+                               │ VerifierAgent        │
                                └──────────────────────┘
                                        ↕
 ┌──────────────────────────────────────────────────────┐
@@ -86,12 +87,12 @@ Axiometica AIR is an enterprise ITSM automation platform for autonomous incident
 
 ## 2. Storm Agent — Correlated Event Meta-Orchestration
 
-The Storm Agent is a meta-orchestrator that runs above the 7-agent pipeline. It detects when multiple incidents share a common root cause and coordinates their triage as a single unit rather than letting each trigger independent (and potentially conflicting) remediations.
+The Storm Agent is a meta-orchestrator that runs above the 8-agent pipeline. It detects when multiple incidents share a common root cause and coordinates their triage as a single unit rather than letting each trigger independent (and potentially conflicting) remediations.
 
 ### Why It Exists
 
 When a core network switch fails, it may cause 10+ downstream services to raise health-check alerts within seconds of each other. Without the Storm Agent:
-- Each incident enters the 7-agent pipeline independently
+- Each incident enters the 8-agent pipeline independently
 - Each pipeline selects a runbook (e.g., "restart service")
 - 10 simultaneous service restarts may make the outage worse
 - The actual root cause (the switch) is never addressed
@@ -134,7 +135,7 @@ After initial storm formation, a second Celery task traverses the Neo4j service 
 
 **Pipeline hold buffer**
 
-A configurable `storm.pipeline_hold_seconds` setting (default: 0, disabled) delays the start of the 7-agent pipeline after incident creation. This gives storm detection time to cluster correlated events before individual pipelines kick off, preventing redundant per-incident remediations that would be overridden by the storm anyway.
+A configurable `storm.pipeline_hold_seconds` setting (default: 0, disabled) delays the start of the 8-agent pipeline after incident creation. This gives storm detection time to cluster correlated events before individual pipelines kick off, preventing redundant per-incident remediations that would be overridden by the storm anyway.
 
 **Pre- and post-pipeline storm guards**
 
@@ -156,7 +157,7 @@ All controls are permissive by default so existing deployments are unaffected.
 
 ---
 
-## 3. Incident Pipeline — 7-Agent Sequence
+## 3. Incident Pipeline — 8-Agent Sequence
 
 Each agent in the pipeline reads the shared `IncidentWorkflowContext` dataclass written by previous agents and appends its own output fields before passing it forward. The full context is persisted to the database at each stage.
 
@@ -187,6 +188,10 @@ RiskAssessor
 MechanicAgent
   - 5-tier runbook selection waterfall (see below)
   - Attaches selected_runbook, selection_tier, confidence_score to context
+      ↓
+RunbookGeneratorAgent
+  - Generates executable runbook steps from the selected template
+  - Attaches generated_steps to context
       ↓
 PolicyBrokerAgent
   - Matches incident attributes against policy ruleset

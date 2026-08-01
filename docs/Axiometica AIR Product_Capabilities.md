@@ -2,7 +2,7 @@
 ## AI-Powered Autonomous IT Operations
 
 **Platform Capabilities — Complete Feature Reference**
-*July 2026 | 1.2.5 | Confidential*
+*July 2026 | 1.6.0 | Confidential*
 
 ---
 

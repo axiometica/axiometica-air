@@ -183,7 +183,7 @@ Response should include:
 curl http://localhost:8000/api/workflows/{workflow_id}
 ```
 
-Should show complete 7-agent reasoning trace.
+Should show complete 8-agent reasoning trace.
 
 ### Test 3: Observe Anomaly Detection
 ```bash
@@ -233,7 +233,7 @@ Backend responds with: workflow_id
 
 ### Step 3: Orchestration (5-10 seconds)
 ```
-Celery worker executes 7-agent workflow:
+Celery worker executes 8-agent workflow:
 
 1. Sentinel Agent: "CRITICAL severity anomaly"
 2. Librarian Agent: "CMDB context, blast radius, dependency graph"

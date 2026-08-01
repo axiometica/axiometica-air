@@ -156,7 +156,7 @@ export default function DemoProgressModal({ open, onClose }: Props) {
         }}>
           {done
             ? 'All 7 events submitted. The AI pipeline is processing each incident — watch the list update in real time.'
-            : 'Creating anomalies on safe containers and submitting events through the 7-agent pipeline.'}
+            : 'Creating anomalies on safe containers and submitting events through the 8-agent pipeline.'}
         </p>
 
         {/* Progress bar */}

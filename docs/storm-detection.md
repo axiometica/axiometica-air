@@ -28,7 +28,7 @@
 
 ## 1. Overview
 
-The storm feature is a **meta-orchestrator** that sits above the standard 7-agent incident pipeline. It detects **correlated event storms** — a burst of incidents across multiple resources within a short time window that suggests a shared root cause rather than independent failures.
+The storm feature is a **meta-orchestrator** that sits above the standard 8-agent incident pipeline. It detects **correlated event storms** — a burst of incidents across multiple resources within a short time window that suggests a shared root cause rather than independent failures.
 
 **Example:** A network partition causes multiple service health checks to fail simultaneously. Without storm detection each incident would enter the individual pipeline, potentially triggering separate remediations that race with one another and make the situation worse. The storm feature groups these into a single parent incident that requires CAB-level approval before any coordinated action is taken.
 
@@ -215,7 +215,7 @@ When an incident is adopted into a storm (whether at creation time via Phase 1, 
 
 ## 3. Race Condition Handling
 
-Storm detection and the normal 7-agent pipeline run concurrently. Three guards prevent double-processing:
+Storm detection and the normal 8-agent pipeline run concurrently. Three guards prevent double-processing:
 
 ### Pre-pipeline guard (execute_workflow_task)
 
@@ -362,7 +362,7 @@ All settings live in the `platform_settings` table under `category = 'storm'`. T
 
 | Key | Type | Default (DB seed) | Description |
 |-----|------|-------------------|-------------|
-| `storm.enabled` | bool | `true` | Enable/disable storm detection entirely. When disabled, all incidents go through the individual 7-agent pipeline. |
+| `storm.enabled` | bool | `true` | Enable/disable storm detection entirely. When disabled, all incidents go through the individual 8-agent pipeline. |
 | `storm.window_seconds` | int | `120` | Look-back window in seconds for Phase 1 detection. Increase for slower-developing storms. |
 | `storm.min_incidents` | int | `3` | Minimum incidents in the detection window to trigger a storm. Lower = more sensitive; higher = fewer false positives. |
 | `storm.min_resources` | int | `2` | Minimum distinct resources affected. Ensures storms are multi-resource events, not a single noisy service. |

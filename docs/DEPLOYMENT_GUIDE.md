@@ -1,6 +1,6 @@
 # Axiometica AIR v2 — Deployment Guide
 
-**Platform version:** v1.1.2  
+**Platform version:** v1.6.0  
 **Last updated:** 2026-07-17
 
 ---
@@ -41,7 +41,7 @@ Axiometica AIR v1.0.0 runs as a nine-container Docker Compose stack.
                            │ REST / WebSocket
 ┌──────────────────────────▼──────────────────────────────────────────┐
 │  agentic_os_backend   (FastAPI, port 8000, 2 uvicorn workers)        │
-│  • 7-agent incident pipeline (SentinelAgent → VerifierAgent)        │
+│  • 8-agent incident pipeline (SentinelAgent → VerifierAgent)        │
 │  • StormDetectionService (background task on every event)           │
 │  • Connector Hub webhook ingest + 7 certified adapters              │
 │  • Slack ChatOps (Socket Mode or webhook)                           │

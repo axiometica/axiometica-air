@@ -235,7 +235,7 @@ The Connector Hub lets any webhook-capable monitoring tool feed into the platfor
 
 Supported connectors: Datadog, Dynatrace, Splunk, Prometheus/Alertmanager, PagerDuty, Zabbix, Grafana, Generic Webhook, ServiceNow (bidirectional).
 
-Copy the generated webhook URL and configure your monitoring tool to POST alerts to it. All inbound events are normalised, risk-scored, and processed through the same 7-agent pipeline as watcher-detected events.
+Copy the generated webhook URL and configure your monitoring tool to POST alerts to it. All inbound events are normalised, risk-scored, and processed through the same 8-agent pipeline as watcher-detected events.
 
 ---
 

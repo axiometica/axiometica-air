@@ -9,6 +9,7 @@ import {
   getSlackSettings, updateSlackSettings, testSlackConnection, testSlackCredentials,
   getPlatformIntelligenceSettings, updatePlatformIntelligenceSettings,
   resetPlatformIntelligenceSettings, PlatformIntelligenceSetting,
+  getAutomationSettings, updateAutomationSettings, AutomationSetting,
   listEventTypeTaxonomy, EventTypeTaxonomyEntry,
 } from '../services/api'
 import { IconCheck, IconAlertTriangle } from './icons'
@@ -104,6 +105,10 @@ export default function Settings() {
   const [smtpSaving, setSmtpSaving] = useState(false)
   const [smtpError, setSmtpError] = useState<string | null>(null)
 
+  // Automation control (kill switch)
+  const [automationSettings, setAutomationSettings] = useState<AutomationSetting[]>([])
+  const [automationSaving, setAutomationSaving] = useState(false)
+
   // Slack ChatOps settings
   const [slackEdits, setSlackEdits] = useState<Record<string, any>>({})
   const [slackLoading, setSlackLoading] = useState(false)
@@ -120,6 +125,7 @@ export default function Settings() {
     loadSmtpSettings()
     loadSlackSettings()
     loadPiSettings()
+    loadAutomationSettings()
     listEventTypeTaxonomy({ enabled_only: true })
       .then(res => setEventTypeOptions(res.data))
       .catch(() => { /* taxonomy fetch failure shouldn't block editing the rest of qualification settings */ })
@@ -177,6 +183,28 @@ export default function Settings() {
     if (key in generalEdits) return generalEdits[key]
     const s = generalSettings.find(r => r.key === key)
     return s ? s.value : undefined
+  }
+
+  // ── Automation control (kill switch) ────────────────────────────────────────
+
+  const loadAutomationSettings = async () => {
+    try {
+      const res = await getAutomationSettings()
+      setAutomationSettings(res.data.settings)
+    } catch { /* non-fatal */ }
+  }
+
+  const automationPaused = !!automationSettings.find(
+    s => s.key === 'automation.global_pause'
+  )?.value
+
+  const handleToggleAutomation = async () => {
+    try {
+      setAutomationSaving(true)
+      await updateAutomationSettings({ global_pause: !automationPaused })
+      await loadAutomationSettings()
+    } catch { /* non-fatal */ }
+    finally { setAutomationSaving(false) }
   }
 
   // ── SMTP settings ─────────────────────────────────────────────────────────────
@@ -1479,6 +1507,61 @@ export default function Settings() {
               </div>
             </div>
           ) : null}
+        </SettingSection>
+
+        {/* ── Automation Control (Kill Switch) ────────────────────────── */}
+        <SettingSection
+          title="Automation Control"
+          isExpanded={expandedSections.has('automation')}
+          onToggle={() => toggleSection('automation')}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: DS.txtS, lineHeight: 1.6 }}>
+              Emergency control to halt all automated remediation across the platform.
+              Incidents are still created and triaged, but no runbook steps are executed.
+              Affected incidents are placed in Awaiting Manual state.
+            </p>
+            <div style={{
+              padding: '1rem 1.25rem',
+              borderRadius: 10,
+              border: `1px solid ${automationPaused ? 'rgba(239,68,68,0.4)' : 'rgba(16,185,129,0.3)'}`,
+              backgroundColor: automationPaused ? 'rgba(239,68,68,0.06)' : 'rgba(16,185,129,0.04)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+            }}>
+              <div>
+                <div style={{
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  color: automationPaused ? '#f87171' : '#34d399',
+                  marginBottom: 2,
+                }}>
+                  {automationPaused ? 'Automation Paused' : 'Automation Active'}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: DS.txtS }}>
+                  {automationPaused
+                    ? 'All incident pipelines are halted before execution. Toggle to resume.'
+                    : 'Incident pipelines are processing normally.'}
+                </div>
+              </div>
+              <button
+                onClick={handleToggleAutomation}
+                disabled={automationSaving}
+                style={{
+                  ...primaryBtn,
+                  backgroundColor: automationPaused ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                  color: automationPaused ? '#34d399' : '#f87171',
+                  border: `1px solid ${automationPaused ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                  minWidth: 140,
+                  opacity: automationSaving ? 0.6 : 1,
+                }}
+              >
+                {automationSaving ? 'Saving...' : automationPaused ? 'Resume Automation' : 'Pause All'}
+              </button>
+            </div>
+          </div>
         </SettingSection>
 
         {/* ── Storm Agent Settings ────────────────────────────────────── */}

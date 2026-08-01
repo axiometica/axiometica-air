@@ -2,7 +2,7 @@
 Demo-mode API routes.
 
 Provides a single endpoint to trigger 7 proven demo incidents through the
-full 7-agent pipeline. Only active when DEMO_MODE=true. Creates real
+full 8-agent pipeline. Only active when DEMO_MODE=true. Creates real
 anomalies on safe containers (via watcher /exec API) so runbook remediation
 succeeds end-to-end.
 
@@ -272,7 +272,7 @@ async def trigger_demo_incidents(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_session),
 ):
-    """Fire 7 proven demo incidents through the full 7-agent pipeline.
+    """Fire 7 proven demo incidents through the full 8-agent pipeline.
 
     Creates anomalies and submits events at 10-second intervals in the
     background. Returns immediately so the UI stays responsive.

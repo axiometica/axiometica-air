@@ -1,8 +1,8 @@
-# Axiometica AIR v1.2.0
+# Axiometica AIR v1.6.0
 
 > Fundamental Intelligence for Autonomous Operations — enterprise AI-driven IT ops platform with autonomous incident detection, triage, enrichment, remediation, and resolution with operator-controlled governance.
 
-[![Status](https://img.shields.io/badge/Status-v1.2.0-brightgreen)]()
+[![Status](https://img.shields.io/badge/Status-v1.6.0-brightgreen)]()
 [![License](https://img.shields.io/badge/License-Source%20Available-blue)](./LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)]()
@@ -37,7 +37,7 @@ Most "AI-powered" ITSM tools are decades-old ticketing systems with a chatbot ad
 
 | Aspect | Legacy ITSM + AI | Axiometica AIR |
 |--------|---|---|
-| **Architecture** | Ticket queue → engineer assigns → AI assists | Event stream → 7 agents investigate & act immediately |
+| **Architecture** | Ticket queue → engineer assigns → AI assists | Event stream → 8 agents investigate & act immediately |
 | **Incident Response** | Engineers wait for alerts; AI provides suggestions | Agents detect, triage, score, remediate autonomously |
 | **Decision Flow** | Sequential manual steps with AI widgets | Parallel agent pipelines with built-in governance gates |
 | **Time to Resolution** | Hours to days (manually dependent) | Minutes (autonomous + approval gates) |
@@ -51,6 +51,7 @@ Most "AI-powered" ITSM tools are decades-old ticketing systems with a chatbot ad
 - **Librarian Agent** — Enriches with CMDB context automatically (not after a ticket is created)
 - **Risk Assessor** — Scores impact instantly; no manual estimation delay
 - **Mechanic Agent** — Selects the best runbook based on historical outcomes
+- **Runbook Generator** — Generates executable runbook steps from the selected template
 - **Policy Broker** — Applies governance rules before execution (CAB gates for high-risk)
 - **Tool Registry** — Executes remediation with step-level abort policies
 - **Verifier Agent** — Confirms resolution; feeds learning back into the system
@@ -61,7 +62,7 @@ Most "AI-powered" ITSM tools are decades-old ticketing systems with a chatbot ad
 
 ### What It Does
 
-Watch your entire infrastructure with **Sentinel** (kernel-level eBPF monitoring), detect anomalies with the **Watcher** service, correlate related incidents with **Storm Detection**, and automatically remediate using a **7-agent AI pipeline** — all with built-in approval workflows for critical changes.
+Watch your entire infrastructure with **Sentinel** (kernel-level eBPF monitoring), detect anomalies with the **Watcher** service, correlate related incidents with **Storm Detection**, and automatically remediate using an **8-agent AI pipeline** — all with built-in approval workflows for critical changes.
 
 **In Simple Terms:**
 - 🔍 **See everything** — kernel syscalls, container health, resource usage, logs
@@ -127,14 +128,17 @@ Watch your entire infrastructure with **Sentinel** (kernel-level eBPF monitoring
 - **Storm Overview UI:** Redesigned incident detail tabs — Overview shows storm timeline and affected resources; AI Insights tab surfaces the LLM hypothesis and confidence score
 - Parent incidents use `awaiting_manual` state for operator coordination before any remediation is attempted
 
-### 3. **7-Agent AI Pipeline**
+### 3. **8-Agent AI Pipeline**
 Automatically triage and remediate incidents using specialized AI agents:
 
 ```
 [Incident] → [1. Sentinel] → [2. Librarian] → [3. RiskAssessor] → [4. Mechanic]
                               (classify)       (enrich CMDB)      (score)        (runbook)
                                                                                       ↓
-                                                                              [5. PolicyBroker]
+                                                                        [5. RunbookGenerator]
+                                                                           (generate steps)
+                                                                                      ↓
+                                                                              [6. PolicyBroker]
                                                                                    (govern)
                                                                                       ↓
                                                             ┌─ [CAB Approval Gate] ─ approval_required?
@@ -142,10 +146,10 @@ Automatically triage and remediate incidents using specialized AI agents:
                                                            YES (wait) / NO (proceed)
                                                             │
                                                             ↓
-                                                    [6. ToolRegistry]
+                                                    [7. ToolRegistry]
                                                     (execute runbook)
                                                             ↓
-                                                   [7. VerifierAgent]
+                                                   [8. VerifierAgent]
                                                    (validate outcome)
                                                             ↓
                                                       [Resolved]
@@ -156,9 +160,10 @@ Automatically triage and remediate incidents using specialized AI agents:
 2. **Librarian Agent** — Enriches with CMDB context, dependencies, service ownership
 3. **Risk Assessor** — Scores impact 0-100 (9-factor model: criticality, blast radius, urgency, etc.)
 4. **Mechanic Agent** — Selects optimal runbook from 5-tier ranking (exact match → CMDB → historical → LLM → fallback)
-5. **Policy Broker** — Applies governance rules; marks high-risk for approval queue
-6. **Tool Registry** — Executes approved runbook steps; handles step-level abort policies
-7. **Verifier Agent** — Confirms the incident is resolved; sets resolution_source
+5. **Runbook Generator** — Generates executable runbook steps from the selected template
+6. **Policy Broker** — Applies governance rules; marks high-risk for approval queue
+7. **Tool Registry** — Executes approved runbook steps; handles step-level abort policies
+8. **Verifier Agent** — Confirms the incident is resolved; sets resolution_source
 
 ### 4. **Operator-Controlled Governance**
 - **CAB Approval Workflow:** Halts execution for high-risk changes pending operator sign-off
@@ -230,7 +235,7 @@ Axiometica AIR watches your infrastructure in real-time and autonomously manages
 1. **Sentinel** (eBPF) reads every syscall on the host kernel — sees all containers
 2. **Watcher** detects anomalies (syscall bombs, health failures, CPU/memory/disk/network spikes, error patterns)
 3. **Storm Agent** detects correlated event bursts across multiple resources and groups them into a single parent incident — preventing redundant remediations when the root cause is shared
-4. **7-agent pipeline** triages, enriches, risk-scores, proposes, governs, executes, and verifies each incident
+4. **8-agent pipeline** triages, enriches, risk-scores, proposes, generates, governs, executes, and verifies each incident
 5. **CAB approval queue** halts execution for operator sign-off on high-risk changes; storm parents use `awaiting_manual` — the operator coordinates investigation before any remediation is attempted
 6. **All-clear mechanism** closes incidents when the watcher confirms the condition has normalised
 
@@ -250,16 +255,17 @@ sentinel_senses  ──► watcher_brain ──► POST /api/monitoring-events
                                         │ (≥3 incidents,       │
                                         │  ≥2 resources)       │
                                         ▼                     ▼
-                                  StormAgent          7-agent pipeline
-                                  (LLM + Neo4j)   ┌──────────────────────────────┐
-                                        │         │ 1. SentinelAgent  (classify) │
-                                        │         │ 2. LibrarianAgent (CMDB)     │
-                                        │         │ 3. RiskAssessor   (0-100)    │
-                                        │         │ 4. MechanicAgent  (runbook)  │
-                                        │         │ 5. PolicyBroker   (govern)   │
-                                        │         │ 6. ToolRegistry   (execute)  │
-                                        │         │ 7. VerifierAgent  (verify)   │
-                              storm_hold children  └──────────────────────────────┘
+                                  StormAgent          8-agent pipeline
+                                  (LLM + Neo4j)   ┌───────────────────────────────────┐
+                                        │         │ 1. SentinelAgent      (classify)  │
+                                        │         │ 2. LibrarianAgent     (CMDB)      │
+                                        │         │ 3. RiskAssessor       (0-100)     │
+                                        │         │ 4. MechanicAgent      (runbook)   │
+                                        │         │ 5. RunbookGenerator   (generate)  │
+                                        │         │ 6. PolicyBroker       (govern)    │
+                                        │         │ 7. ToolRegistry       (execute)   │
+                                        │         │ 8. VerifierAgent      (verify)    │
+                              storm_hold children  └───────────────────────────────────┘
                               awaiting_manual (parent)
                                         │
                                         └──────────┬──────────┘
@@ -486,5 +492,5 @@ The full license text is in [LICENSE](./LICENSE). [NOTICE](./NOTICE) contains th
 
 - **GitHub:** https://github.com/axiometica/axiometica-air
 - **Branch:** main
-- **Version:** v1.2.0 — June 2026
+- **Version:** v1.6.0 — June 2026
 - **Status:** ✅ Production Ready
