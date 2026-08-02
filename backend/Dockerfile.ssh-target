@@ -10,8 +10,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir /run/sshd
 
-RUN useradd -m -s /bin/bash testuser \
+RUN apt-get update && apt-get install -y sudo && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -s /bin/bash testuser \
     && echo "testuser:testpass123" | chpasswd \
+    && echo "testuser ALL=(ALL) NOPASSWD: /usr/bin/kill, /usr/bin/pkill, /usr/bin/killall" >> /etc/sudoers.d/testuser \
+    && chmod 0440 /etc/sudoers.d/testuser \
     && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config \
     && sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
     && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config

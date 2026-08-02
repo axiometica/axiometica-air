@@ -3646,7 +3646,8 @@ class ToolRegistryAgent(Agent):
             _use_pull = False
 
         if _use_pull:
-            kill_cmd = f"pkill -{signal} {process_name}"
+            sig_flag = signal.replace("SIG", "")
+            kill_cmd = f"sudo pkill -{sig_flag} {process_name}"
             logger.info(f"[TOOL] process_kill via pull dispatch: {kill_cmd}")
             return _dispatch_via_pull(
                 watcher_id=watcher_id,
