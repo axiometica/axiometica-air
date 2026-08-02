@@ -2254,6 +2254,7 @@ class ToolRegistryAgent(Agent):
             # Diagnostic steps can deposit values (e.g. "top_process") that later steps
             # automatically receive via parameter substitution — no template syntax needed.
             step_outputs: Dict[int, Dict] = {}
+            step_outputs["_watcher"] = {"adapter_mode": _adapter_mode, "dispatch_mode": _dispatch_mode}
 
             # Tracks whether a diagnostic step (e.g. top_processes) has actively
             # discovered the offending process.  When True, process_kill always uses
@@ -4567,6 +4568,18 @@ class ToolRegistryAgent(Agent):
             m2 = re.search(r'(\d+\.?\d*)[%\s]+us', out)
             if m2:
                 return {"cpu_percent": float(m2.group(1))}
+            # ps -eo pcpu --no-headers: one float per line (per-process CPU %).
+            # Sum all values to get total CPU utilisation.
+            _cpu_total = 0.0
+            _cpu_lines = 0
+            for _line in out.strip().splitlines():
+                try:
+                    _cpu_total += float(_line.strip())
+                    _cpu_lines += 1
+                except ValueError:
+                    pass
+            if _cpu_lines > 0:
+                return {"cpu_percent": round(_cpu_total, 1)}
             return {}
 
         # ── HTTP health check ─────────────────────────────────────────────────
@@ -4603,27 +4616,46 @@ class ToolRegistryAgent(Agent):
         if tool_key in ("top_processes", "host_top_processes", "win_top_processes"):
             for line in out.split('\n'):
                 cols = line.split()
+                # ps aux: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND (11+ cols)
+                # USER is non-numeric, PID is at index 1
+                if len(cols) >= 11 and not cols[0].isdigit() and cols[1].isdigit():
+                    try:
+                        cpu_pct = float(cols[2])
+                        return {
+                            "top_process":          cols[10],
+                            "top_process_name":     cols[10],
+                            "top_process_pid":      int(cols[1]),
+                            "top_cpu_percent":      cpu_pct,
+                            "top_process_cpu_pct":  cpu_pct,
+                            "top_mem_percent":      float(cols[3]),
+                        }
+                    except (ValueError, IndexError):
+                        pass
                 # GNU top/ps -f: PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND (12 cols)
                 if len(cols) >= 12 and cols[0].isdigit():
                     try:
+                        cpu_pct = float(cols[8])
                         return {
-                            "top_process":     cols[11],
-                            "top_process_pid": int(cols[0]),
-                            "top_cpu_percent": float(cols[8]),
-                            "top_mem_percent": float(cols[9]),
+                            "top_process":          cols[11],
+                            "top_process_name":     cols[11],
+                            "top_process_pid":      int(cols[0]),
+                            "top_cpu_percent":      cpu_pct,
+                            "top_process_cpu_pct":  cpu_pct,
+                            "top_mem_percent":      float(cols[9]),
                         }
                     except (ValueError, IndexError):
                         pass
                 # busybox `top -bn1`: PID PPID USER STAT VSZ %VSZ CPU %CPU COMMAND (9 cols)
-                # Used by the catalog's default docker top_processes command — Alpine/slim
-                # images ship busybox top, not the GNU ps/top format above.
                 elif len(cols) >= 9 and cols[0].isdigit():
                     try:
+                        cpu_pct = float(cols[7].rstrip('%'))
                         return {
-                            "top_process":     cols[8],
-                            "top_process_pid": int(cols[0]),
-                            "top_cpu_percent": float(cols[7].rstrip('%')),
-                            "top_mem_percent": float(cols[5].rstrip('%')),
+                            "top_process":          cols[8],
+                            "top_process_name":     cols[8],
+                            "top_process_pid":      int(cols[0]),
+                            "top_cpu_percent":      cpu_pct,
+                            "top_process_cpu_pct":  cpu_pct,
+                            "top_mem_percent":      float(cols[5].rstrip('%')),
                         }
                     except (ValueError, IndexError):
                         pass

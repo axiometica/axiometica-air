@@ -522,6 +522,8 @@ async def execute_editor_runbook(data: dict, db: Session = Depends(get_session))
 
     results:      list = []
     step_outputs: dict = {}   # keyed by BOTH int-idx and str step-id
+    # Inject watcher context so decision nodes can branch on adapter_mode
+    step_outputs["_watcher"] = {"adapter_mode": adapter_mode, "dispatch_mode": dispatch_mode}
     t0 = time.time()
     idx = 0  # monotonic execution counter
 

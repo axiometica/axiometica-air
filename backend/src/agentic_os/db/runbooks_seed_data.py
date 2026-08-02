@@ -63,8 +63,9 @@ RUNBOOKS = [
         "id": "550e8400-e29b-41d4-a716-446655440101",
         "name": "High CPU — Kill Runaway or Scale Up",
         "description": (
-            "Handles elevated CPU. If a rogue subprocess is the cause, kills it and restarts "
-            "the service. If the main service process is legitimately overloaded, scales up replicas."
+            "Handles elevated CPU. If a rogue subprocess is the cause, kills it. "
+            "If the main service process is legitimately overloaded and the target is "
+            "Kubernetes, scales up replicas. SSH/Docker targets skip scale-up."
         ),
         "event_type": "infrastructure.compute.cpu_high",
         "service": None,
@@ -74,8 +75,11 @@ RUNBOOKS = [
         "confidence": 0.82,
         "blast_radius": 2,
         # Flat arrays derived from the visual-editor graph (source_steps).
-        # Graph: Check CPU → Get Top Process → DECISION(top_process_cpu_pct>60)
-        #        → true: Kill Runaway | false: Scale Up → Verify CPU → Notify
+        # Graph: Check CPU → Top Process → DECISION(cpu>60)
+        #        → true: Kill → Wait → Verify → Resolve → Notify
+        #        → false: DECISION(adapter_mode=="kubernetes")
+        #            → true: Scale Up → Wait → Verify → Resolve → Notify
+        #            → false: Verify → Resolve → Notify
         "diagnostics": [
             _diag(1, "Check CPU Usage",
                   "Measure current CPU utilisation across all cores",
@@ -108,9 +112,10 @@ RUNBOOKS = [
             "steps": [
                 {"id": "diag_cpu", "name": "Check CPU Usage", "tool": "check_cpu", "type": "diagnostic", "args": {}, "output_capture": {"cpu_pct": "$.cpu_percent"}},
                 {"id": "diag_top_proc", "name": "Get Top Process Info", "tool": "top_processes", "type": "diagnostic", "args": {"sort": "cpu", "limit": "5"}, "output_capture": {"top_process_pid": "$.top_process_pid", "top_process_name": "$.top_process", "top_process_cpu_pct": "$.top_cpu_percent"}},
-                {"id": "dec_runaway", "name": "Runaway Process Causing It?", "type": "decision", "condition": "top_process_cpu_pct > 60", "on_true": "action_kill", "on_false": "action_scale"},
+                {"id": "dec_runaway", "name": "Runaway Process Causing It?", "type": "decision", "condition": "top_process_cpu_pct > 60", "on_true": "action_kill", "on_false": "dec_adapter"},
                 {"id": "action_kill", "name": "Kill Runaway Process", "tool": "process_kill", "type": "action", "args": {"pid": "{{top_process_pid}}", "signal": "SIGTERM", "process_name": "{{top_process_name}}"}},
                 {"id": "wait_after_kill", "name": "Wait for CPU Recovery", "type": "wait", "duration_seconds": 15},
+                {"id": "dec_adapter", "name": "Kubernetes Target?", "type": "decision", "condition": "adapter_mode == \"kubernetes\"", "on_true": "action_scale", "on_false": "verify_cpu"},
                 {"id": "action_scale", "name": "Scale Up Service", "tool": "scale_up", "type": "action", "args": {"replicas": "2"}},
                 {"id": "wait_after_scale", "name": "Wait for Instances to Start", "type": "wait", "duration_seconds": 30},
                 {"id": "verify_cpu", "name": "Verify CPU Normal", "tool": "check_cpu", "type": "verification", "args": {}, "check": "less_than", "value": "80", "metric": "cpu_after", "output_capture": {"cpu_after": "$.cpu_percent"}},
@@ -122,9 +127,11 @@ RUNBOOKS = [
                 {"source": "diag_cpu",        "target": "diag_top_proc",   "sourceHandle": None},
                 {"source": "diag_top_proc",   "target": "dec_runaway",     "sourceHandle": None},
                 {"source": "dec_runaway",     "target": "action_kill",     "sourceHandle": "true"},
-                {"source": "dec_runaway",     "target": "action_scale",    "sourceHandle": "false"},
+                {"source": "dec_runaway",     "target": "dec_adapter",     "sourceHandle": "false"},
                 {"source": "action_kill",     "target": "wait_after_kill", "sourceHandle": None},
                 {"source": "wait_after_kill", "target": "verify_cpu",      "sourceHandle": None},
+                {"source": "dec_adapter",     "target": "action_scale",    "sourceHandle": "true"},
+                {"source": "dec_adapter",     "target": "verify_cpu",      "sourceHandle": "false"},
                 {"source": "action_scale",    "target": "wait_after_scale","sourceHandle": None},
                 {"source": "wait_after_scale","target": "verify_cpu",      "sourceHandle": None},
                 {"source": "verify_cpu",      "target": "incident_update_resolve", "sourceHandle": None},

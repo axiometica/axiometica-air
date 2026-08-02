@@ -182,7 +182,7 @@ APPROVED_ACTIONS = [
         "command": "docker exec {target} sh -c 'top -bn{interval_sec} | head -20'",
         "command_variants": {
             "docker":     "docker exec {target} sh -c 'top -bn{interval_sec} | head -20'",
-            "ssh":        "ssh {target} sh -c 'top -bn{interval_sec} | head -20'",
+            "ssh":        "ssh {target} ps -eo pcpu --no-headers",
             "kubernetes": "kubectl exec {target} -n {namespace} -- sh -c 'top -bn{interval_sec} | head -20'",
             "vcenter":    "sh -c 'top -bn{interval_sec} | head -20'",
             "aws_ssm":    "sh -c 'top -bn{interval_sec} | head -20'",
