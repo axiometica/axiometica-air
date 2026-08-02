@@ -235,6 +235,16 @@ class SSHAdapter(ExecutionAdapter):
              timeout: int = 12, mode: str = "target") -> ExecResult:
         if target not in self._targets:
             return ExecResult.error(f"SSH target '{target}' not configured", command)
+
+        # Strip redundant ssh prefix — paramiko already handles the SSH transport.
+        # Command variants like "ssh {target} sh -c '...'" are written for Docker
+        # adapters that shell out; here we just need the inner command.
+        import re as _re
+        _ssh_prefix = _re.match(r'^ssh\s+\S+\s+', command)
+        if _ssh_prefix:
+            command = command[_ssh_prefix.end():]
+            logger.debug(f"[SSH] Stripped ssh prefix, running: {command}")
+
         client = None
         try:
             client = self._connect(target)
