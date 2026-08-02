@@ -779,7 +779,7 @@ class ExecTaskResultBody(BaseModel):
     returncode: int = 0
 
 
-@router.get(
+@public_router.get(
     "/monitoring/watchers/{watcher_id}/exec-tasks",
     tags=["Monitoring"],
     status_code=200,
@@ -800,7 +800,7 @@ def claim_exec_task(
     return task
 
 
-@router.post(
+@public_router.post(
     "/monitoring/watchers/{watcher_id}/exec-tasks/{task_id}/result",
     tags=["Monitoring"],
     status_code=200,

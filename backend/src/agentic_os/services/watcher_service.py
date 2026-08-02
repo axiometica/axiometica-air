@@ -3005,7 +3005,7 @@ class WatcherService:
         Claims one task at a time, executes it via the adapter, and reports results."""
         if not self._watcher_id:
             return
-        base = self.api_base.rstrip("/")
+        base = self.api_base_url.rstrip("/")
         url = f"{base}/api/monitoring/watchers/{self._watcher_id}/exec-tasks"
         while True:
             try:
