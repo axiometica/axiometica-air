@@ -101,10 +101,28 @@ class SSHAdapter(ExecutionAdapter):
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
+    def _resolve_db_credential(self, hostname: str):
+        """Look up an SSH credential from the database by hostname pattern match."""
+        try:
+            from agentic_os.db.database import SessionLocal
+            from agentic_os.api.routes.ssh_credentials import resolve_credential
+            db = SessionLocal()
+            try:
+                cred = resolve_credential(hostname, db)
+                if cred:
+                    logger.info(f"[SSH] Resolved DB credential '{cred.name}' for host '{hostname}'")
+                    return cred
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.debug(f"[SSH] DB credential lookup failed (falling back to env): {exc}")
+        return None
+
     def _connect(self, target_name: str):
         """Return a connected paramiko SSHClient."""
         try:
             import paramiko
+            import io
         except ImportError:
             raise RuntimeError(
                 "paramiko not installed. Add it to requirements.txt: paramiko>=3.4"
@@ -133,12 +151,27 @@ class SSHAdapter(ExecutionAdapter):
             "timeout": 10,
             "banner_timeout": 10,
         }
+
         if target.key_path:
             kwargs["key_filename"] = target.key_path
         elif target.password:
             kwargs["password"] = target.password
             kwargs["look_for_keys"] = False
             kwargs["allow_agent"] = False
+        else:
+            # No credentials from env — try the DB credential store
+            db_cred = self._resolve_db_credential(target.host)
+            if db_cred:
+                kwargs["username"] = db_cred.username
+                kwargs["port"] = db_cred.port
+                kwargs["pkey"] = paramiko.RSAKey.from_private_key(
+                    io.StringIO(db_cred.private_key)
+                )
+            else:
+                logger.warning(
+                    f"[SSH] No credentials for '{target_name}' — "
+                    f"attempting agent/default key"
+                )
 
         client.connect(**kwargs)
         return client

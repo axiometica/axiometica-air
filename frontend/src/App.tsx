@@ -27,12 +27,13 @@ import UserManagement from './components/UserManagement'
 import StormsDashboard from './components/StormsDashboard'
 import PlatformIntelligencePage from './components/PlatformIntelligencePage'
 import EventTypesPage from './components/EventTypesPage'
+import SSHCredentials from './components/SSHCredentials'
 import ChatPanel from './components/ChatPanel'
 import { useCurrentUser } from './hooks/useCurrentUser'
 import ErrorBoundary from './components/ErrorBoundary'
 import DemoBanner from './components/DemoBanner'
 
-type View = 'dashboard' | 'incident' | 'change' | 'details' | 'approvals' | 'policies' | 'admin' | 'settings' | 'runbooks' | 'runbook-editor' | 'runbook-browser' | 'approved-actions' | 'action-editor' | 'events' | 'incidents' | 'cmdb' | 'monitoring' | 'connectors' | 'users' | 'storms' | 'platform-intelligence' | 'event-types'
+type View = 'dashboard' | 'incident' | 'change' | 'details' | 'approvals' | 'policies' | 'admin' | 'settings' | 'runbooks' | 'runbook-editor' | 'runbook-browser' | 'approved-actions' | 'action-editor' | 'events' | 'incidents' | 'cmdb' | 'monitoring' | 'connectors' | 'users' | 'storms' | 'platform-intelligence' | 'event-types' | 'credentials'
 
 export default function App() {
   const { user, loading: authLoading, logout, refetch, isAdmin, isITOMAdmin, isDemo } = useCurrentUser()
@@ -262,6 +263,10 @@ export default function App() {
 
         {view === 'event-types' && (isITOMAdmin || isDemo) && (
           <EventTypesPage />
+        )}
+
+        {view === 'credentials' && (isAdmin || isITOMAdmin) && (
+          <SSHCredentials />
         )}
         </ErrorBoundary>
         </div>

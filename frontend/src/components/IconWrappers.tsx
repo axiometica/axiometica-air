@@ -28,6 +28,7 @@ import {
   IconBrain,
   IconTags,
   IconTestPipe,
+  IconKey,
 } from './icons'
 
 export interface IconProps {
@@ -132,6 +133,10 @@ export const PlatformIntelIcon = ({ className = 'w-5 h-5', size = 20, strokeWidt
 
 export const EventTypesIcon = ({ className = 'w-5 h-5', size = 20, strokeWidth = 2 }: IconProps) => (
   <IconTags size={size} strokeWidth={strokeWidth} className={className} />
+)
+
+export const CredentialsIcon = ({ className = 'w-5 h-5', size = 20, strokeWidth = 2 }: IconProps) => (
+  <IconKey size={size} strokeWidth={strokeWidth} className={className} />
 )
 
 // Status Icons

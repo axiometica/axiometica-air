@@ -16,6 +16,7 @@ import {
   StormIcon,
   PlatformIntelIcon,
   EventTypesIcon,
+  CredentialsIcon,
   type IconProps,
 } from './IconWrappers'
 import { countPendingRecommendations, getNavBadgeCounts } from '../services/api'
@@ -133,6 +134,7 @@ export default function Sidebar({
     { divider: true },
     { icon: AdminIcon,          label: 'Admin',              view: 'admin',               allowedRoles: ADMIN_ONLY },
     { icon: UsersNavIcon,       label: 'Users',              view: 'users',               allowedRoles: ADMIN_ONLY },
+    { icon: CredentialsIcon,    label: 'Credentials',        view: 'credentials',         allowedRoles: ['admin', 'itom_admin'] },
     { icon: SettingsIcon,       label: 'Settings',           view: 'settings',            allowedRoles: SETTINGS_VIEW },
   ]
 

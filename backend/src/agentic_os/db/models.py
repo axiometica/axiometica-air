@@ -1306,3 +1306,27 @@ class SyntheticMonitorModel(Base):
     __table_args__ = (
         Index('idx_synthetic_monitors_enabled', 'enabled'),
     )
+
+
+class SSHCredentialModel(Base):
+    """
+    Named SSH credential — stores an AES-encrypted private key that the
+    SSH adapter resolves at connection time by matching target hostname
+    against host_pattern (fnmatch glob, e.g. "web-*.prod.internal").
+    """
+    __tablename__ = "ssh_credentials"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name          = Column(String(100), nullable=False, unique=True, index=True)
+    host_pattern  = Column(String(255), nullable=False, index=True)
+    username      = Column(String(100), nullable=False, default="root")
+    private_key   = Column(EncryptedString(16000), nullable=False)
+    port          = Column(Integer, nullable=False, default=22)
+    description   = Column(Text, nullable=True)
+    enabled       = Column(Boolean, nullable=False, default=True, server_default='true')
+    created_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index('idx_ssh_credentials_enabled', 'enabled'),
+    )

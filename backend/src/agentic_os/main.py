@@ -100,6 +100,7 @@ from agentic_os.api.routes import chat as chat_routes
 from agentic_os.api.routes import slack_webhook
 from agentic_os.api.routes import synthetics as synthetics_routes
 from agentic_os.api.routes import demo as demo_routes
+from agentic_os.api.routes import ssh_credentials as ssh_credentials_routes
 from agentic_os.api.ws import websocket_endpoint, global_events_endpoint
 from agentic_os.services.neo4j_init import seed_neo4j_database
 
@@ -385,6 +386,7 @@ app.include_router(notification_teams.router, prefix="/api", tags=["Notification
 app.include_router(admin.router,           prefix="/api/admin", tags=["Admin"],        dependencies=_admin)
 app.include_router(admin_logs_route.router,                     tags=["Admin Logs"],   dependencies=_admin)
 app.include_router(llm_settings.router,                         tags=["LLM Settings"], dependencies=_admin)
+app.include_router(ssh_credentials_routes.router, prefix="/api", tags=["SSH Credentials"], dependencies=_admin)
 
 # Root endpoint
 @app.get("/", tags=["Root"])

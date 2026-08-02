@@ -1548,3 +1548,57 @@ export interface DemoTriggerResult {
 export const triggerDemoIncidents = () =>
   axios.post<{ triggered: number; results: DemoTriggerResult[] }>(`${API_BASE_URL}/demo/trigger-incidents`)
 
+// ─────────────────────────────────────────────────────────────────
+// SSH Credentials
+// ─────────────────────────────────────────────────────────────────
+
+export interface SSHCredential {
+  id: string
+  name: string
+  host_pattern: string
+  username: string
+  has_key: boolean
+  port: number
+  description: string | null
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SSHCredentialCreate {
+  name: string
+  host_pattern: string
+  username: string
+  private_key: string
+  port: number
+  description?: string
+}
+
+export interface SSHCredentialUpdate {
+  name?: string
+  host_pattern?: string
+  username?: string
+  private_key?: string
+  port?: number
+  description?: string
+  enabled?: boolean
+}
+
+export const getSSHCredentials = () =>
+  axios.get<{ credentials: SSHCredential[] }>(`${API_BASE_URL}/settings/ssh-credentials`)
+
+export const createSSHCredential = (data: SSHCredentialCreate) =>
+  axios.post<SSHCredential>(`${API_BASE_URL}/settings/ssh-credentials`, data)
+
+export const updateSSHCredential = (id: string, data: SSHCredentialUpdate) =>
+  axios.put<SSHCredential>(`${API_BASE_URL}/settings/ssh-credentials/${id}`, data)
+
+export const deleteSSHCredential = (id: string) =>
+  axios.delete<{ deleted: boolean; name: string }>(`${API_BASE_URL}/settings/ssh-credentials/${id}`)
+
+export const testSSHCredential = (id: string, hostname: string, port?: number) =>
+  axios.post<{ success: boolean; output?: string; error?: string }>(
+    `${API_BASE_URL}/settings/ssh-credentials/${id}/test`,
+    { hostname, port },
+  )
+
