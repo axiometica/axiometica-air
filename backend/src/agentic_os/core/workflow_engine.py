@@ -79,6 +79,31 @@ class WorkflowEngine:
                 state.transition_state(LifecycleState.FAILED, f'Step not found: {current_step_id}')
                 break
 
+            # ── Global automation kill switch ─────────────────────────────
+            # Let triage agents run so the incident is fully classified;
+            # halt only before the tool_registry step executes runbook actions.
+            if current_step_id == "tool_registry" and state.workflow_type and state.workflow_type.value == "incident":
+                try:
+                    from agentic_os.api.routes.platform_settings import is_automation_paused
+                    if is_automation_paused(self.db):
+                        state.context["kill_switch"] = True
+                        state.add_trace(
+                            "Pipeline halted before execution: global automation pause is active. "
+                            "An operator must resume automation or resolve this incident manually."
+                        )
+                        state.transition_state(
+                            LifecycleState.AWAITING_MANUAL,
+                            "Global automation pause — runbook execution skipped",
+                        )
+                        self.workflow_repo.save(state)
+                        logger.warning(
+                            f"Kill switch engaged for {state.workflow_id} — "
+                            f"halted before tool_registry"
+                        )
+                        break
+                except Exception as _ks_err:
+                    logger.warning(f"Kill switch check failed (proceeding): {_ks_err}")
+
             # Execute step
             state.add_trace(f"Executing step: {step.name} ({current_step_id})")
 

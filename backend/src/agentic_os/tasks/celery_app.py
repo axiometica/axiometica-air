@@ -233,33 +233,6 @@ def execute_workflow_task(self, workflow_id: str, workflow_type: str):
                     f"(proceeding normally): {_pre_err}"
                 )
 
-        # ── Global automation kill switch ────────────────────────────────────
-        if workflow_type == "incident":
-            try:
-                from agentic_os.api.routes.platform_settings import is_automation_paused
-                if is_automation_paused(db):
-                    logger.warning(
-                        f"[{self.request.id}] Global automation paused — "
-                        f"skipping pipeline for {workflow_id}"
-                    )
-                    state.lifecycle_state = LifecycleState.AWAITING_MANUAL
-                    state.context["kill_switch"] = True
-                    state.add_trace(
-                        "Pipeline halted: global automation pause is active. "
-                        "An operator must resume automation or resolve this incident manually."
-                    )
-                    repo.save(state)
-                    db.close()
-                    return {
-                        "status": "paused_kill_switch",
-                        "workflow_id": workflow_id,
-                    }
-            except Exception as _ks_err:
-                logger.warning(
-                    f"[{self.request.id}] Kill switch check failed "
-                    f"(proceeding normally): {_ks_err}"
-                )
-
         # Execute workflow — explicit loop avoids asyncio.run() clearing the
         # thread-local event loop used by billiard's ForkPoolWorker result pipe.
         logger.info(f"[{self.request.id}] Starting workflow execution...")
