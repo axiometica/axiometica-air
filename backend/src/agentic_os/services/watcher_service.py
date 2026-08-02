@@ -2501,7 +2501,7 @@ class WatcherService:
                             and self.poll_count % self.discovery_interval_polls == 0
                         ):
                             try:
-                                summary = self._run_discovery_via_api(container_stats)
+                                summary = self._run_discovery_via_api(None)
                                 logger.info(
                                     f"🔍 [DISCOVERY] Poll #{self.poll_count}: "
                                     f"{summary.get('updated', 0)} updated, "
