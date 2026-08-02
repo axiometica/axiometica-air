@@ -3033,21 +3033,39 @@ class WatcherService:
 
     async def _poll_exec_tasks(self):
         """Poll the platform for pending execution tasks assigned to this watcher.
-        Claims one task at a time, executes it via the adapter, and reports results."""
+        Claims one task at a time, executes it via the adapter, and reports results.
+        After draining, does brief follow-up polls to catch multi-step runbook tasks
+        that the backend queues after receiving each step's result."""
         if not self._watcher_id:
             return
         base = self.api_base_url.rstrip("/")
         url = f"{base}/api/monitoring/watchers/{self._watcher_id}/exec-tasks"
+        executed_any = False
         while True:
             try:
                 async with httpx.AsyncClient(timeout=10.0, headers=self._api_headers) as client:
                     resp = await client.get(url)
                     if resp.status_code == 204:
-                        return
-                    if resp.status_code != 200:
+                        if not executed_any:
+                            return
+                        # Just finished task(s) — backend may be queuing the next step.
+                        # Brief follow-up poll to avoid waiting a full monitoring cycle.
+                        for _retry in range(8):
+                            await asyncio.sleep(2)
+                            try:
+                                resp2 = await client.get(url)
+                                if resp2.status_code == 200:
+                                    task = resp2.json()
+                                    break
+                            except Exception:
+                                pass
+                        else:
+                            return
+                    elif resp.status_code != 200:
                         logger.warning(f"[EXEC-POLL] Unexpected status {resp.status_code}")
                         return
-                    task = resp.json()
+                    else:
+                        task = resp.json()
             except Exception as e:
                 logger.debug(f"[EXEC-POLL] Failed to poll exec tasks: {e}")
                 return
@@ -3082,6 +3100,7 @@ class WatcherService:
                         "returncode": returncode,
                     })
                 logger.info(f"[EXEC-POLL] Reported result for task {task_id}: success={success}")
+                executed_any = True
             except Exception as e:
                 logger.error(f"[EXEC-POLL] Failed to report result for task {task_id}: {e}")
                 return
