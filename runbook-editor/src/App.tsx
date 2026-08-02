@@ -1767,6 +1767,33 @@ function StepRow({ r }: { r: StepResult }) {
   );
 }
 
+function ExecutingSpinner() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const ss = String(elapsed % 60).padStart(2, '0');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', gap: 16 }}>
+      <span className="lre-spin" style={{ fontSize: 28, color: '#3b82f6' }}>⟳</span>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Executing on target…</div>
+      <div style={{ fontSize: 11, color: '#64748b' }}>
+        Dispatching steps via watcher — this may take a minute for SSH targets
+      </div>
+      <div style={{ fontFamily: 'monospace', fontSize: 18, color: '#3b82f6', fontWeight: 700, letterSpacing: '.1em' }}>
+        {mm}:{ss}
+      </div>
+      <div style={{ display: 'flex', gap: 5, alignItems: 'flex-end', height: 10 }}>
+        <span className="lre-dot" style={{ height: 8 }} />
+        <span className="lre-dot" style={{ height: 8 }} />
+        <span className="lre-dot" style={{ height: 8 }} />
+      </div>
+    </div>
+  );
+}
+
 function RunningRow({ step }: { step: StepResult }) {
   return (
     <div className="lre-step-enter" style={{ padding: '10px 15px', borderBottom: '1px solid #1a1d26', background: '#120d00' }}>
@@ -1828,8 +1855,8 @@ function LiveResultPanel({ result, displayedResults, runningStep, running, onClo
 
         {/* Status badge */}
         {running && (
-          <span style={{ fontSize: 10, color: '#10b981', background: '#061a12', border: '1px solid #0d4030', borderRadius: 10, padding: '2px 8px' }}>
-            Contacting…
+          <span style={{ fontSize: 10, color: '#3b82f6', background: '#0d1a2e', border: '1px solid #1e3a5f', borderRadius: 10, padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span className="lre-spin" style={{ fontSize: 10 }}>⟳</span> Executing…
           </span>
         )}
         {!running && runningStep && (
@@ -1858,11 +1885,7 @@ function LiveResultPanel({ result, displayedResults, runningStep, running, onClo
 
       {/* ── Steps (progressive) ── */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
-        {running && !result && (
-          <div style={{ padding: 24, color: '#64748b', fontSize: 12, textAlign: 'center' }}>
-            Contacting watcher…
-          </div>
-        )}
+        {running && !result && <ExecutingSpinner />}
 
         {/* Settled steps */}
         {displayedResults.map((r, i) => <StepRow key={i} r={r} />)}
