@@ -1665,6 +1665,7 @@ class SyntheticMonitorRepository:
         from agentic_os.db.models import SyntheticMonitorModel  # avoid circular
         return {
             "id":              str(row.id),
+            "watcher_name":    row.watcher_name,
             "name":            row.name,
             "har_filename":    row.har_filename,
             "script":          row.script,
@@ -1684,14 +1685,22 @@ class SyntheticMonitorRepository:
         rows = self.db.query(SyntheticMonitorModel).order_by(SyntheticMonitorModel.created_at).all()
         return [self._row_to_dict(r) for r in rows]
 
-    def list_enabled(self) -> list[dict]:
+    def list_by_watcher(self, watcher_name: str) -> list[dict]:
         from agentic_os.db.models import SyntheticMonitorModel
         rows = (
             self.db.query(SyntheticMonitorModel)
-            .filter(SyntheticMonitorModel.enabled == True)
+            .filter(SyntheticMonitorModel.watcher_name == watcher_name)
             .order_by(SyntheticMonitorModel.created_at)
             .all()
         )
+        return [self._row_to_dict(r) for r in rows]
+
+    def list_enabled(self, watcher_name: Optional[str] = None) -> list[dict]:
+        from agentic_os.db.models import SyntheticMonitorModel
+        q = self.db.query(SyntheticMonitorModel).filter(SyntheticMonitorModel.enabled == True)
+        if watcher_name:
+            q = q.filter(SyntheticMonitorModel.watcher_name == watcher_name)
+        rows = q.order_by(SyntheticMonitorModel.created_at).all()
         return [self._row_to_dict(r) for r in rows]
 
     def get(self, monitor_id: str) -> Optional[dict]:
@@ -1706,6 +1715,7 @@ class SyntheticMonitorRepository:
         import uuid as _uuid
         row = SyntheticMonitorModel(
             id=_uuid.uuid4(),
+            watcher_name=data.get("watcher_name", "watcher_brain"),
             name=data["name"],
             har_filename=data.get("har_filename"),
             script=data.get("script"),
@@ -1726,7 +1736,7 @@ class SyntheticMonitorRepository:
         ).first()
         if not row:
             return None
-        for field in ("name", "har_filename", "script", "pages_json", "credentials_enc", "schedule_mins", "enabled"):
+        for field in ("watcher_name", "name", "har_filename", "script", "pages_json", "credentials_enc", "schedule_mins", "enabled"):
             if field in data:
                 setattr(row, field, data[field])
         row.updated_at = datetime.utcnow()

@@ -1290,7 +1290,8 @@ class SyntheticMonitorModel(Base):
     __tablename__ = "synthetic_monitors"
 
     id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name            = Column(String(200), nullable=False, unique=True, index=True)
+    watcher_name    = Column(String(100), nullable=False, index=True, server_default='watcher_brain')
+    name            = Column(String(200), nullable=False, index=True)
     har_filename    = Column(String(500), nullable=True)
     script          = Column(Text, nullable=True)
     pages_json      = Column(Text, nullable=True)   # JSON-serialized ParsedPage[] — lets the edit UI
@@ -1306,6 +1307,8 @@ class SyntheticMonitorModel(Base):
 
     __table_args__ = (
         Index('idx_synthetic_monitors_enabled', 'enabled'),
+        Index('idx_synthetic_monitors_watcher', 'watcher_name'),
+        Index('idx_synthetic_monitors_watcher_name', 'watcher_name', 'name', unique=True),
     )
 
 

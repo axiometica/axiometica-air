@@ -1090,9 +1090,11 @@ export default function SyntheticsPage() {
 export function MonitorModal({
   monitor,
   onClose,
+  watcherName,
 }: {
   monitor: SyntheticMonitor | null
   onClose: () => void
+  watcherName?: string
 }) {
   const isEdit = !!monitor
 
@@ -1208,6 +1210,7 @@ export function MonitorModal({
     setSaving(true)
     try {
       const payload = {
+        watcher_name: watcherName || monitor?.watcher_name || undefined,
         name: name.trim(),
         har_filename: harFilename || undefined,
         script: script || undefined,

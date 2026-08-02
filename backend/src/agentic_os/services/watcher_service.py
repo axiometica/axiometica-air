@@ -3026,6 +3026,7 @@ class WatcherService:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(
                     f"{self.api_base_url}/api/synthetics",
+                    params={"watcher_name": self.watcher_name},
                     headers=self._api_headers,
                 )
                 if resp.status_code != 200:

@@ -22,7 +22,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -36,6 +36,7 @@ router = APIRouter()
 # ── Pydantic schemas ───────────────────────────────────────────────────────────
 
 class SyntheticMonitorCreate(BaseModel):
+    watcher_name: str = Field("watcher_brain", max_length=100)
     name: str = Field(..., min_length=1, max_length=200)
     har_filename: Optional[str] = None
     script: Optional[str] = None
@@ -99,9 +100,12 @@ def _row_with_plain_credentials(row: dict) -> dict:
 # ── CRUD ───────────────────────────────────────────────────────────────────────
 
 @router.get("/synthetics", tags=["Synthetics"])
-def list_synthetics(db: Session = Depends(get_session)):
+def list_synthetics(
+    watcher_name: Optional[str] = Query(None, description="Filter by watcher name"),
+    db: Session = Depends(get_session),
+):
     repo = SyntheticMonitorRepository(db)
-    rows = repo.list_all()
+    rows = repo.list_by_watcher(watcher_name) if watcher_name else repo.list_all()
     return [_row_with_plain_credentials(r) for r in rows]
 
 
@@ -109,6 +113,7 @@ def list_synthetics(db: Session = Depends(get_session)):
 def create_synthetic(payload: SyntheticMonitorCreate, db: Session = Depends(get_session)):
     repo = SyntheticMonitorRepository(db)
     data = {
+        "watcher_name":    payload.watcher_name,
         "name":            payload.name,
         "har_filename":    payload.har_filename,
         "script":          payload.script,

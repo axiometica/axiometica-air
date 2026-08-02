@@ -1608,7 +1608,7 @@ function WatcherMetricsDashboard({ watcher }: { watcher: WatcherInfo }) {
 
 // ── Synthetic Monitors section ────────────────────────────────────────────────
 
-function SyntheticMonitorsSection() {
+function SyntheticMonitorsSection({ watcherName }: { watcherName: string }) {
   const [monitors, setMonitors]           = useState<SyntheticMonitor[]>([])
   const [loading, setLoading]             = useState(true)
   const [error, setError]                 = useState<string | null>(null)
@@ -1622,14 +1622,14 @@ function SyntheticMonitorsSection() {
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await listSyntheticMonitors()
+      const res = await listSyntheticMonitors(watcherName)
       setMonitors(res.data)
     } catch {
       setError('Failed to load synthetic monitors')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [watcherName])
 
   useEffect(() => { load() }, [load])
 
@@ -1816,6 +1816,7 @@ function SyntheticMonitorsSection() {
       {showModal && (
         <MonitorModal
           monitor={editingMonitor}
+          watcherName={watcherName}
           onClose={() => { setShowModal(false); load() }}
         />
       )}
@@ -1964,7 +1965,7 @@ export default function MonitoringSetup() {
 
           <ContainerMonitoringSection watcherName={selected.watcher_name} />
           <ExternalChecksSection watcherName={selected.watcher_name} />
-          <SyntheticMonitorsSection />
+          <SyntheticMonitorsSection watcherName={selected.watcher_name} />
           <LogMonitorsSetup watcherName={selected.watcher_name} />
         </>
       )}

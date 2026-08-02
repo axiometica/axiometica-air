@@ -598,6 +598,7 @@ export interface ConfigHistoryEntry {
 
 export interface SyntheticMonitor {
   id: string
+  watcher_name: string
   name: string
   har_filename: string | null
   script: string | null

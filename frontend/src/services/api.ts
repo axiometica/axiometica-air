@@ -1503,6 +1503,7 @@ export const deleteNotificationTeam = (teamId: string) =>
 import type { SyntheticMonitor } from '../types'
 
 export interface SyntheticMonitorPayload {
+  watcher_name?: string
   name: string
   har_filename?: string
   script?: string
@@ -1512,8 +1513,10 @@ export interface SyntheticMonitorPayload {
   enabled?: boolean
 }
 
-export const listSyntheticMonitors = () =>
-  axios.get<SyntheticMonitor[]>(`${API_BASE_URL}/synthetics`)
+export const listSyntheticMonitors = (watcherName?: string) =>
+  axios.get<SyntheticMonitor[]>(`${API_BASE_URL}/synthetics`, {
+    params: watcherName ? { watcher_name: watcherName } : undefined,
+  })
 
 export const getSyntheticMonitor = (id: string) =>
   axios.get<SyntheticMonitor>(`${API_BASE_URL}/synthetics/${id}`)
