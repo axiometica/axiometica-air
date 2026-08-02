@@ -94,7 +94,7 @@ class WatcherService:
         self.poll_interval = poll_interval
         self.anomaly_threshold = anomaly_threshold
         # Cache last known container per process — handles short-lived bursting
-        # processes that exit before _find_process_container can run pgrep.
+        # processes that exit before _find_process_containers can run pgrep.
         self._process_container_cache: dict = {}
 
         # ── Environment detection ─────────────────────────────────────────────
@@ -881,7 +881,7 @@ class WatcherService:
         "kube-",            # any kube-* K8s infrastructure process
     )
 
-    def detect_anomaly(self) -> Tuple[bool, Optional[str], int, Optional[str]]:
+    def detect_anomaly(self) -> Tuple[bool, Optional[str], int, List[str]]:
         """
         Detect high syscall intensity anomalies using the sentinel_senses eBPF container.
 
@@ -889,30 +889,26 @@ class WatcherService:
         It traces raw_syscalls:sys_enter which fires for every syscall on the HOST — meaning
         it sees ALL processes across ALL containers, not just its own.
 
-        After identifying the top offending process we then locate which container it
-        actually lives in (via pgrep) so the incident is attributed to the right resource.
-
-        Phase 1 Optimization: Sample syscalls every N polls to reduce CPU overhead.
+        After identifying the top offending process we locate ALL containers it
+        is running in (via pgrep, filtering out zombies) so each gets its own
+        incident.
 
         Returns:
-            (is_anomaly, process_name, syscall_count, container_name)
+            (is_anomaly, process_name, syscall_count, affected_containers)
+            affected_containers is a list of container names (may be >1).
         """
-        # ── Sentinel guard — skip syscall monitoring when Sentinel is not configured ──
         if not self.sentinel_container:
-            return False, None, 0, None
+            return False, None, 0, []
 
-        # Phase 1: Skip syscall collection on light polls (sample every N polls)
         if self.poll_count % self.syscall_sample_interval != 0:
             logger.debug(f"[SYSCALL SAMPLE] Skipping collection on poll #{self.poll_count} (sampling every {self.syscall_sample_interval})")
-            return False, None, 0, None
+            return False, None, 0, []
 
-        # Run bpftrace once in sentinel_senses — it sees the whole host
-        telemetry = self.get_kernel_telemetry()   # defaults to self.sentinel_container
+        telemetry = self.get_kernel_telemetry()
         if not telemetry:
             logger.debug("⚠️  [SYSCALL] No telemetry from sentinel_senses (bpftrace unavailable?)")
-            return False, None, 0, None
+            return False, None, 0, []
 
-        # Filter out known system/infra processes (exact match + prefix match)
         filtered = {
             p: c for p, c in telemetry.items()
             if p not in self.SYSCALL_EXCLUDE
@@ -920,119 +916,111 @@ class WatcherService:
         }
         if not filtered:
             logger.debug("✓ [SYSCALL] Only system processes in telemetry window")
-            return False, None, 0, None
+            return False, None, 0, []
 
         top_proc = max(filtered, key=filtered.get)
         count = filtered[top_proc]
         logger.info(f"📍 [SYSCALL] Top user process: {top_proc} ({count} syscalls/5s), threshold={self.anomaly_threshold}")
 
         if count > self.anomaly_threshold:
-            # Identify which container the process belongs to.
-            # Bursting processes (e.g. dd with sleep intervals) may have already exited
-            # by the time bpftrace returns. Retry pgrep every 300ms for up to 3s to
-            # catch the process during its next burst, then fall back to the cache,
-            # then sentinel_container as last resort.
             import time as _time
-            container = None
+            matches: List[Tuple[str, int]] = []
             for _attempt in range(10):
-                container = self._find_process_container(top_proc)
-                if container:
-                    self._process_container_cache[top_proc] = container
+                matches = self._find_process_containers(top_proc)
+                if matches:
+                    for cname, _ in matches:
+                        self._process_container_cache[top_proc] = cname
                     break
                 _time.sleep(0.3)
-            if not container:
-                container = self._process_container_cache.get(top_proc) or self.sentinel_container
-                if top_proc in self._process_container_cache:
-                    logger.info(f"[PROCESS HUNT] '{top_proc}' not found live — using cached container '{container}'")
+
+            if matches:
+                containers = [c for c, _ in matches]
+            else:
+                cached = self._process_container_cache.get(top_proc)
+                if cached:
+                    logger.info(f"[PROCESS HUNT] '{top_proc}' not found live — using cached container '{cached}'")
+                    containers = [cached]
+                else:
+                    containers = [self.sentinel_container]
+
             logger.warning(
-                f"🚨 [SYSCALL ANOMALY] '{top_proc}' in '{container}': "
+                f"🚨 [SYSCALL ANOMALY] '{top_proc}' in {containers}: "
                 f"{count} syscalls/5s (threshold: {self.anomaly_threshold})"
             )
-            return True, top_proc, count, container
+            return True, top_proc, count, containers
 
         logger.debug(f"✓ [SYSCALL] No anomaly — max={count} (threshold={self.anomaly_threshold})")
-        return False, None, 0, None
+        return False, None, 0, []
 
-    def _find_process_container(self, process_name: str) -> Optional[str]:
+    @staticmethod
+    def _count_live_pids(container: str, process_name: str, use_adapter, adapter) -> int:
+        """Count non-zombie PIDs matching *process_name* inside *container*."""
+        if use_adapter:
+            r = adapter.exec(container, f"pgrep -x {process_name}", timeout=5)
+            pids = [p.strip() for p in (r.stdout or "").splitlines() if p.strip()] if r.success else []
+        else:
+            result = subprocess.run(
+                ["docker", "exec", container, "pgrep", "-x", process_name],
+                capture_output=True, text=True, timeout=5,
+            )
+            pids = [p.strip() for p in result.stdout.splitlines() if p.strip()] if result.returncode == 0 else []
+        if not pids:
+            return 0
+        # Filter out zombies: read /proc/<pid>/stat — field 3 is state char
+        live = 0
+        for pid in pids:
+            try:
+                if use_adapter:
+                    st = adapter.exec(container, f"cat /proc/{pid}/stat", timeout=3)
+                    line = st.stdout.strip() if st.success else ""
+                else:
+                    sr = subprocess.run(
+                        ["docker", "exec", container, "cat", f"/proc/{pid}/stat"],
+                        capture_output=True, text=True, timeout=3,
+                    )
+                    line = sr.stdout.strip() if sr.returncode == 0 else ""
+                # Format: "pid (comm) state ..."  — state is after the last ')'
+                state_field = line.rpartition(")")[2].strip().split()[0] if ")" in line else ""
+                if state_field != "Z":
+                    live += 1
+            except Exception:
+                live += 1  # err on the side of counting
+        return live
+
+    def _find_process_containers(self, process_name: str) -> List[Tuple[str, int]]:
         """
-        Find which running container a named process belongs to.
+        Find ALL containers where *process_name* is running (non-zombie).
 
-        Runs `pgrep -c <name>` inside every monitored container (exact name match)
-        and returns the container with the HIGHEST process count.  This prevents
-        a false attribution when the same process name exists in multiple containers
-        (e.g. neo4j appearing before redis in `docker ps` order).
-
-        Falls back to a single-hit search if pgrep -c is not available (older images).
+        Returns a list of (container_name, live_pid_count) sorted by count
+        descending.  An empty list means the process was not found anywhere.
         """
         containers = self.get_all_containers()
-        best_container: Optional[str] = None
-        best_count: int = 0
-        fallback_container: Optional[str] = None  # first container with returncode 0
-
+        results: List[Tuple[str, int]] = []
         use_adapter = self.adapter.adapter_name != "docker"
 
         for container in containers:
-            # Sentinel uses hostPID=true and sees all node processes — skip it
-            # so it never gets falsely attributed as the source container.
             if container.startswith("sentinel"):
                 continue
             try:
-                if use_adapter:
-                    # K8s / SSH / vCenter — route through the execution adapter so
-                    # the right transport (kubectl exec, ssh, etc.) is used instead
-                    # of Docker CLI, which is not available / irrelevant in these modes.
-                    r1 = self.adapter.exec(container, f"pgrep -c -x {process_name}", timeout=5)
-                    if r1.success and r1.stdout.strip().isdigit():
-                        count = int(r1.stdout.strip())
-                    else:
-                        r2 = self.adapter.exec(container, f"pgrep -x {process_name}", timeout=5)
-                        if not r2.success:
-                            continue
-                        pids = [p for p in r2.stdout.strip().splitlines() if p.strip()]
-                        count = len(pids) if pids else 1
-                else:
-                    # Docker mode — use docker exec directly (fastest path)
-                    # First try procps-style pgrep -c (count mode, not supported by busybox/Alpine)
-                    result = subprocess.run(
-                        ["docker", "exec", container, "pgrep", "-c", "-x", process_name],
-                        capture_output=True, text=True, timeout=5
-                    )
-                    if result.returncode == 0:
-                        try:
-                            count = int(result.stdout.strip())
-                        except ValueError:
-                            count = 1
-                    else:
-                        # Either "not found" or busybox/Alpine (no -c flag).
-                        result2 = subprocess.run(
-                            ["docker", "exec", container, "pgrep", "-x", process_name],
-                            capture_output=True, text=True, timeout=5
-                        )
-                        if result2.returncode != 0:
-                            continue
-                        pids = [p for p in result2.stdout.strip().splitlines() if p.strip()]
-                        count = len(pids) if pids else 1
-
+                count = self._count_live_pids(container, process_name, use_adapter, self.adapter)
+                if count == 0:
+                    continue
                 logger.debug(
-                    f"[PROCESS HUNT] '{process_name}' in '{container}': {count} PIDs"
+                    f"[PROCESS HUNT] '{process_name}' in '{container}': {count} live PIDs"
                 )
-                if fallback_container is None:
-                    fallback_container = container
-                if count > best_count:
-                    best_count = count
-                    best_container = container
+                results.append((container, count))
             except Exception:
                 continue
 
-        if best_container:
+        results.sort(key=lambda x: x[1], reverse=True)
+        if results:
             logger.info(
-                f"[PROCESS HUNT] '{process_name}' -> '{best_container}' "
-                f"({best_count} PIDs, highest across {len(containers)} containers)"
+                f"[PROCESS HUNT] '{process_name}' found in {len(results)} container(s): "
+                + ", ".join(f"{c}({n})" for c, n in results)
             )
-            return best_container
-
-        logger.debug(f"[PROCESS HUNT] '{process_name}' not found in any container")
-        return None
+        else:
+            logger.debug(f"[PROCESS HUNT] '{process_name}' not found in any container")
+        return results
 
     def create_incident_alert(self, process: str, syscall_count: int, container: str = None) -> Dict[str, Any]:
         """
@@ -2412,7 +2400,7 @@ class WatcherService:
                     # ── Adapter-aware monitoring ──────────────────────────────────
                     # Docker mode: full container introspection via Docker socket.
                     # SSH / K8s / vCenter / SSM mode: metrics via adapter.get_metrics().
-                    is_syscall_anomaly, process, count, anomaly_container = self.detect_anomaly()
+                    is_syscall_anomaly, process, count, anomaly_containers = self.detect_anomaly()
 
                     if self.adapter.adapter_name == "docker":
                         # ── Docker path (existing behaviour) ─────────────────────────
@@ -2627,9 +2615,10 @@ class WatcherService:
                     # Used for (a) all-clear logic and (b) stale counter resets.
                     currently_anomalous: set = set()
                     current_anomaly_keys: set = set()
-                    if is_syscall_anomaly and anomaly_container:
-                        currently_anomalous.add(anomaly_container)
-                        current_anomaly_keys.add(f"{anomaly_container}:high_syscall_intensity")
+                    if is_syscall_anomaly and anomaly_containers:
+                        for _ac in anomaly_containers:
+                            currently_anomalous.add(_ac)
+                            current_anomaly_keys.add(f"{_ac}:high_syscall_intensity")
                     for _cname, _atype, _ in all_anomalies:
                         currently_anomalous.add(_cname)
                         current_anomaly_keys.add(f"{_cname}:{_atype}")
@@ -2716,72 +2705,65 @@ class WatcherService:
                     # ──────────────────────────────────────────────────────────────────
 
                     # ── Handle syscall anomalies (highest priority) ───────────────────
+                    # Process each affected container independently so concurrent
+                    # anomalies in different containers each get their own incident.
                     if is_syscall_anomaly:
-                        consecutive_count = self._increment_anomaly_count(anomaly_container, "high_syscall_intensity")
                         self.last_anomaly_process = process
+                        for anomaly_container in anomaly_containers:
+                            consecutive_count = self._increment_anomaly_count(anomaly_container, "high_syscall_intensity")
 
-                        if consecutive_count < self.min_consecutive_polls:
-                            # Not sustained long enough — observe quietly
-                            logger.info(
-                                f"👀 [WATCHING] {anomaly_container}: syscall spike "
-                                f"{count} ({consecutive_count}/{self.min_consecutive_polls} consecutive polls)"
-                            )
-                            self.write_status("watching", "high_syscall_intensity", process, count)
+                            if consecutive_count < self.min_consecutive_polls:
+                                logger.info(
+                                    f"👀 [WATCHING] {anomaly_container}: syscall spike "
+                                    f"{count} ({consecutive_count}/{self.min_consecutive_polls} consecutive polls)"
+                                )
+                                self.write_status("watching", "high_syscall_intensity", process, count)
 
-                        elif anomaly_container in self._active_workflow_ids:
-                            # An open incident already exists for this container
-                            # (from a previous anomaly). Don't open a duplicate.
-                            logger.info(
-                                f"📊 [ONGOING] Incident already open for '{anomaly_container}' "
-                                f"— suppressing duplicate syscall event"
-                            )
-                            self.write_status("incident_ongoing", "high_syscall_intensity", process, count)
+                            elif anomaly_container in self._active_workflow_ids:
+                                logger.info(
+                                    f"📊 [ONGOING] Incident already open for '{anomaly_container}' "
+                                    f"— suppressing duplicate syscall event"
+                                )
+                                self.write_status("incident_ongoing", "high_syscall_intensity", process, count)
 
-                        elif self._resource_in_cooldown(anomaly_container):
-                            self.write_status("cooldown", "high_syscall_intensity", process, count)
+                            elif self._resource_in_cooldown(anomaly_container):
+                                self.write_status("cooldown", "high_syscall_intensity", process, count)
 
-                        else:
-                            # Sustained + no active incident + not in cooldown → fire
-                            logger.warning(
-                                f"\n🚨 [SUSTAINED SYSCALL] '{process}' in '{anomaly_container}': "
-                                f"{count} syscalls over {consecutive_count} polls"
-                            )
-                            self.active_incident_id = self.generate_incident_id()
-                            self.anomaly_start_time = datetime.utcnow()
-                            alert = self.create_incident_alert(process, count, anomaly_container)
-
-                            success, event_id, wf_id = await self.submit_monitoring_event_to_platform(
-                                event_type="high_syscall_intensity",
-                                resource_name=anomaly_container,
-                                raw_criticality=self.event_type_severity.get("high_syscall_intensity", "critical"),
-                                alert_payload=alert,
-                                signal_value=float(count),
-                                signal_threshold=float(self.anomaly_threshold),
-                                anomaly_process=process,
-                            )
-
-                            if success:
-                                self._set_resource_cooldown(anomaly_container)
-                                self._reset_anomaly_count(anomaly_container, "high_syscall_intensity")
-                                if wf_id:
-                                    # Incident created or deduped — track it
-                                    self.active_conditions[anomaly_container] = "high_syscall_intensity"
-                                    self._active_workflow_ids[anomaly_container] = wf_id
-                                    self.write_status("event_submitted", "high_syscall_intensity", process, count)
-                                else:
-                                    # Event submitted but scored below threshold — no incident
-                                    # opened. Do NOT set active_conditions: the platform has no
-                                    # open incident to guard, so we should not block future re-fires
-                                    # after the cooldown.  Cooldown is already set above to prevent
-                                    # immediate spam.
-                                    logger.info(
-                                        f"⚠️  [DISMISSED] {anomaly_container}/high_syscall_intensity: "
-                                        f"event submitted but scored below threshold — "
-                                        f"cooldown active, will retry after {self.cooldown_seconds}s"
-                                    )
-                                    self.write_status("event_submitted", "high_syscall_intensity", process, count)
                             else:
-                                self.write_status("event_submission_failed", "high_syscall_intensity", process, count)
+                                logger.warning(
+                                    f"\n🚨 [SUSTAINED SYSCALL] '{process}' in '{anomaly_container}': "
+                                    f"{count} syscalls over {consecutive_count} polls"
+                                )
+                                self.active_incident_id = self.generate_incident_id()
+                                self.anomaly_start_time = datetime.utcnow()
+                                alert = self.create_incident_alert(process, count, anomaly_container)
+
+                                success, event_id, wf_id = await self.submit_monitoring_event_to_platform(
+                                    event_type="high_syscall_intensity",
+                                    resource_name=anomaly_container,
+                                    raw_criticality=self.event_type_severity.get("high_syscall_intensity", "critical"),
+                                    alert_payload=alert,
+                                    signal_value=float(count),
+                                    signal_threshold=float(self.anomaly_threshold),
+                                    anomaly_process=process,
+                                )
+
+                                if success:
+                                    self._set_resource_cooldown(anomaly_container)
+                                    self._reset_anomaly_count(anomaly_container, "high_syscall_intensity")
+                                    if wf_id:
+                                        self.active_conditions[anomaly_container] = "high_syscall_intensity"
+                                        self._active_workflow_ids[anomaly_container] = wf_id
+                                        self.write_status("event_submitted", "high_syscall_intensity", process, count)
+                                    else:
+                                        logger.info(
+                                            f"⚠️  [DISMISSED] {anomaly_container}/high_syscall_intensity: "
+                                            f"event submitted but scored below threshold — "
+                                            f"cooldown active, will retry after {self.cooldown_seconds}s"
+                                        )
+                                        self.write_status("event_submitted", "high_syscall_intensity", process, count)
+                                else:
+                                    self.write_status("event_submission_failed", "high_syscall_intensity", process, count)
 
                     # ── Handle container / infra anomalies ───────────────────────────
                     # Processed independently of syscall anomalies — each condition type
