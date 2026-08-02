@@ -514,7 +514,11 @@ async def execute_editor_runbook(data: dict, db: Session = Depends(get_session))
 
     # Resolve watcher URL + adapter + dispatch strategy
     watcher_base, adapter_mode, dispatch_mode, watcher_id = _resolve_watcher_info(watcher_name)
-    logger.info(f"[EXECUTE-EDITOR] target={target} watcher={watcher_base} adapter={adapter_mode} dispatch={dispatch_mode} graph_edges={len(edges)}")
+
+    # Test runs have no real workflow — generate a synthetic ID so pull dispatch can queue tasks
+    import uuid as _uuid
+    test_workflow_id = str(_uuid.uuid4())
+    logger.info(f"[EXECUTE-EDITOR] target={target} watcher={watcher_base} adapter={adapter_mode} dispatch={dispatch_mode} graph_edges={len(edges)} test_workflow={test_workflow_id}")
 
     results:      list = []
     step_outputs: dict = {}   # keyed by BOTH int-idx and str step-id
@@ -608,6 +612,7 @@ async def execute_editor_runbook(data: dict, db: Session = Depends(get_session))
                 fresh_result = ToolRegistryAgent._execute_tool(
                     tool_key, args, target, watcher_base, adapter_mode,
                     dispatch_mode=dispatch_mode, watcher_id=watcher_id,
+                    workflow_id=test_workflow_id,
                 )
                 verify_raw   = fresh_result.get("raw_output") or fresh_result.get("output") or ""
                 fresh_struct = fresh_result.get("structured") or {}
@@ -662,6 +667,7 @@ async def execute_editor_runbook(data: dict, db: Session = Depends(get_session))
                 step_result = ToolRegistryAgent._execute_tool(
                     tool_key, args, target, watcher_base, adapter_mode,
                     dispatch_mode=dispatch_mode, watcher_id=watcher_id,
+                    workflow_id=test_workflow_id,
                 )
                 if step_result.get("success") or attempt >= retry_count:
                     break
