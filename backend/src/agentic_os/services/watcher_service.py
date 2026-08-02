@@ -560,6 +560,16 @@ class WatcherService:
             payload["targets"] = {
                 "k8s_namespace": getattr(self.adapter, "namespace", "agentic-platform")
             }
+        # For SSH adapters, include target hosts so the editor can populate the
+        # target dropdown and sentinel_container defaults to the primary SSH host.
+        if self.adapter.adapter_name == "ssh":
+            try:
+                ssh_targets = self.adapter.list_targets()
+                payload["targets"] = {"ssh_hosts": ssh_targets}
+                if ssh_targets and self.sentinel_container == "sentinel_senses":
+                    payload["sentinel_container"] = ssh_targets[0]
+            except Exception:
+                pass
         # Include stable UUID on heartbeats so the platform can look us up by id,
         # not by name — prevents a name collision from stealing our registration.
         if self._watcher_id:
@@ -2330,7 +2340,7 @@ class WatcherService:
 
                 # ── CPU ───────────────────────────────────────────────────────
                 if metrics.cpu_percent > 0:
-                    cpu_key = f"{target}:high_cpu"
+                    cpu_key = f"{target}:cpu_spike"
                     if metrics.cpu_percent >= self.cpu_threshold:
                         self.consecutive_anomaly_counts[cpu_key] = (
                             self.consecutive_anomaly_counts.get(cpu_key, 0) + 1
@@ -2342,7 +2352,10 @@ class WatcherService:
                         )
                         if polls >= self.min_consecutive_polls:
                             crit = "critical" if metrics.cpu_percent >= self.cpu_threshold * 1.1 else "warning"
-                            anomalies.append((target, "high_cpu", crit))
+                            anomalies.append((target, "cpu_spike", {
+                                "description": f"CPU usage {metrics.cpu_percent:.1f}% exceeds threshold {self.cpu_threshold}%",
+                                "severity": crit,
+                            }))
                     else:
                         # Hysteresis: only clear when well below threshold
                         if metrics.cpu_percent < self.cpu_threshold * 0.80:
@@ -2350,7 +2363,7 @@ class WatcherService:
 
                 # ── Memory ────────────────────────────────────────────────────
                 if metrics.memory_percent > 0:
-                    mem_key = f"{target}:high_memory"
+                    mem_key = f"{target}:memory_surge"
                     if metrics.memory_percent >= self.memory_threshold:
                         self.consecutive_anomaly_counts[mem_key] = (
                             self.consecutive_anomaly_counts.get(mem_key, 0) + 1
@@ -2361,7 +2374,10 @@ class WatcherService:
                             f"(>{self.memory_threshold}%) — {polls}/{self.min_consecutive_polls} polls"
                         )
                         if polls >= self.min_consecutive_polls:
-                            anomalies.append((target, "high_memory", "critical"))
+                            anomalies.append((target, "memory_surge", {
+                                "description": f"Memory usage {metrics.memory_percent:.1f}% exceeds threshold {self.memory_threshold}%",
+                                "severity": "critical",
+                            }))
                     else:
                         if metrics.memory_percent < self.memory_threshold * 0.80:
                             self.consecutive_anomaly_counts.pop(mem_key, None)
@@ -2884,7 +2900,8 @@ class WatcherService:
                                 # Correlation logic removed — backend dedup handles
                                 # multiple anomaly types on the same container.
                                 logger.warning(f"\n🚨 [SUSTAINED {anomaly_type.upper()}] {container_name}{culprit_detail} ({consecutive_count} polls)")
-                                alert = self.create_container_anomaly_alert(container_name, anomaly_type, description)
+                                desc_str = description.get("description", str(description)) if isinstance(description, dict) else description
+                                alert = self.create_container_anomaly_alert(container_name, anomaly_type, desc_str)
                             elif anomaly_type == "disk_full":
                                 culprit = None
                                 logger.warning(f"\n🚨 [SUSTAINED DISK FULL] {container_name} ({consecutive_count} polls)")
@@ -2932,7 +2949,6 @@ class WatcherService:
                                     or criticality_map.get(anomaly_type, "critical")
                                 )
                             elif isinstance(description, dict) and "severity" in description:
-                                # Custom log monitor — use the operator-configured severity directly
                                 raw_crit = description["severity"]
                             else:
                                 raw_crit = (

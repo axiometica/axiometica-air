@@ -129,6 +129,7 @@ def _reg_to_dict(row: WatcherRegistrationModel) -> Dict[str, Any]:
         "environment": getattr(row, "environment", "unknown") or "unknown",
         "adapter_mode": getattr(row, "adapter_mode", "docker") or "docker",
         "dispatch_mode": getattr(row, "dispatch_mode", "push") or "push",
+        "targets": getattr(row, "targets", None) or {},
         "watcher_version": getattr(row, "watcher_version", None),
         "metrics_history": getattr(row, "metrics_history", None) or [],
         "approved_at": row.approved_at.isoformat() if getattr(row, "approved_at", None) else None,

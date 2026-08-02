@@ -484,7 +484,7 @@ export default function App() {
   const [showCtxFields,  setShowCtxFields]   = useState(false);
   const [dryRun,         setDryRun]          = useState(false);
   // Registered watchers for dropdown
-  const [watchers,       setWatchers]        = useState<Array<{ watcher_name: string; display_name: string; sentinel_container: string; status: string }>>([]);
+  const [watchers,       setWatchers]        = useState<Array<{ watcher_name: string; display_name: string; sentinel_container: string; status: string; adapter_mode?: string; dispatch_mode?: string; targets?: Record<string, any> }>>([]);
   // Save status
   const [saveStatus,     setSaveStatus]      = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   // Human-readable save error — persists independently of saveStatus's 2.5s auto-reset
@@ -1426,7 +1426,7 @@ export default function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 11, color: '#64748b' }}>Watcher:</span>
               {watchers.length > 0 ? (
-                <select value={liveWatcher} onChange={e => { const w = watchers.find(w => w.watcher_name === e.target.value); setLiveWatcher(e.target.value); if (w) setLiveTarget(w.sentinel_container || ''); }}
+                <select value={liveWatcher} onChange={e => { const w = watchers.find(w => w.watcher_name === e.target.value); setLiveWatcher(e.target.value); if (w) setLiveTarget(w.sentinel_container || (w as any).targets?.ssh_hosts?.[0] || ''); }}
                   style={{ background: '#161b28', border: '1px solid #2a3548', borderRadius: 5, padding: '4px 8px', color: '#e2e8f0', fontSize: 12, outline: 'none', cursor: 'pointer' }}>
                   {watchers.map(w => <option key={w.watcher_name} value={w.watcher_name}>{w.display_name || w.watcher_name}</option>)}
                 </select>

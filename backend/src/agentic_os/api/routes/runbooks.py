@@ -512,9 +512,9 @@ async def execute_editor_runbook(data: dict, db: Session = Depends(get_session))
     if not target:
         raise HTTPException(status_code=422, detail="target (container name) is required")
 
-    # Resolve watcher URL + adapter
-    watcher_base, adapter_mode = _resolve_watcher_info(watcher_name)
-    logger.info(f"[EXECUTE-EDITOR] target={target} watcher={watcher_base} adapter={adapter_mode} graph_edges={len(edges)}")
+    # Resolve watcher URL + adapter + dispatch strategy
+    watcher_base, adapter_mode, dispatch_mode, watcher_id = _resolve_watcher_info(watcher_name)
+    logger.info(f"[EXECUTE-EDITOR] target={target} watcher={watcher_base} adapter={adapter_mode} dispatch={dispatch_mode} graph_edges={len(edges)}")
 
     results:      list = []
     step_outputs: dict = {}   # keyed by BOTH int-idx and str step-id
@@ -606,7 +606,8 @@ async def execute_editor_runbook(data: dict, db: Session = Depends(get_session))
             # This is the core of real verification — we don't trust pre-action values.
             if tool_key:
                 fresh_result = ToolRegistryAgent._execute_tool(
-                    tool_key, args, target, watcher_base, adapter_mode
+                    tool_key, args, target, watcher_base, adapter_mode,
+                    dispatch_mode=dispatch_mode, watcher_id=watcher_id,
                 )
                 verify_raw   = fresh_result.get("raw_output") or fresh_result.get("output") or ""
                 fresh_struct = fresh_result.get("structured") or {}
@@ -659,7 +660,8 @@ async def execute_editor_runbook(data: dict, db: Session = Depends(get_session))
             attempt = 0
             while True:
                 step_result = ToolRegistryAgent._execute_tool(
-                    tool_key, args, target, watcher_base, adapter_mode
+                    tool_key, args, target, watcher_base, adapter_mode,
+                    dispatch_mode=dispatch_mode, watcher_id=watcher_id,
                 )
                 if step_result.get("success") or attempt >= retry_count:
                     break

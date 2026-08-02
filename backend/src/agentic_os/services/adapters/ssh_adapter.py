@@ -285,7 +285,7 @@ class SSHAdapter(ExecutionAdapter):
         """Collect metrics via a single compound SSH command (one round-trip)."""
         m = TargetMetrics(target=target)
         script = (
-            "echo CPU: $(top -bn1 2>/dev/null | awk '/Cpu/{print $2}' | tr -d '%us,');"
+            "echo CPU: $(ps -eo pcpu --no-headers 2>/dev/null | awk '{s+=$1}END{if(NR>0)printf \"%.1f\",s; else print \"0.0\"}');"
             "echo MEM: $(free -m 2>/dev/null | awk 'NR==2{printf \"%.1f %.0f %.0f\",$3/$2*100,$3,$2}');"
             "echo DISK: $(df / 2>/dev/null | awk 'NR==2{gsub(/%/,\"\",$5); printf \"%.1f %.3f %.3f\",$5,$3/1048576,$2/1048576}');"
             "echo LOAD: $(awk '{print $1}' /proc/loadavg 2>/dev/null)"
