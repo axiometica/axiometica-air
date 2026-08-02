@@ -2495,6 +2495,21 @@ class WatcherService:
                             except Exception as disc_err:
                                 logger.warning(f"⚠️  [DISCOVERY] K8s: {disc_err}")
 
+                        if (
+                            self.discovery and self.discovery_enabled
+                            and self.adapter.adapter_name == "ssh"
+                            and self.poll_count % self.discovery_interval_polls == 0
+                        ):
+                            try:
+                                summary = self._run_discovery_via_api(container_stats)
+                                logger.info(
+                                    f"🔍 [DISCOVERY] Poll #{self.poll_count}: "
+                                    f"{summary.get('updated', 0)} updated, "
+                                    f"{summary.get('new_cis', 0)} new"
+                                )
+                            except Exception as disc_err:
+                                logger.warning(f"⚠️  [DISCOVERY] SSH: {disc_err}")
+
                         loop = asyncio.get_event_loop()
                         try:
                             adapter_targets = await loop.run_in_executor(None, self.adapter.list_targets)
