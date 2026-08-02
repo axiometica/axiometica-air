@@ -1,0 +1,29 @@
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y \
+    openssh-server \
+    procps \
+    sysstat \
+    stress-ng \
+    net-tools \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir /run/sshd
+
+RUN useradd -m -s /bin/bash testuser \
+    && echo "testuser:testpass123" | chpasswd \
+    && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+
+COPY .ssh-test-keys/test_key.pub /tmp/test_key.pub
+RUN mkdir -p /home/testuser/.ssh \
+    && cat /tmp/test_key.pub >> /home/testuser/.ssh/authorized_keys \
+    && chmod 700 /home/testuser/.ssh \
+    && chmod 600 /home/testuser/.ssh/authorized_keys \
+    && chown -R testuser:testuser /home/testuser/.ssh \
+    && rm /tmp/test_key.pub
+
+EXPOSE 22
+
+CMD ["/usr/sbin/sshd", "-D"]

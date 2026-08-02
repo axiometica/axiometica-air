@@ -197,3 +197,4 @@ postgresql.conf
 # Local-only testing tools (never push)
 event_simulator/
 backend/tests/unit/
+backend/.ssh-test-keys/test_key
