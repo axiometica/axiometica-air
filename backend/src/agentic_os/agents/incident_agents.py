@@ -3418,14 +3418,11 @@ class ToolRegistryAgent(Agent):
         elif dispatch_mode == "auto":
             _use_pull = not _is_watcher_reachable(watcher_base)
 
+        if _use_pull and (not watcher_id or not workflow_id):
+            logger.info(f"[TOOL] Pull dispatch requested but missing watcher_id/workflow_id (test run?), falling back to push")
+            _use_pull = False
+
         if _use_pull:
-            if not watcher_id or not workflow_id:
-                return {
-                    "success": False,
-                    "execution_id": exec_id,
-                    "command": command,
-                    "error": "Pull dispatch requires watcher_id and workflow_id",
-                }
             logger.info(f"[TOOL] Using pull dispatch for {action_name or 'exec'} → watcher {watcher_id}")
             return _dispatch_via_pull(
                 watcher_id=watcher_id,
@@ -3643,13 +3640,11 @@ class ToolRegistryAgent(Agent):
         elif dispatch_mode == "auto":
             _use_pull = not _is_watcher_reachable(watcher_base)
 
+        if _use_pull and (not watcher_id or not workflow_id):
+            logger.info(f"[TOOL] Pull dispatch requested but missing watcher_id/workflow_id (test run?), falling back to push")
+            _use_pull = False
+
         if _use_pull:
-            if not watcher_id or not workflow_id:
-                return {
-                    "success": False,
-                    "execution_id": exec_id,
-                    "error": "Pull dispatch requires watcher_id and workflow_id for process_kill",
-                }
             kill_cmd = f"pkill -{signal} {process_name}"
             logger.info(f"[TOOL] process_kill via pull dispatch: {kill_cmd}")
             return _dispatch_via_pull(
