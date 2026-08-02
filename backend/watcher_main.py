@@ -727,50 +727,32 @@ async def main():
 
     # ── APPROVAL GATE ────────────────────────────────────────────────────────
     # Do NOT start monitoring until the watcher is approved by an admin.
-    # This ensures no metrics are collected or incidents created until
-    # the watcher has been explicitly authorized.
+    # Uses the public registration endpoint as a heartbeat to check status
+    # (no auth required — works for remote watchers without a platform principal).
     logger.info("⏸️  [STARTUP] Waiting for watcher approval before starting monitoring...")
-    approval_check_interval = 30  # Check every 30 seconds
-    approval_wait_attempts = 0
-    while True:
-        approval_wait_attempts += 1
-        try:
-            import httpx
-            logger.debug(f"[STARTUP] Approval check attempt {approval_wait_attempts}...")
-            async with httpx.AsyncClient(timeout=5.0, headers=watcher._api_headers) as client:
-                resp = await client.get(
-                    f"{watcher.api_base_url}/api/monitoring/watchers"
-                )
-                logger.debug(f"[STARTUP] Approval check response: {resp.status_code}")
-                if resp.status_code == 200:
-                    watchers = resp.json()
-                    logger.debug(f"[STARTUP] Got {len(watchers)} watchers from API")
-                    # Find this watcher in the list
-                    my_registration = next(
-                        (w for w in watchers if w.get("watcher_name") == watcher.watcher_name),
-                        None
-                    )
-                    if my_registration:
-                        status = my_registration.get("registration_status", "unknown")
-                        if status == "approved":
-                            logger.info("✅ [STARTUP] Watcher approved — starting monitoring")
-                            break
-                        else:
-                            if approval_wait_attempts % 2 == 1:  # Log every other attempt to avoid noise
-                                logger.info(f"⏳ [STARTUP] Watcher status: {status} — waiting for approval…")
-                    else:
-                        logger.info(
-                            f"ℹ️  [STARTUP] Watcher '{watcher.watcher_name}' not found in registration "
-                            f"list yet — retrying registration (attempt {approval_wait_attempts})…"
-                        )
-                        await watcher.register_with_api()
+    approval_check_interval = 30
+    if watcher._registration_status == "approved":
+        logger.info("✅ [STARTUP] Watcher approved at registration — starting monitoring")
+    else:
+        approval_wait_attempts = 0
+        while True:
+            approval_wait_attempts += 1
+            try:
+                await watcher.register_with_api()
+                status = watcher._registration_status
+                if status == "approved":
+                    logger.info("✅ [STARTUP] Watcher approved — starting monitoring")
+                    break
+                elif status == "rejected":
+                    logger.error("❌ [STARTUP] Watcher rejected by operator — exiting")
+                    sys.exit(1)
                 else:
-                    logger.warning(f"[STARTUP] Approval check returned {resp.status_code}: {resp.text}")
-        except Exception as e:
-            logger.warning(f"[STARTUP] Could not check approval status (attempt {approval_wait_attempts}): {e}")
+                    if approval_wait_attempts % 2 == 1:
+                        logger.info(f"⏳ [STARTUP] Watcher status: {status} — waiting for approval…")
+            except Exception as e:
+                logger.warning(f"[STARTUP] Could not check approval status (attempt {approval_wait_attempts}): {e}")
 
-        logger.debug(f"[STARTUP] Sleeping for {approval_check_interval}s before next approval check")
-        await asyncio.sleep(approval_check_interval)
+            await asyncio.sleep(approval_check_interval)
     # ─────────────────────────────────────────────────────────────────────────
 
     # Load persisted log monitors from the platform DB now that we're approved.

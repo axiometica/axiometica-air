@@ -15,8 +15,8 @@ services:
       WATCHER_API_KEY: ${WATCHER_API_KEY}
       WATCHER_NGINX_URL: https://instance.axiometica.com
 
-      # SSH adapter — target the Oracle host
-      # No key path or password — adapter resolves credentials via platform API
+      # Force SSH adapter (container runs in Docker but monitors a remote host)
+      WATCHER_ADAPTER: ssh
       WATCHER_SSH_HOST: 147.5.124.7
       WATCHER_SSH_USER: ubuntu
       WATCHER_SSH_PORT: "22"

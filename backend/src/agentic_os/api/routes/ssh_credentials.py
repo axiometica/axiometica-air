@@ -29,6 +29,7 @@ from agentic_os.db.models import SSHCredentialModel
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+automation_router = APIRouter()
 
 
 # ── Pydantic schemas ─────────────────────────────────────────────────────────
@@ -206,7 +207,7 @@ class SSHCredentialResolveRequest(BaseModel):
     hostname: str = Field(..., description="Target hostname to match against host_pattern")
 
 
-@router.post("/settings/ssh-credentials/resolve")
+@automation_router.post("/settings/ssh-credentials/resolve")
 def resolve_ssh_credential_api(body: SSHCredentialResolveRequest, db: Session = Depends(get_session)):
     """Resolve an SSH credential by hostname pattern match.
     Returns the full credential including decrypted private key.

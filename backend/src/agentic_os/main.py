@@ -387,6 +387,7 @@ app.include_router(admin.router,           prefix="/api/admin", tags=["Admin"], 
 app.include_router(admin_logs_route.router,                     tags=["Admin Logs"],   dependencies=_admin)
 app.include_router(llm_settings.router,                         tags=["LLM Settings"], dependencies=_admin)
 app.include_router(ssh_credentials_routes.router, prefix="/api", tags=["SSH Credentials"], dependencies=_admin)
+app.include_router(ssh_credentials_routes.automation_router, prefix="/api", tags=["SSH Credentials"], dependencies=_any)
 
 # Root endpoint
 @app.get("/", tags=["Root"])
