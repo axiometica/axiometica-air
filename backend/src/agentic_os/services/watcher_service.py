@@ -183,6 +183,11 @@ class WatcherService:
         self.docker_stats = DockerStatsService()
         self.advanced_monitor = AdvancedMonitoringService()
 
+        # ── Adapter log scan cursor ──────────────────────────────────────────
+        # Tracks the last poll time per SSH/K8s/SSM target so journalctl only
+        # returns entries since the previous check (avoids re-detecting stale errors).
+        self._adapter_log_cursor: Dict[str, str] = {}
+
         # ── Log File Monitoring ──────────────────────────────────────────────
         # Monitors log files for regex patterns and emits custom events.
         # Configuration via WATCHER_LOG_MONITORS environment variable (JSON array).
@@ -547,6 +552,7 @@ class WatcherService:
             "adapter_mode": self.adapter.adapter_name,
             "watcher_version": WATCHER_VERSION,
             "metrics_history": self._metrics_buffer,
+            "dispatch_mode": "pull" if self.adapter.adapter_name in ("ssh", "aws_ssm", "vcenter", "azure") else "push",
         }
         # For K8s adapters, include the namespace so the backend can substitute
         # {namespace} correctly in command templates (e.g. kubectl exec {pod} -n {namespace}).
@@ -1757,17 +1763,25 @@ class WatcherService:
         """
         Detect error logs on SSH/K8s/SSM targets via the execution adapter.
         Uses journalctl (systemd) with syslog/messages fallback for non-systemd hosts.
+        Only returns NEW entries since the last poll (tracked via _adapter_log_cursor).
         Returns list of (target, anomaly_type, description) tuples.
         """
         LOG_KEYWORDS = ("error", "exception", "failed", "traceback", "fatal")
-        log_cmd = (
-            "journalctl -n 100 --no-pager -p err..emerg 2>/dev/null "
-            "|| grep -iE 'error|exception|failed|fatal' /var/log/syslog 2>/dev/null | tail -50 "
-            "|| grep -iE 'error|exception|failed|fatal' /var/log/messages 2>/dev/null | tail -50"
-        )
+        now_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         anomalies = []
         for target in targets:
             try:
+                since = self._adapter_log_cursor.get(target)
+                if since:
+                    jctl = f'journalctl --no-pager -p err..emerg --since "{since}" 2>/dev/null'
+                else:
+                    jctl = "journalctl -n 100 --no-pager -p err..emerg 2>/dev/null"
+                log_cmd = (
+                    f"{jctl} "
+                    f"|| grep -iE 'error|exception|failed|fatal' /var/log/syslog 2>/dev/null | tail -50 "
+                    f"|| grep -iE 'error|exception|failed|fatal' /var/log/messages 2>/dev/null | tail -50"
+                )
+                self._adapter_log_cursor[target] = now_utc
                 result = self.adapter.exec(target, log_cmd, timeout=10)
                 if not result.success or not result.stdout.strip():
                     continue
@@ -2967,6 +2981,9 @@ class WatcherService:
                         self.write_status("healthy", "normal", "", 0)
                         logger.info(f"✓ [HEALTHY]{status_detail}")
 
+                    # ── Pull-based execution tasks ────────────────────────────────────
+                    await self._poll_exec_tasks()
+
                     # ── Synthetic transaction monitors ────────────────────────────────
                     await self._check_synthetic_monitors()
 
@@ -2979,6 +2996,64 @@ class WatcherService:
 
         except KeyboardInterrupt:
             logger.info("\n\n🛑 [STOP] Watcher stopped by user")
+
+
+    # ── Pull-based execution task polling ────────────────────────────────────
+
+    async def _poll_exec_tasks(self):
+        """Poll the platform for pending execution tasks assigned to this watcher.
+        Claims one task at a time, executes it via the adapter, and reports results."""
+        if not self._watcher_id:
+            return
+        base = self.api_base.rstrip("/")
+        url = f"{base}/api/monitoring/watchers/{self._watcher_id}/exec-tasks"
+        while True:
+            try:
+                async with httpx.AsyncClient(timeout=10.0, headers=self._api_headers) as client:
+                    resp = await client.get(url)
+                    if resp.status_code == 204:
+                        return
+                    if resp.status_code != 200:
+                        logger.warning(f"[EXEC-POLL] Unexpected status {resp.status_code}")
+                        return
+                    task = resp.json()
+            except Exception as e:
+                logger.debug(f"[EXEC-POLL] Failed to poll exec tasks: {e}")
+                return
+
+            task_id = task.get("task_id")
+            command = task.get("command", "")
+            target = task.get("target", "")
+            mode = task.get("mode", "host")
+            timeout = task.get("timeout", 30)
+            logger.info(f"[EXEC-POLL] Claimed task {task_id}: {command!r} target={target!r} mode={mode}")
+
+            try:
+                result = self.adapter.exec(target, command, timeout=timeout, mode=mode)
+                success = result.success
+                stdout = result.stdout or ""
+                stderr = result.stderr or ""
+                returncode = result.returncode if result.returncode is not None else (-1 if not success else 0)
+            except Exception as e:
+                logger.error(f"[EXEC-POLL] Execution failed for task {task_id}: {e}")
+                success = False
+                stdout = ""
+                stderr = str(e)
+                returncode = -1
+
+            result_url = f"{base}/api/monitoring/watchers/{self._watcher_id}/exec-tasks/{task_id}/result"
+            try:
+                async with httpx.AsyncClient(timeout=10.0, headers=self._api_headers) as client:
+                    await client.post(result_url, json={
+                        "success": success,
+                        "stdout": stdout,
+                        "stderr": stderr,
+                        "returncode": returncode,
+                    })
+                logger.info(f"[EXEC-POLL] Reported result for task {task_id}: success={success}")
+            except Exception as e:
+                logger.error(f"[EXEC-POLL] Failed to report result for task {task_id}: {e}")
+                return
 
 
     # ── Synthetic transaction monitoring ──────────────────────────────────────

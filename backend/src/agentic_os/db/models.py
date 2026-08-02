@@ -906,6 +906,7 @@ class WatcherRegistrationModel(Base):
     # Environment & adapter
     environment      = Column(String(50),  nullable=False, default="unknown")
     adapter_mode     = Column(String(20),  nullable=False, default="docker")
+    dispatch_mode    = Column(String(10),  nullable=False, server_default="push")
     watcher_version  = Column(String(50),  nullable=True)
     targets          = Column(JSON,        nullable=True)   # JSON list of managed targets
     metrics_history  = Column(JSON,        nullable=True)   # rolling list of {ts,cpu,mem,disk,alerts}
@@ -913,6 +914,46 @@ class WatcherRegistrationModel(Base):
 
     last_seen = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     registered_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class WatcherExecTaskModel(Base):
+    """
+    Execution task queue for pull-based watcher dispatch.
+
+    When the backend cannot push commands to a watcher's Kill-API directly
+    (remote/NAT), it queues tasks here. The watcher polls for pending tasks,
+    executes them via its adapter, and reports results back.
+
+    Lifecycle: pending → claimed → completed | failed | timed_out
+    """
+    __tablename__ = "watcher_exec_tasks"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    watcher_id    = Column(UUID(as_uuid=True), nullable=False, index=True)
+    workflow_id   = Column(UUID(as_uuid=True), nullable=False)
+    step_index    = Column(Integer, nullable=False, default=0)
+
+    command       = Column(Text, nullable=False)
+    target        = Column(String(255), nullable=False, default="")
+    mode          = Column(String(20), nullable=False, default="host")
+    timeout       = Column(Integer, nullable=False, default=30)
+
+    status        = Column(String(20), nullable=False, default="pending", index=True)
+
+    result_success    = Column(Boolean, nullable=True)
+    result_stdout     = Column(Text, nullable=True)
+    result_stderr     = Column(Text, nullable=True)
+    result_returncode = Column(Integer, nullable=True)
+
+    created_at    = Column(DateTime, nullable=False, default=datetime.utcnow)
+    claimed_at    = Column(DateTime, nullable=True)
+    completed_at  = Column(DateTime, nullable=True)
+    expires_at    = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        Index('idx_watcher_exec_tasks_watcher_status', 'watcher_id', 'status'),
+        Index('idx_watcher_exec_tasks_workflow', 'workflow_id', 'step_index'),
+    )
 
 
 class WatcherExternalCheckModel(Base):

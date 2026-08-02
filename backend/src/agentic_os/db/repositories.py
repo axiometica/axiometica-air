@@ -15,6 +15,7 @@ from agentic_os.db.models import (
     RunbookModel, ApprovedActionModel, MonitoringEventModel, RiskWeightConfigModel,
     PolicyModel, GovernancePolicyModel, OptimizationRecommendationModel,
     EventConditionStateModel, RunbookStepOutcomeModel, PlatformIntelRunModel,
+    WatcherExecTaskModel,
 )
 
 
@@ -1766,3 +1767,113 @@ class SyntheticMonitorRepository:
         self.db.delete(row)
         self.db.commit()
         return True
+
+
+class WatcherExecTaskRepository:
+    """CRUD + state transitions for pull-based execution tasks."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def create_task(self, watcher_id, workflow_id, step_index: int,
+                    command: str, target: str, mode: str, timeout: int,
+                    ttl_seconds: int = 150):
+        task = WatcherExecTaskModel(
+            watcher_id=watcher_id,
+            workflow_id=workflow_id,
+            step_index=step_index,
+            command=command,
+            target=target,
+            mode=mode,
+            timeout=timeout,
+            status="pending",
+            expires_at=datetime.utcnow() + timedelta(seconds=ttl_seconds),
+        )
+        self.db.add(task)
+        self.db.commit()
+        self.db.refresh(task)
+        return task
+
+    def claim_pending(self, watcher_id):
+        from sqlalchemy import text
+        row = self.db.execute(
+            text("""
+                UPDATE watcher_exec_tasks
+                SET status = 'claimed', claimed_at = now()
+                WHERE id = (
+                    SELECT id FROM watcher_exec_tasks
+                    WHERE watcher_id = :wid AND status = 'pending'
+                      AND expires_at > now()
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING id, command, target, mode, timeout, workflow_id, step_index
+            """),
+            {"wid": str(watcher_id)},
+        ).fetchone()
+        self.db.commit()
+        if not row:
+            return None
+        return {
+            "task_id": str(row[0]),
+            "command": row[1],
+            "target": row[2],
+            "mode": row[3],
+            "timeout": row[4],
+            "workflow_id": str(row[5]),
+            "step_index": row[6],
+        }
+
+    def report_result(self, task_id: str, success: bool, stdout: str = "",
+                      stderr: str = "", returncode: int = 0):
+        task = self.db.query(WatcherExecTaskModel).filter(
+            WatcherExecTaskModel.id == task_id,
+        ).first()
+        if not task:
+            return None
+        task.status = "completed" if success else "failed"
+        task.result_success = success
+        task.result_stdout = stdout
+        task.result_stderr = stderr
+        task.result_returncode = returncode
+        task.completed_at = datetime.utcnow()
+        self.db.commit()
+        return task
+
+    def poll_for_result(self, task_id):
+        task = self.db.query(WatcherExecTaskModel).filter(
+            WatcherExecTaskModel.id == task_id,
+        ).first()
+        if not task:
+            return "not_found", None
+        self.db.refresh(task)
+        if task.status in ("completed", "failed"):
+            return task.status, {
+                "success": task.result_success or False,
+                "stdout": task.result_stdout or "",
+                "stderr": task.result_stderr or "",
+                "returncode": task.result_returncode or 0,
+                "command": task.command,
+            }
+        if task.status == "timed_out":
+            return "timed_out", None
+        return task.status, None
+
+    def expire_stale(self):
+        now = datetime.utcnow()
+        self.db.query(WatcherExecTaskModel).filter(
+            WatcherExecTaskModel.status.in_(["pending", "claimed"]),
+            WatcherExecTaskModel.expires_at < now,
+        ).update({"status": "timed_out", "completed_at": now}, synchronize_session=False)
+        self.db.commit()
+
+    def expire_task(self, task_id):
+        task = self.db.query(WatcherExecTaskModel).filter(
+            WatcherExecTaskModel.id == task_id,
+            WatcherExecTaskModel.status.in_(["pending", "claimed"]),
+        ).first()
+        if task:
+            task.status = "timed_out"
+            task.completed_at = datetime.utcnow()
+            self.db.commit()

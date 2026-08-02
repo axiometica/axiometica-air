@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import socket as _socket
+import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -95,10 +96,13 @@ class SSHAdapter(ExecutionAdapter):
     network interruptions).
     """
 
+    _CREDENTIAL_CACHE_TTL = 300  # re-resolve every 5 minutes
+
     def __init__(self, targets: Optional[List[SSHTarget]] = None):
         self._targets: Dict[str, SSHTarget] = {}
         for t in (targets or _targets_from_env()):
             self._targets[t.name] = t
+        self._credential_cache: Dict[str, tuple] = {}  # hostname → (credential, timestamp)
         logger.info(
             f"[SSH] Adapter initialised with {len(self._targets)} target(s): "
             f"{', '.join(self._targets)}"
@@ -111,6 +115,18 @@ class SSHAdapter(ExecutionAdapter):
     # ── Internal ──────────────────────────────────────────────────────────────
 
     def _resolve_credential(self, hostname: str):
+        """Look up an SSH credential with TTL cache to avoid per-exec API calls."""
+        cached = self._credential_cache.get(hostname)
+        if cached:
+            cred, ts = cached
+            if time.monotonic() - ts < self._CREDENTIAL_CACHE_TTL:
+                return cred
+        result = self._resolve_credential_uncached(hostname)
+        if result:
+            self._credential_cache[hostname] = (result, time.monotonic())
+        return result
+
+    def _resolve_credential_uncached(self, hostname: str):
         """Look up an SSH credential — tries direct DB first, then platform API."""
         # Path 1: direct DB query (works when co-located with the backend)
         try:
@@ -219,13 +235,13 @@ class SSHAdapter(ExecutionAdapter):
              timeout: int = 12, mode: str = "target") -> ExecResult:
         if target not in self._targets:
             return ExecResult.error(f"SSH target '{target}' not configured", command)
+        client = None
         try:
             client = self._connect(target)
             stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
             stdout_str = stdout.read().decode(errors="replace").strip()
             stderr_str = stderr.read().decode(errors="replace").strip()
             rc = stdout.channel.recv_exit_status()
-            client.close()
             return ExecResult(
                 success=rc == 0,
                 stdout=stdout_str,
@@ -235,6 +251,12 @@ class SSHAdapter(ExecutionAdapter):
             )
         except Exception as exc:
             return ExecResult.error(str(exc), f"[ssh:{target}] {command}")
+        finally:
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
 
     def kill_process(self, target: str, process_name: str,
                      signal: str = "SIGKILL") -> ExecResult:

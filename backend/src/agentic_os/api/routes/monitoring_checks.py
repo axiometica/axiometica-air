@@ -24,7 +24,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -56,6 +56,7 @@ class WatcherRegistration(BaseModel):
     kill_api_url: str = ""     # Kill-API callback URL (http://<host>:8080)
     environment: str = "unknown"   # Detected runtime environment
     adapter_mode: str = "docker"   # Execution adapter in use
+    dispatch_mode: str = "push"    # "push" | "pull" | "auto"
     watcher_version: Optional[str] = None  # Watcher agent version string
     metrics_history: Optional[list] = None  # Rolling [{ts,cpu,mem,disk,alerts}] buffer
     targets: Optional[dict] = None  # Adapter-specific target metadata (e.g. k8s_namespace)
@@ -127,6 +128,7 @@ def _reg_to_dict(row: WatcherRegistrationModel) -> Dict[str, Any]:
         "kill_api_url": getattr(row, "kill_api_url", "") or "",
         "environment": getattr(row, "environment", "unknown") or "unknown",
         "adapter_mode": getattr(row, "adapter_mode", "docker") or "docker",
+        "dispatch_mode": getattr(row, "dispatch_mode", "push") or "push",
         "watcher_version": getattr(row, "watcher_version", None),
         "metrics_history": getattr(row, "metrics_history", None) or [],
         "approved_at": row.approved_at.isoformat() if getattr(row, "approved_at", None) else None,
@@ -208,6 +210,8 @@ def register_watcher(
             row.environment = payload.environment
         if payload.adapter_mode:
             row.adapter_mode = payload.adapter_mode
+        if payload.dispatch_mode:
+            row.dispatch_mode = payload.dispatch_mode
         if payload.targets is not None:
             row.targets = payload.targets
         if payload.watcher_version:
@@ -239,6 +243,7 @@ def register_watcher(
             kill_api_url=payload.kill_api_url,
             environment=payload.environment,
             adapter_mode=payload.adapter_mode,
+            dispatch_mode=payload.dispatch_mode,
             watcher_version=payload.watcher_version,
             metrics_history=payload.metrics_history or [],
             targets=payload.targets,
@@ -763,3 +768,59 @@ def seed_defaults(watcher_name: str, db: Session = Depends(get_session)):
             added += 1
     db.commit()
     return {"seeded": added, "watcher_name": watcher_name}
+
+
+# ── Pull-based execution task endpoints ────────────────────────────────────────
+
+class ExecTaskResultBody(BaseModel):
+    success: bool
+    stdout: str = ""
+    stderr: str = ""
+    returncode: int = 0
+
+
+@router.get(
+    "/monitoring/watchers/{watcher_id}/exec-tasks",
+    tags=["Monitoring"],
+    status_code=200,
+)
+def claim_exec_task(
+    watcher_id: str,
+    db: Session = Depends(get_session),
+):
+    """
+    Watcher polls for pending execution tasks. Atomically claims the oldest
+    pending task and returns it. Returns 204 if no tasks are pending.
+    """
+    from agentic_os.db.repositories import WatcherExecTaskRepository
+    repo = WatcherExecTaskRepository(db)
+    task = repo.claim_pending(watcher_id)
+    if not task:
+        return Response(status_code=204)
+    return task
+
+
+@router.post(
+    "/monitoring/watchers/{watcher_id}/exec-tasks/{task_id}/result",
+    tags=["Monitoring"],
+    status_code=200,
+)
+def report_exec_task_result(
+    watcher_id: str,
+    task_id: str,
+    body: ExecTaskResultBody,
+    db: Session = Depends(get_session),
+):
+    """Watcher reports execution result for a claimed task."""
+    from agentic_os.db.repositories import WatcherExecTaskRepository
+    repo = WatcherExecTaskRepository(db)
+    task = repo.report_result(
+        task_id=task_id,
+        success=body.success,
+        stdout=body.stdout,
+        stderr=body.stderr,
+        returncode=body.returncode,
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"status": task.status, "task_id": str(task.id)}

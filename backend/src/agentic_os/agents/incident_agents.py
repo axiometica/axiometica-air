@@ -32,11 +32,11 @@ def _resolve_kill_api_base(watcher_name: str) -> str:
 
 def _resolve_watcher_info(watcher_name: str) -> tuple:
     """
-    Return (kill_api_url, adapter_mode) for the named watcher.
+    Return (kill_api_url, adapter_mode, dispatch_mode, watcher_id) for the named watcher.
 
-    Looks up both fields from watcher_registrations in one DB call so the
-    execution layer can choose the right command variant for the environment.
-    Falls back to (http://<watcher_name>:8080, "docker") if the row is missing.
+    Looks up fields from watcher_registrations in one DB call so the
+    execution layer can choose the right command variant and dispatch strategy.
+    Falls back to (http://<watcher_name>:8080, "docker", "push", None) if missing.
     """
     try:
         from agentic_os.db.database import SessionLocal
@@ -50,12 +50,113 @@ def _resolve_watcher_info(watcher_name: str) -> tuple:
                 url = (getattr(row, "kill_api_url", "") or "").rstrip("/") \
                       or f"http://{watcher_name}:8080"
                 mode = getattr(row, "adapter_mode", "docker") or "docker"
-                return url, mode
+                dispatch = getattr(row, "dispatch_mode", "push") or "push"
+                watcher_id = getattr(row, "watcher_id", None)
+                return url, mode, dispatch, watcher_id
         finally:
             db.close()
     except Exception as _e:
         logger.debug(f"[WATCHER-ROUTE] DB lookup failed for '{watcher_name}': {_e}")
-    return f"http://{watcher_name}:8080", "docker"
+    return f"http://{watcher_name}:8080", "docker", "push", None
+
+
+_watcher_reachable_cache: Dict[str, tuple] = {}
+
+
+def _is_watcher_reachable(kill_api_url: str) -> bool:
+    """Probe the watcher's kill-API /health with a 2s timeout, cached for 60s."""
+    import httpx, time
+    cached = _watcher_reachable_cache.get(kill_api_url)
+    if cached:
+        result, ts = cached
+        if time.monotonic() - ts < 60:
+            return result
+    try:
+        r = httpx.get(f"{kill_api_url}/health", timeout=2.0)
+        ok = r.status_code < 500
+    except Exception:
+        ok = False
+    _watcher_reachable_cache[kill_api_url] = (ok, time.monotonic())
+    return ok
+
+
+def _dispatch_via_pull(
+    watcher_id,
+    workflow_id,
+    step_index: int,
+    command: str,
+    target: str,
+    mode: str = "host",
+    timeout: int = 30,
+) -> Dict:
+    """Queue a task in the DB for the watcher to claim on its next poll cycle.
+    Polls every 3s for up to 120s waiting for the result."""
+    import time, uuid as _uuid
+    from agentic_os.db.database import SessionLocal
+    from agentic_os.db.repositories import WatcherExecTaskRepository
+
+    db = SessionLocal()
+    try:
+        repo = WatcherExecTaskRepository(db)
+        task = repo.create_task(
+            watcher_id=watcher_id,
+            workflow_id=workflow_id,
+            step_index=step_index,
+            command=command,
+            target=target,
+            mode=mode,
+            timeout=timeout,
+            ttl_seconds=150,
+        )
+        task_id = task.id
+        db.commit()
+    finally:
+        db.close()
+
+    logger.info(f"[PULL-DISPATCH] Queued task {task_id} for watcher {watcher_id} cmd={command!r}")
+
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        time.sleep(3)
+        db = SessionLocal()
+        try:
+            repo = WatcherExecTaskRepository(db)
+            status, result = repo.poll_for_result(task_id)
+        finally:
+            db.close()
+
+        if status in ("completed", "failed"):
+            success = result.get("success", False) if result else False
+            return {
+                "success": success,
+                "execution_id": f"pull-{str(task_id)[:8]}",
+                "command": command,
+                "message": f"Ran via pull dispatch: {command}" if success else "Pull-dispatched command failed",
+                "raw_output": (result or {}).get("stdout", ""),
+                "error": (result or {}).get("stderr", "") if not success else None,
+                "parameters": {"target": target, "mode": mode},
+            }
+        if status == "timed_out":
+            return {
+                "success": False,
+                "execution_id": f"pull-{str(task_id)[:8]}",
+                "command": command,
+                "error": "Pull-dispatched task timed out (watcher never claimed or execution exceeded budget)",
+            }
+
+    db = SessionLocal()
+    try:
+        repo = WatcherExecTaskRepository(db)
+        repo.expire_task(task_id)
+        db.commit()
+    finally:
+        db.close()
+    return {
+        "success": False,
+        "execution_id": f"pull-{str(task_id)[:8]}",
+        "command": command,
+        "error": "Pull dispatch: watcher did not claim task within 120s polling budget",
+    }
 
 
 def _derive_platform(resource_type: str, cmdb_platform: str = "") -> str:
@@ -2102,8 +2203,8 @@ class ToolRegistryAgent(Agent):
         # ──────────────────────────────────────────────────────────────
         _alert_payload_ctx = state.context.get("alert_payload", {})
         _watcher_name_ctx = _alert_payload_ctx.get("watcher_name", "watcher_brain")
-        _watcher_base, _adapter_mode = _resolve_watcher_info(_watcher_name_ctx)
-        logger.info(f"[TOOL REGISTRY] Kill-API routed to {_watcher_base} adapter={_adapter_mode} (watcher: {_watcher_name_ctx})")
+        _watcher_base, _adapter_mode, _dispatch_mode, _watcher_id = _resolve_watcher_info(_watcher_name_ctx)
+        logger.info(f"[TOOL REGISTRY] Kill-API routed to {_watcher_base} adapter={_adapter_mode} dispatch={_dispatch_mode} (watcher: {_watcher_name_ctx})")
 
         # ──────────────────────────────────────────────────────────────
         # Execute: Single action OR multi-step runbook
@@ -2554,7 +2655,9 @@ class ToolRegistryAgent(Agent):
                 else:
                     # Execute this step with substituted parameters using real tool executor
                     step_result = ToolRegistryAgent._execute_tool(
-                        step_tool, substituted_args, container_name, _watcher_base, _adapter_mode
+                        step_tool, substituted_args, container_name, _watcher_base, _adapter_mode,
+                        dispatch_mode=_dispatch_mode, watcher_id=_watcher_id,
+                        workflow_id=state.workflow_id, step_index=step_idx,
                     )
 
                 # ── Capture step outputs for chaining ────────────────────────────
@@ -2815,7 +2918,11 @@ class ToolRegistryAgent(Agent):
 
         else:
             # Single action execution (full approval, no runbook steps)
-            execution_result = await self._execute_action(action, proposal, _watcher_base, _adapter_mode)
+            execution_result = await self._execute_action(
+                action, proposal, _watcher_base, _adapter_mode,
+                dispatch_mode=_dispatch_mode, watcher_id=_watcher_id,
+                workflow_id=state.workflow_id, step_index=0,
+            )
 
             # Store single action result in typed context
             if execution_result.get("success"):
@@ -3171,11 +3278,19 @@ class ToolRegistryAgent(Agent):
         action_name: str = "",
         adapter_mode: str = "docker",
         execution_mode: str = None,
+        *,
+        dispatch_mode: str = "push",
+        watcher_id=None,
+        workflow_id=None,
+        step_index: int = 0,
     ) -> Dict:
         """
         Execute a shell command on the target via the watcher's Kill-API /exec endpoint.
         {param} placeholders in command_template are interpolated from proposal.
         The watcher's adapter (Docker/SSH/K8s/SSM) handles the actual transport.
+
+        dispatch_mode="pull": queue the task in DB for the watcher to poll.
+        dispatch_mode="auto": probe the watcher first, fall back to pull.
         """
         import httpx, re as _re, uuid
         exec_id = f"exec-{uuid.uuid4().hex[:8]}"
@@ -3295,7 +3410,32 @@ class ToolRegistryAgent(Agent):
             execution_mode = "target" if adapter_mode in _TARGET_MODE_ADAPTERS else "host"
         payload = {"target": target, "command": command, "timeout": 30, "mode": execution_mode}
         watcher_url = f"{watcher_base}/exec"
-        logger.info(f"[TOOL] {action_name or 'exec'} → {watcher_url} cmd={command!r} target={target!r}")
+        logger.info(f"[TOOL] {action_name or 'exec'} → {watcher_url} cmd={command!r} target={target!r} dispatch={dispatch_mode}")
+
+        _use_pull = False
+        if dispatch_mode == "pull":
+            _use_pull = True
+        elif dispatch_mode == "auto":
+            _use_pull = not _is_watcher_reachable(watcher_base)
+
+        if _use_pull:
+            if not watcher_id or not workflow_id:
+                return {
+                    "success": False,
+                    "execution_id": exec_id,
+                    "command": command,
+                    "error": "Pull dispatch requires watcher_id and workflow_id",
+                }
+            logger.info(f"[TOOL] Using pull dispatch for {action_name or 'exec'} → watcher {watcher_id}")
+            return _dispatch_via_pull(
+                watcher_id=watcher_id,
+                workflow_id=workflow_id,
+                step_index=step_index,
+                command=command,
+                target=target,
+                mode=execution_mode,
+                timeout=30,
+            )
 
         try:
             response = httpx.post(watcher_url, json=payload, timeout=35.0)
@@ -3333,6 +3473,11 @@ class ToolRegistryAgent(Agent):
         proposal: Dict,
         watcher_base: str = "http://watcher_brain:8080",
         adapter_mode: str = "docker",
+        *,
+        dispatch_mode: str = "push",
+        watcher_id=None,
+        workflow_id=None,
+        step_index: int = 0,
     ) -> Dict:
         """
         Execute a tool action.
@@ -3344,7 +3489,11 @@ class ToolRegistryAgent(Agent):
         import uuid
 
         if action == "process_kill":
-            return ToolRegistryAgent._execute_process_kill(proposal, watcher_base)
+            return ToolRegistryAgent._execute_process_kill(
+                proposal, watcher_base,
+                dispatch_mode=dispatch_mode, watcher_id=watcher_id,
+                workflow_id=workflow_id, step_index=step_index,
+            )
 
         # Look up action from the approved_actions catalog
         action_obj = None
@@ -3386,6 +3535,10 @@ class ToolRegistryAgent(Agent):
                     action_name=action_obj.name,
                     adapter_mode=adapter_mode,
                     execution_mode=execution_mode,
+                    dispatch_mode=dispatch_mode,
+                    watcher_id=watcher_id,
+                    workflow_id=workflow_id,
+                    step_index=step_index,
                 )
             # Action is known but has no command — simulate (e.g. abstract actions like kubectl_scale
             # that don't yet have a command wired; avoids silent failure)
@@ -3448,12 +3601,15 @@ class ToolRegistryAgent(Agent):
             return True, "Rule check error — defaulting to allow"
 
     @staticmethod
-    def _execute_process_kill(proposal: Dict, watcher_base: str = "http://watcher_brain:8080") -> Dict:
+    def _execute_process_kill(proposal: Dict, watcher_base: str = "http://watcher_brain:8080",
+                              *, dispatch_mode: str = "push", watcher_id=None,
+                              workflow_id=None, step_index: int = 0) -> Dict:
         """
         Real implementation: delegate process kill to the detecting watcher via its Kill-API
         (POST <watcher_base>/kill).  The watcher container has the Docker socket mounted
         and docker.io installed, so it can run 'docker exec pkill'.
         Always validates the process name against the approved_actions process rules first.
+        In pull mode, builds a pkill command and dispatches via pull queue instead.
         """
         import httpx, uuid
 
@@ -3480,6 +3636,31 @@ class ToolRegistryAgent(Agent):
                 "parameters": {"process_name": process_name, "container": container, "signal": signal},
                 "error": f"Process '{process_name}' blocked by policy — {rule_reason}",
             }
+
+        _use_pull = False
+        if dispatch_mode == "pull":
+            _use_pull = True
+        elif dispatch_mode == "auto":
+            _use_pull = not _is_watcher_reachable(watcher_base)
+
+        if _use_pull:
+            if not watcher_id or not workflow_id:
+                return {
+                    "success": False,
+                    "execution_id": exec_id,
+                    "error": "Pull dispatch requires watcher_id and workflow_id for process_kill",
+                }
+            kill_cmd = f"pkill -{signal} {process_name}"
+            logger.info(f"[TOOL] process_kill via pull dispatch: {kill_cmd}")
+            return _dispatch_via_pull(
+                watcher_id=watcher_id,
+                workflow_id=workflow_id,
+                step_index=step_index,
+                command=kill_cmd,
+                target=container,
+                mode="host",
+                timeout=30,
+            )
 
         watcher_url = f"{watcher_base}/kill"
         payload = {"process_name": process_name, "container": container, "signal": signal}
@@ -3617,11 +3798,17 @@ class ToolRegistryAgent(Agent):
     @staticmethod
     def _execute_tool(tool_name: str, args: Dict, container: str = "sentinel_senses",
                       watcher_base: str = "http://watcher_brain:8080",
-                      adapter_mode: str = "docker") -> Dict:
+                      adapter_mode: str = "docker", *,
+                      dispatch_mode: str = "push", watcher_id=None,
+                      workflow_id=None, step_index: int = 0) -> Dict:
         """Thin wrapper around _execute_tool_impl that redacts credential-shaped
         substrings from the result before any caller sees it — see
         _redact_secrets_from_result / _SECRET_PATTERNS above."""
-        result = ToolRegistryAgent._execute_tool_impl(tool_name, args, container, watcher_base, adapter_mode)
+        result = ToolRegistryAgent._execute_tool_impl(
+            tool_name, args, container, watcher_base, adapter_mode,
+            dispatch_mode=dispatch_mode, watcher_id=watcher_id,
+            workflow_id=workflow_id, step_index=step_index,
+        )
         return ToolRegistryAgent._redact_secrets_from_result(result)
 
     @staticmethod
@@ -3830,7 +4017,9 @@ class ToolRegistryAgent(Agent):
     @staticmethod
     def _execute_tool_impl(tool_name: str, args: Dict, container: str = "sentinel_senses",
                       watcher_base: str = "http://watcher_brain:8080",
-                      adapter_mode: str = "docker") -> Dict:
+                      adapter_mode: str = "docker", *,
+                      dispatch_mode: str = "push", watcher_id=None,
+                      workflow_id=None, step_index: int = 0) -> Dict:
         """
         Execute a tool via the detecting watcher's HTTP API (which has Docker access).
         Returns actual command output or error message.
@@ -3866,7 +4055,8 @@ class ToolRegistryAgent(Agent):
                     "process_name": process_name,
                     "target": container,
                     "signal": signal,
-                }, watcher_base)
+                }, watcher_base, dispatch_mode=dispatch_mode, watcher_id=watcher_id,
+                    workflow_id=workflow_id, step_index=step_index)
 
             # Special handling: Process Detail with terminate action → use Kill-API
             if "process_detail" in tool_key and args.get("action") == "terminate":
@@ -3877,7 +4067,8 @@ class ToolRegistryAgent(Agent):
                     "process_name": process_name,
                     "target": container,
                     "signal": signal,
-                }, watcher_base)
+                }, watcher_base, dispatch_mode=dispatch_mode, watcher_id=watcher_id,
+                    workflow_id=workflow_id, step_index=step_index)
 
             # Special handling: notify / alert_escalate / alert_update / send_alert →
             # route to whichever outbound notification channel is configured (a named
@@ -3991,6 +4182,10 @@ class ToolRegistryAgent(Agent):
                     action_name=_action_name or tool_name,
                     adapter_mode=adapter_mode,
                     execution_mode=_exec_mode,
+                    dispatch_mode=dispatch_mode,
+                    watcher_id=watcher_id,
+                    workflow_id=workflow_id,
+                    step_index=step_index,
                 )
                 # Parse raw text output into a structured dict so downstream steps
                 # can reference captured values via output_capture / run_if conditions.
