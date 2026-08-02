@@ -86,7 +86,7 @@ RUNBOOKS = [
                   "check_cpu", {}),
             _diag(2, "Get Top Process Info",
                   "Identify the top CPU-consuming process",
-                  "top_processes", {"sort": "cpu", "limit": "5"}),
+                  "top_processes", {"sort_by": "pcpu", "limit": "5"}),
         ],
         "actions": [
             _action(1, "Kill Runaway Process",
@@ -111,7 +111,7 @@ RUNBOOKS = [
         "source_steps": {
             "steps": [
                 {"id": "diag_cpu", "name": "Check CPU Usage", "tool": "check_cpu", "type": "diagnostic", "args": {}, "output_capture": {"cpu_pct": "$.cpu_percent"}},
-                {"id": "diag_top_proc", "name": "Get Top Process Info", "tool": "top_processes", "type": "diagnostic", "args": {"sort": "cpu", "limit": "5"}, "output_capture": {"top_process_pid": "$.top_process_pid", "top_process_name": "$.top_process", "top_process_cpu_pct": "$.top_cpu_percent"}},
+                {"id": "diag_top_proc", "name": "Get Top Process Info", "tool": "top_processes", "type": "diagnostic", "args": {"sort_by": "pcpu", "limit": "5"}, "output_capture": {"top_process_pid": "$.top_process_pid", "top_process_name": "$.top_process", "top_process_cpu_pct": "$.top_cpu_percent"}},
                 {"id": "dec_runaway", "name": "Runaway Process Causing It?", "type": "decision", "condition": "top_process_cpu_pct > 60", "on_true": "action_kill", "on_false": "dec_adapter"},
                 {"id": "action_kill", "name": "Kill Runaway Process", "tool": "process_kill", "type": "action", "args": {"pid": "{{top_process_pid}}", "signal": "SIGTERM", "process_name": "{{top_process_name}}"}},
                 {"id": "wait_after_kill", "name": "Wait for CPU Recovery", "type": "wait", "duration_seconds": 15},
@@ -811,7 +811,7 @@ RUNBOOKS = [
         "diagnostics": [
             _diag(1, "List Top Processes",
                   "Identify highest-resource processes to compare against anomaly process",
-                  "top_processes", {"sort": "cpu", "limit": "5"}),
+                  "top_processes", {"sort_by": "pcpu", "limit": "5"}),
             _diag(2, "Trace Anomaly Process Syscalls",
                   "Trace syscalls for the specific anomaly process from the event",
                   "trace_syscalls", {"process_name": "{process_name}"}),
@@ -858,7 +858,7 @@ RUNBOOKS = [
             # mirrors the decision's own threshold (top_syscall_count > 10000) so "normal"
             # means the same thing on the way in as on the way out.
             "steps": [
-                {"id": "diag_top_proc", "name": "Identify Top Process", "tool": "top_processes", "type": "diagnostic", "args": {"sort": "cpu", "limit": "5"}, "output_capture": {"top_process_name": "$.top_process"}},
+                {"id": "diag_top_proc", "name": "Identify Top Process", "tool": "top_processes", "type": "diagnostic", "args": {"sort_by": "pcpu", "limit": "5"}, "output_capture": {"top_process_name": "$.top_process"}},
                 {"id": "diag_syscall", "name": "Trace Anomaly Process", "tool": "trace_syscalls", "type": "diagnostic", "args": {"process_name": "{process_name}"}, "output_capture": {"top_syscall_pid": "$.pid", "top_syscall_count": "$.top_syscall_count"}},
                 {"id": "dec_high_syscall", "type": "decision", "condition": "top_syscall_count > 10000", "on_true": "action_kill", "on_false": "incident_update_resolve"},
                 {"id": "action_kill", "name": "Kill Anomaly Process", "tool": "process_kill", "type": "action", "args": {"process_name": "{process_name}"}},
@@ -1376,7 +1376,7 @@ RUNBOOKS = [
                   "list_open_files"),
             _diag(2, "Top processes",
                   "Correlate FD usage with CPU/memory to identify the culprit",
-                  "top_processes", {"sort": "cpu", "limit": "10"}),
+                  "top_processes", {"sort_by": "pcpu", "limit": "10"}),
         ],
         "actions": [
             _action(1, "Kill FD-leaking process",

@@ -100,8 +100,8 @@ APPROVED_ACTIONS = [
             {"name": "target",  "type": "string",  "required": True,  "description": "Target container name"},
             {"name": "limit",      "type": "integer", "required": False, "default": 10,
              "description": "Number of processes to return"},
-            {"name": "sort_by",    "type": "string",  "required": False, "default": "cpu",
-             "description": "Sort field: cpu | memory"},
+            {"name": "sort_by",    "type": "string",  "required": False, "default": "pcpu",
+             "description": "Sort field: pcpu (CPU %) | pmem (memory %)"},
         ],
     },
     {
