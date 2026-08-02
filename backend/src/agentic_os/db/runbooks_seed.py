@@ -100,10 +100,9 @@ def seed_runbooks(db: Session) -> int:
             if existing.published_at is None:
                 existing.published_at = now
                 changed = True
-            # Seed source_steps only when the DB has none — never overwrite user edits
-            if rb.get("source_steps") and existing.source_steps is None:
-                existing.source_steps = rb["source_steps"]
-                changed = True
+            # Always update source_steps for seeded runbooks so graph changes deploy
+            if rb.get("source_steps"):
+                _set("source_steps", rb["source_steps"])
 
             if changed:
                 existing.updated_at = now
