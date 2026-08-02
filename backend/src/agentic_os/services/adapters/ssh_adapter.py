@@ -77,6 +77,15 @@ def _targets_from_env() -> List[SSHTarget]:
     return []
 
 
+@dataclass
+class _ApiCredential:
+    """Lightweight credential object returned by the platform API resolve endpoint."""
+    name: str
+    username: str
+    port: int
+    private_key: str
+
+
 class SSHAdapter(ExecutionAdapter):
     """
     Execute commands on remote Linux/Unix hosts via SSH.
@@ -101,8 +110,9 @@ class SSHAdapter(ExecutionAdapter):
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
-    def _resolve_db_credential(self, hostname: str):
-        """Look up an SSH credential from the database by hostname pattern match."""
+    def _resolve_credential(self, hostname: str):
+        """Look up an SSH credential — tries direct DB first, then platform API."""
+        # Path 1: direct DB query (works when co-located with the backend)
         try:
             from agentic_os.db.database import SessionLocal
             from agentic_os.api.routes.ssh_credentials import resolve_credential
@@ -115,7 +125,34 @@ class SSHAdapter(ExecutionAdapter):
             finally:
                 db.close()
         except Exception as exc:
-            logger.debug(f"[SSH] DB credential lookup failed (falling back to env): {exc}")
+            logger.debug(f"[SSH] DB credential lookup unavailable: {exc}")
+
+        # Path 2: resolve via platform API (remote watchers)
+        api_url = os.environ.get("WATCHER_API_URL", "")
+        api_key = os.environ.get("WATCHER_API_KEY", "")
+        if api_url:
+            try:
+                import httpx
+                headers = {"X-API-Key": api_key} if api_key else {}
+                with httpx.Client(timeout=5.0) as client:
+                    resp = client.post(
+                        f"{api_url}/api/settings/ssh-credentials/resolve",
+                        json={"hostname": hostname},
+                        headers=headers,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("found"):
+                            logger.info(f"[SSH] Resolved API credential '{data['name']}' for host '{hostname}'")
+                            return _ApiCredential(
+                                name=data["name"],
+                                username=data["username"],
+                                port=data["port"],
+                                private_key=data["private_key"],
+                            )
+            except Exception as exc:
+                logger.debug(f"[SSH] API credential lookup failed: {exc}")
+
         return None
 
     def _connect(self, target_name: str):
@@ -159,8 +196,8 @@ class SSHAdapter(ExecutionAdapter):
             kwargs["look_for_keys"] = False
             kwargs["allow_agent"] = False
         else:
-            # No credentials from env — try the DB credential store
-            db_cred = self._resolve_db_credential(target.host)
+            # No credentials from env — try credential store (DB or API)
+            db_cred = self._resolve_credential(target.host)
             if db_cred:
                 kwargs["username"] = db_cred.username
                 kwargs["port"] = db_cred.port

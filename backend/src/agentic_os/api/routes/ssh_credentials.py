@@ -200,7 +200,31 @@ def test_ssh_credential(cred_id: str, body: SSHCredentialTestRequest, db: Sessio
         return {"success": False, "error": str(exc)}
 
 
-# ── Lookup helper (used by SSH adapter) ──────────────────────────────────────
+# ── Resolve endpoint (used by remote watchers via API) ────────────────────────
+
+class SSHCredentialResolveRequest(BaseModel):
+    hostname: str = Field(..., description="Target hostname to match against host_pattern")
+
+
+@router.post("/settings/ssh-credentials/resolve")
+def resolve_ssh_credential_api(body: SSHCredentialResolveRequest, db: Session = Depends(get_session)):
+    """Resolve an SSH credential by hostname pattern match.
+    Returns the full credential including decrypted private key.
+    Requires API key auth (used by remote watchers)."""
+    cred = resolve_credential(body.hostname, db)
+    if not cred:
+        return {"found": False}
+    return {
+        "found": True,
+        "username": cred.username,
+        "port": cred.port,
+        "private_key": cred.private_key,
+        "name": cred.name,
+        "host_pattern": cred.host_pattern,
+    }
+
+
+# ── Lookup helper (used by SSH adapter direct DB path) ────────────────────────
 
 def resolve_credential(hostname: str, db: Session) -> Optional[SSHCredentialModel]:
     """Find the first enabled credential whose host_pattern matches hostname."""
