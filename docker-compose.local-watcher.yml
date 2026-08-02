@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  watcher_ssh_test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.watcher
+    container_name: watcher_ssh_test
+    restart: "no"
+    volumes:
+      - ./backend/watcher_main.py:/app/watcher_main.py
+      - C:/Users/mikeb/OneDrive/Desktop/Axiometica/ssh-key-oracle.key:/app/.ssh/oracle.key:ro
+    environment:
+      WATCHER_NAME: watcher_ssh_test
+      WATCHER_API_URL: https://instance.axiometica.com
+      WATCHER_API_KEY: ${WATCHER_API_KEY}
+      WATCHER_NGINX_URL: https://instance.axiometica.com
+
+      # SSH adapter config
+      WATCHER_SSH_HOST: 147.5.124.7
+      WATCHER_SSH_USER: ubuntu
+      WATCHER_SSH_PORT: "22"
+      WATCHER_SSH_KEY_PATH: /app/.ssh/oracle.key
+      WATCHER_SSH_STRICT_HOST_KEYS: "false"
+
+      # Polling & cooldown
+      WATCHER_POLL_INTERVAL: "10"
+      WATCHER_COOLDOWN_SECONDS: "60"
+
+      # Anomaly thresholds
+      WATCHER_ANOMALY_THRESHOLD: "1000"
+      WATCHER_CPU_THRESHOLD: "80.0"
+      WATCHER_MEMORY_THRESHOLD: "90.0"
+
+      # Discovery off
+      WATCHER_DISCOVERY_ENABLED: "false"
+
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app/src

@@ -679,18 +679,26 @@ export interface WatcherSettingsUpdate {
   discovery_interval_polls?: number
 }
 
-export const getWatcherSettings = () =>
-  axios.get<WatcherSettingsResponse>(`${API_BASE_URL}/settings/watcher`)
+export const getWatcherSettings = (watcherName?: string) =>
+  axios.get<WatcherSettingsResponse>(
+    watcherName
+      ? `${API_BASE_URL}/settings/watcher/${encodeURIComponent(watcherName)}`
+      : `${API_BASE_URL}/settings/watcher`,
+  )
 
-export const updateWatcherSettings = (update: WatcherSettingsUpdate) =>
+export const updateWatcherSettings = (update: WatcherSettingsUpdate, watcherName?: string) =>
   axios.put<{ saved: WatcherSettingsUpdate; watcher_live_applied: boolean; message: string }>(
-    `${API_BASE_URL}/settings/watcher`,
+    watcherName
+      ? `${API_BASE_URL}/settings/watcher/${encodeURIComponent(watcherName)}`
+      : `${API_BASE_URL}/settings/watcher`,
     update,
   )
 
-export const resetWatcherSettings = () =>
+export const resetWatcherSettings = (watcherName?: string) =>
   axios.post<{ message: string; defaults: WatcherSettingsUpdate }>(
-    `${API_BASE_URL}/settings/watcher/reset`,
+    watcherName
+      ? `${API_BASE_URL}/settings/watcher/${encodeURIComponent(watcherName)}/reset`
+      : `${API_BASE_URL}/settings/watcher/reset`,
   )
 
 // ─────────────────────────────────────────────────────────────────

@@ -333,7 +333,7 @@ class WatcherService:
         Fetch watcher thresholds from the platform's settings API (DB-backed).
         Returns True if any setting changed.
         """
-        url = f"{self.api_base_url}/api/settings/watcher"
+        url = f"{self.api_base_url}/api/settings/watcher/{self.watcher_name}"
         try:
             async with httpx.AsyncClient(timeout=5.0, headers=self._api_headers) as client:
                 resp = await client.get(url)

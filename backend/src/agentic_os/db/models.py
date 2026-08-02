@@ -909,6 +909,7 @@ class WatcherRegistrationModel(Base):
     watcher_version  = Column(String(50),  nullable=True)
     targets          = Column(JSON,        nullable=True)   # JSON list of managed targets
     metrics_history  = Column(JSON,        nullable=True)   # rolling list of {ts,cpu,mem,disk,alerts}
+    settings         = Column(JSON,        nullable=True)   # per-watcher threshold overrides (null = use platform defaults)
 
     last_seen = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     registered_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -181,7 +181,8 @@ class WatcherSettingsUpdate(BaseModel):
 
 @public_router.get("/settings/watcher")
 def get_watcher_settings(db: Session = Depends(get_session)):
-    """Return all watcher settings with metadata. Public — read-only, non-sensitive config."""
+    """Return platform-default watcher settings (no per-watcher overrides).
+    Legacy endpoint — prefer GET /settings/watcher/{watcher_name}."""
     rows = db.query(PlatformSettingModel).filter(
         PlatformSettingModel.category == "watcher"
     ).all()
@@ -198,12 +199,103 @@ def get_watcher_settings(db: Session = Depends(get_session)):
     }
 
 
+def _get_watcher_registration(watcher_name: str, db: Session):
+    """Look up a watcher registration by name, or 404."""
+    from agentic_os.db.models import WatcherRegistrationModel
+    row = db.query(WatcherRegistrationModel).filter_by(watcher_name=watcher_name).first()
+    if not row:
+        raise HTTPException(404, f"Watcher '{watcher_name}' not found")
+    return row
+
+
+@public_router.get("/settings/watcher/{watcher_name}")
+def get_watcher_settings_scoped(watcher_name: str, db: Session = Depends(get_session)):
+    """Return watcher settings for a specific watcher, merging per-watcher
+    overrides on top of platform defaults."""
+    # Load platform defaults
+    rows = db.query(PlatformSettingModel).filter(
+        PlatformSettingModel.category == "watcher"
+    ).all()
+    if not rows:
+        seed_watcher_defaults(db)
+        rows = db.query(PlatformSettingModel).filter(
+            PlatformSettingModel.category == "watcher"
+        ).all()
+
+    base_settings = [_row_to_dict(r) for r in rows]
+
+    # Load per-watcher overrides
+    reg = _get_watcher_registration(watcher_name, db)
+    overrides = reg.settings or {}
+
+    # Merge: per-watcher values win over platform defaults
+    for s in base_settings:
+        short_key = s["key"].replace("watcher.", "")
+        if short_key in overrides:
+            s["value"] = overrides[short_key]
+
+    return {
+        "category": "watcher",
+        "watcher_name": watcher_name,
+        "settings": base_settings,
+    }
+
+
+@router.put("/settings/watcher/{watcher_name}")
+async def update_watcher_settings_scoped(
+    watcher_name: str,
+    payload: WatcherSettingsUpdate,
+    db: Session = Depends(get_session),
+):
+    """Update watcher settings for a specific watcher instance.
+    Saves overrides to the watcher registration record, not platform_settings."""
+    reg = _get_watcher_registration(watcher_name, db)
+
+    updates = payload.model_dump(exclude_none=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No settings provided")
+
+    # Merge into existing overrides
+    current = dict(reg.settings or {})
+    for field, new_value in updates.items():
+        current[field] = new_value
+    reg.settings = current
+    db.commit()
+
+    # Live-push to this specific watcher
+    watcher_applied = False
+    kill_url = (getattr(reg, "kill_api_url", "") or f"http://{watcher_name}:8080").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            try:
+                resp = await client.put(f"{kill_url}/config", json=updates)
+                if resp.status_code == 200:
+                    watcher_applied = True
+                else:
+                    logger.warning(f"Watcher config push to {kill_url} returned {resp.status_code}")
+            except Exception as _exc:
+                logger.warning(f"Could not push config to {kill_url}: {_exc}")
+    except Exception as exc:
+        logger.warning(f"Could not push config to watcher: {exc}")
+
+    return {
+        "saved": updates,
+        "watcher_live_applied": watcher_applied,
+        "message": (
+            f"Settings saved for {watcher_name} and applied live."
+            if watcher_applied
+            else f"Settings saved for {watcher_name}. Will apply on next poll cycle."
+        ),
+    }
+
+
 @router.put("/settings/watcher")
 async def update_watcher_settings(
     payload: WatcherSettingsUpdate,
     db: Session = Depends(get_session),
 ):
-    """Update watcher settings in DB and push live to the running watcher."""
+    """Update platform-default watcher settings in DB and push live to all watchers.
+    Legacy endpoint — prefer PUT /settings/watcher/{watcher_name}."""
     field_to_key = {
         "poll_interval":          "watcher.poll_interval",
         "cpu_threshold":          "watcher.cpu_threshold",
@@ -226,7 +318,6 @@ async def update_watcher_settings(
         db_key = field_to_key[field]
         row = db.get(PlatformSettingModel, db_key)
         if row is None:
-            # Auto-create if seed hasn't run
             defaults = {d["key"]: d for d in WATCHER_DEFAULTS}
             meta = defaults.get(db_key, {})
             row = PlatformSettingModel(
@@ -243,7 +334,6 @@ async def update_watcher_settings(
 
     db.commit()
 
-    # Live-push to all approved watchers (non-fatal if any watcher is down)
     watcher_applied = False
     _watcher_urls = _get_approved_watcher_kill_urls(db)
     try:
@@ -271,9 +361,35 @@ async def update_watcher_settings(
     }
 
 
+@router.post("/settings/watcher/{watcher_name}/reset")
+async def reset_watcher_settings_scoped(watcher_name: str, db: Session = Depends(get_session)):
+    """Clear per-watcher overrides, reverting to platform defaults."""
+    reg = _get_watcher_registration(watcher_name, db)
+    reg.settings = None
+    db.commit()
+
+    # Push platform defaults to this watcher
+    default_payload = {
+        d["key"].split(".", 1)[1]: _coerce(d["value"], d["value_type"])
+        for d in WATCHER_DEFAULTS
+    }
+    kill_url = (getattr(reg, "kill_api_url", "") or f"http://{watcher_name}:8080").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            try:
+                await client.put(f"{kill_url}/config", json=default_payload)
+            except Exception as _exc:
+                logger.warning(f"Could not push reset config to {kill_url}: {_exc}")
+    except Exception as exc:
+        logger.warning(f"Could not push reset config to watcher: {exc}")
+
+    return {"message": f"Settings for {watcher_name} reset to platform defaults.", "defaults": default_payload}
+
+
 @router.post("/settings/watcher/reset")
 async def reset_watcher_settings(db: Session = Depends(get_session)):
-    """Restore all watcher settings to factory defaults."""
+    """Restore platform-default watcher settings to factory defaults.
+    Legacy endpoint — prefer POST /settings/watcher/{watcher_name}/reset."""
     for item in WATCHER_DEFAULTS:
         row = db.get(PlatformSettingModel, item["key"])
         if row:
@@ -289,7 +405,6 @@ async def reset_watcher_settings(db: Session = Depends(get_session)):
             ))
     db.commit()
 
-    # Push defaults to all approved live watchers
     default_payload = {
         d["key"].split(".", 1)[1]: _coerce(d["value"], d["value_type"])
         for d in WATCHER_DEFAULTS

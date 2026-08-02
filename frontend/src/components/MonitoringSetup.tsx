@@ -361,7 +361,7 @@ function ContainerMonitoringSection({ watcherName }: { watcherName: string }) {
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await getWatcherSettings()
+      const res = await getWatcherSettings(watcherName)
       setSettings(res.data.settings)
       const d: WatcherSettingsUpdate = {}
       for (const s of res.data.settings) {
@@ -374,14 +374,14 @@ function ContainerMonitoringSection({ watcherName }: { watcherName: string }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [watcherName])
 
   useEffect(() => { load() }, [load])
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      await updateWatcherSettings(draft)
+      await updateWatcherSettings(draft, watcherName)
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch {
@@ -394,7 +394,7 @@ function ContainerMonitoringSection({ watcherName }: { watcherName: string }) {
   const handleReset = async () => {
     setSaving(true)
     try {
-      await resetWatcherSettings()
+      await resetWatcherSettings(watcherName)
       await load()
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
