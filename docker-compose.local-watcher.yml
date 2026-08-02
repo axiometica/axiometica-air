@@ -21,6 +21,7 @@ services:
       - "8081:8080"
     volumes:
       - ./backend/watcher_main.py:/app/watcher_main.py
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       WATCHER_NAME: watcher_ssh_test
       WATCHER_API_URL: https://instance.axiometica.com
@@ -46,8 +47,8 @@ services:
       WATCHER_CONNECTION_THRESHOLD: "1000"
       WATCHER_MIN_CONSECUTIVE_POLLS: "3"
 
-      # Discovery off
-      WATCHER_DISCOVERY_ENABLED: "false"
+      # Discovery enabled — registers ssh_target CI in CMDB
+      WATCHER_DISCOVERY_ENABLED: "true"
 
       PYTHONUNBUFFERED: 1
       PYTHONPATH: /app/src
