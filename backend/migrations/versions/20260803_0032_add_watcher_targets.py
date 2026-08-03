@@ -16,32 +16,38 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "watcher_targets",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("watcher_id", UUID(as_uuid=True), sa.ForeignKey("watcher_registrations.watcher_id", ondelete="CASCADE"), nullable=False),
-        sa.Column("name", sa.String(200), nullable=False, server_default=""),
-        sa.Column("host", sa.String(255), nullable=False),
-        sa.Column("port", sa.Integer, nullable=False, server_default="22"),
-        sa.Column("credential_name", sa.String(100), nullable=True),
-        sa.Column("status", sa.String(20), nullable=False, server_default="pending"),
-        sa.Column("source", sa.String(20), nullable=False, server_default="manual"),
-        sa.Column("cidr_group", sa.String(50), nullable=True),
-        sa.Column("auto_approve", sa.Boolean, nullable=False, server_default="false"),
-        sa.Column("last_probe_at", sa.DateTime, nullable=True),
-        sa.Column("last_connected_at", sa.DateTime, nullable=True),
-        sa.Column("probe_error", sa.String(500), nullable=True),
-        sa.Column("matched_credential", sa.String(100), nullable=True),
-        sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
-        sa.UniqueConstraint("watcher_id", "host", "port", name="uq_watcher_target_host_port"),
-    )
-    op.create_index("idx_watcher_targets_watcher_status", "watcher_targets", ["watcher_id", "status"])
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
 
-    op.add_column(
-        "watcher_registrations",
-        sa.Column("discovery_auto_approve", sa.Boolean, nullable=False, server_default="false"),
-    )
+    if "watcher_targets" not in inspector.get_table_names():
+        op.create_table(
+            "watcher_targets",
+            sa.Column("id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+            sa.Column("watcher_id", UUID(as_uuid=True), sa.ForeignKey("watcher_registrations.watcher_id", ondelete="CASCADE"), nullable=False),
+            sa.Column("name", sa.String(200), nullable=False, server_default=""),
+            sa.Column("host", sa.String(255), nullable=False),
+            sa.Column("port", sa.Integer, nullable=False, server_default="22"),
+            sa.Column("credential_name", sa.String(100), nullable=True),
+            sa.Column("status", sa.String(20), nullable=False, server_default="pending"),
+            sa.Column("source", sa.String(20), nullable=False, server_default="manual"),
+            sa.Column("cidr_group", sa.String(50), nullable=True),
+            sa.Column("auto_approve", sa.Boolean, nullable=False, server_default="false"),
+            sa.Column("last_probe_at", sa.DateTime, nullable=True),
+            sa.Column("last_connected_at", sa.DateTime, nullable=True),
+            sa.Column("probe_error", sa.String(500), nullable=True),
+            sa.Column("matched_credential", sa.String(100), nullable=True),
+            sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
+            sa.Column("updated_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
+            sa.UniqueConstraint("watcher_id", "host", "port", name="uq_watcher_target_host_port"),
+        )
+        op.create_index("idx_watcher_targets_watcher_status", "watcher_targets", ["watcher_id", "status"])
+
+    existing_cols = [c["name"] for c in inspector.get_columns("watcher_registrations")]
+    if "discovery_auto_approve" not in existing_cols:
+        op.add_column(
+            "watcher_registrations",
+            sa.Column("discovery_auto_approve", sa.Boolean, nullable=False, server_default="false"),
+        )
 
 
 def downgrade() -> None:
