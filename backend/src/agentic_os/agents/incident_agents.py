@@ -4647,7 +4647,7 @@ class ToolRegistryAgent(Agent):
                     except (ValueError, IndexError):
                         pass
                 # busybox `top -bn1`: PID PPID USER STAT VSZ %VSZ CPU %CPU COMMAND (9 cols)
-                elif len(cols) >= 9 and cols[0].isdigit():
+                if len(cols) >= 9 and cols[0].isdigit():
                     try:
                         cpu_pct = float(cols[7].rstrip('%'))
                         return {

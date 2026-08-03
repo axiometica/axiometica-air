@@ -806,8 +806,10 @@ RUNBOOKS = [
         "confidence": 0.94,
         "blast_radius": 1,
         # Flat arrays derived from the visual-editor graph (source_steps).
-        # Graph: Top Syscall Processes → DECISION(syscall_count>10000) → Kill|end
-        #        → Verify Syscall Normal → Notify
+        # Graph: Top Processes → Trace → DECISION(count>10000) → Kill/Wait|skip
+        #        → Verify Syscall Normal → Resolve → Notify
+        # Both branches converge on verify_syscall: false positives auto-resolve,
+        # persistent issues abort via on_failure=abort → VerifierAgent → awaiting_manual
         "diagnostics": [
             _diag(1, "List Top Processes",
                   "Identify highest-resource processes to compare against anomaly process",
@@ -860,28 +862,24 @@ RUNBOOKS = [
             "steps": [
                 {"id": "diag_top_proc", "name": "Identify Top Process", "tool": "top_processes", "type": "diagnostic", "args": {"sort_by": "pcpu", "limit": "5"}, "output_capture": {"top_process_name": "$.top_process"}},
                 {"id": "diag_syscall", "name": "Trace Anomaly Process", "tool": "trace_syscalls", "type": "diagnostic", "args": {"process_name": "{process_name}"}, "output_capture": {"top_syscall_pid": "$.pid", "top_syscall_count": "$.top_syscall_count"}},
-                {"id": "dec_high_syscall", "type": "decision", "condition": "top_syscall_count > 10000", "on_true": "action_kill", "on_false": "incident_update_manual"},
+                {"id": "dec_high_syscall", "type": "decision", "condition": "top_syscall_count > 10000", "on_true": "action_kill", "on_false": "verify_syscall"},
                 {"id": "action_kill", "name": "Kill Anomaly Process", "tool": "process_kill", "type": "action", "args": {"process_name": "{process_name}"}},
                 {"id": "wait_after_kill", "name": "Wait for Process Termination", "type": "wait", "duration_seconds": 10},
                 {"id": "verify_syscall", "name": "Verify Syscall Normal", "tool": "trace_syscalls", "type": "verification", "args": {"process_name": "{process_name}"}, "output_capture": {"syscall_after": "$.top_syscall_count"}, "metric": "syscall_after", "check": "less_than", "value": 10000},
-                {"id": "notify_done", "name": "Notify Resolution", "tool": "send_alert", "type": "notify", "args": {"message": "Syscall remediation complete. Syscall count now: {{syscall_after}}", "severity": "info"}},
-                {"id": "notify_no_action", "name": "Notify: Below Threshold", "tool": "send_alert", "type": "notify", "args": {"message": "Syscall count ({{top_syscall_count}}) below threshold — no kill needed. Escalating to operator.", "severity": "warning"}},
                 {"id": "incident_update_resolve", "name": "Mark Resolved", "type": "incident_update", "state": "resolved"},
-                {"id": "incident_update_manual", "name": "Escalate to Operator", "type": "incident_update", "state": "awaiting_manual"},
+                {"id": "notify_done", "name": "Notify Resolution", "tool": "send_alert", "type": "notify", "args": {"message": "Syscall intensity resolved. Count: {{syscall_after}}", "severity": "info"}},
             ],
             "edges": [
                 {"source": "start",          "target": "diag_top_proc",   "sourceHandle": None},
                 {"source": "diag_top_proc",  "target": "diag_syscall",    "sourceHandle": None},
                 {"source": "diag_syscall",   "target": "dec_high_syscall","sourceHandle": None},
                 {"source": "dec_high_syscall","target": "action_kill",    "sourceHandle": "true"},
-                {"source": "dec_high_syscall","target": "incident_update_manual", "sourceHandle": "false"},
+                {"source": "dec_high_syscall","target": "verify_syscall", "sourceHandle": "false"},
                 {"source": "action_kill",    "target": "wait_after_kill", "sourceHandle": None},
                 {"source": "wait_after_kill","target": "verify_syscall",  "sourceHandle": None},
                 {"source": "verify_syscall", "target": "incident_update_resolve", "sourceHandle": None},
                 {"source": "incident_update_resolve", "target": "notify_done", "sourceHandle": None},
                 {"source": "notify_done",    "target": "end",             "sourceHandle": None},
-                {"source": "incident_update_manual", "target": "notify_no_action", "sourceHandle": None},
-                {"source": "notify_no_action", "target": "end",          "sourceHandle": None},
             ],
             "positions": {},
         },
