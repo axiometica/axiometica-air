@@ -1,7 +1,7 @@
 # Watcher Service — Setup & Configuration Guide
 
 **Last updated:** 2026-06-07  
-**Platform version:** v1.6.0
+**Platform version:** v1.7.0
 
 ---
 

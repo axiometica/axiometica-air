@@ -11,6 +11,96 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.7.0] — 2026-08-02
+
+### New Features ✨
+
+**Pull-Based Execution Dispatch for Remote Watchers**
+- Watchers behind NAT or firewalls can now receive and execute remediation tasks without the backend needing to reach them — the watcher polls the backend for queued tasks on its existing heartbeat loop, executes locally or via SSH, and reports results back
+- New `watcher_exec_tasks` table with `FOR UPDATE SKIP LOCKED` atomic claim, automatic TTL expiry, and full result capture (stdout, stderr, return code)
+- `dispatch_mode` per watcher (`push` / `pull` / `auto`) — remote adapters (SSH, AWS SSM, vCenter, Azure) default to `pull`; co-located adapters (Docker, Kubernetes) default to `push`
+- API: `GET /api/monitoring/watchers/{name}/exec-tasks` (claim), `POST .../exec-tasks/{id}/result` (report)
+- ToolRegistryAgent routes execution through push or pull path based on the watcher's `dispatch_mode`, with transparent fallback in `auto` mode
+
+**SSH Credential Store**
+- Encrypted-at-rest credential vault for SSH private keys and passwords, with full CRUD UI under Settings → SSH Credentials
+- Credentials encrypted via Fernet (AES-128-CBC) with the platform's `ENCRYPTION_KEY`; plaintext never hits the API response
+- Watchers resolve credentials at runtime via `GET /api/ssh-credentials/{name}/resolve` — no keys stored on the watcher host
+- SSH adapter uses the credential store automatically when `ssh_credential_name` is set in watcher config
+
+**Per-Watcher Monitoring Settings**
+- Each watcher now carries its own thresholds (CPU %, memory %, disk %, poll interval, cooldown) instead of sharing a single global config
+- Settings travel with the watcher registration and are hot-reloaded on each poll cycle — no restart required
+- Synthetic monitors are scoped per-watcher: each watcher runs only the monitors assigned to it, with results tagged by watcher name
+
+**SSH Adapter — Container Discovery via Docker API**
+- SSH-connected watchers can now discover and monitor containers on the remote host via the Docker socket, the same way the local Docker adapter does
+- Discovered containers are registered as CMDB CIs in Neo4j with `HOSTED_ON` relationships to the target host
+
+**Global Automation Kill Switch**
+- New `automation_paused` platform setting instantly halts all automated remediation pipeline-wide — the check runs before `ToolRegistryAgent` so no new execution starts while paused
+- Toggle via Settings UI or API; incidents that hit the gate enter `awaiting_manual` instead of executing
+
+**Adapter-Mode Decision Nodes in Runbooks**
+- High CPU runbook now branches on adapter mode (Docker/SSH) at a decision node, routing to the correct diagnostic and remediation tools for each environment
+- All seeded runbooks updated with adapter-aware paths where applicable
+
+**Animated Execution Spinner**
+- Replaced the static "Contacting watcher…" text in the runbook editor's test-run view with a multi-phase animated spinner showing execution progress in real time
+
+**Demo Mode**
+- Read-only demo role with one-click sign-in, LLM cost tracking panel, role badge, and incident trigger endpoint for live demos
+- Demo overlay is cleanly separated: one compose flag + `DEMO_MODE` env var, trivially removable for production
+- Umami analytics integration at `analytics.axiometica.com`
+
+### Bug Fixes 🐛
+
+**Runbook False-Branch Resolution (20 runbooks)**
+- All seeded runbooks now route both true and false decision branches through a verification step before resolving — previously, 19 runbooks sent the false (no-action) branch directly to a notify step and `end`, skipping verification entirely, which meant false-positive incidents were never confirmed as actually clear before being closed
+- The verification → `incident_update(resolved)` → notify → end path ensures that even false-positive paths confirm the issue is genuinely resolved; if verification fails, `on_failure: abort` halts the pipeline and the incident lands in `awaiting_manual` for operator review
+
+**Syscall Runbook False-Resolves**
+- The High Syscall runbook's decision node false branch now goes through verification first instead of straight to manual escalation — if syscalls are normal (false positive), the incident auto-resolves; only if verification fails does it escalate
+
+**BusyBox `top_processes` Parser**
+- Fixed: when BusyBox `top -bn1` output has COMMAND fields with spaces (e.g. `next-server (v14.2.13, turbo, port 3000)`), lines split into ≥12 columns, causing the GNU format branch to match and fail, and the `elif` guard prevented the BusyBox branch from ever executing — result was empty `structured` output
+- Changed `elif` to `if` so BusyBox format detection runs independently after GNU format detection fails
+
+**`top_processes` Sort Key Mismatch**
+- `sort_by=pcpu` parameter was not recognized by the parser; output was unsorted. Fixed to match the `ps` format specifier
+
+**Sudo for SSH Targets**
+- `pkill` and process management commands on SSH targets now use `sudo` — required when the watcher connects as a non-root user
+
+**Event Type Normalization Before Dedup**
+- `event_type` is now normalized to canonical form before the condition-state dedup check, preventing duplicate incidents when aliases and canonical names refer to the same condition
+
+**Zombie Process Filtering**
+- Zombie processes (state `Z`) are now filtered out of kill targets — previously, attempting to kill a zombie process would fail and report a false remediation failure
+- Added `init: true` to worker containers to prevent zombie accumulation
+
+**DB Session Leak**
+- Closed leaked database sessions in the agent pipeline that caused connection pool exhaustion under sustained incident load
+
+**Anomaly Process Override**
+- The diagnostic discovery step no longer overrides an anomaly process that was already identified by the alert source — previously, a watcher alert naming a specific process could be overwritten by a generic top-CPU process from diagnostics
+
+**Docker/K8s Tool Variants**
+- All generic `host_*` approved actions now include Docker (`docker exec`) and Kubernetes (`kubectl exec`) command variants, ensuring runbook tools work correctly in containerized environments
+
+**BusyBox-Compatible `ps` Commands**
+- Replaced `ps aux` with BusyBox-compatible `ps -o pid,ppid,user,%cpu,%mem,comm` across all tool definitions and parsers
+
+**Seed Idempotency**
+- `source_steps` for seeded runbooks are now always compared and updated on startup, ensuring deployed graph fixes take effect without manual database intervention
+
+### Internal 🧹
+- Nginx refactored to proxy to the frontend container instead of serving baked static files — single source of truth for frontend assets
+- Nginx proxy timeout increased to 180s for long-running pull-dispatch test executions
+- SSH host-key verification defaults to `RejectPolicy` (strict) with opt-out, replacing the previous `AutoAddPolicy` default
+- Frontend interceptor no longer treats HTTP 403 as session expiry (was triggering unnecessary logouts on permission-denied responses)
+- Event type loader now includes disabled types so they appear in admin UI for re-enabling
+
 ## [1.6.0] — 2026-07-11
 
 ### New Features ✨
@@ -442,7 +532,8 @@ Initial general availability release.
 
 ---
 
-[Unreleased]: https://github.com/axiometica/axiometica-air/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/axiometica/axiometica-air/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/axiometica/axiometica-air/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/axiometica/axiometica-air/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/axiometica/axiometica-air/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/axiometica/axiometica-air/compare/v1.3.0...v1.4.0

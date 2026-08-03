@@ -1,6 +1,6 @@
 # Axiometica AIR v2 — Deployment Guide
 
-**Platform version:** v1.6.0  
+**Platform version:** v1.7.0  
 **Last updated:** 2026-07-17
 
 ---

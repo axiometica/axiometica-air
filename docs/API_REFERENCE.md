@@ -1225,7 +1225,7 @@ Receives monitoring signals from `watcher_brain`, external connectors, or script
 
 **Response (200 OK):**
 ```json
-{"status": "healthy", "version": "1.6.0", "timestamp": "2026-05-30T10:00:00Z"}
+{"status": "healthy", "version": "1.7.0", "timestamp": "2026-05-30T10:00:00Z"}
 ```
 
 ### Readiness Check

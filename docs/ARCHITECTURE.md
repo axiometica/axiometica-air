@@ -1,6 +1,6 @@
 # Axiometica AIR — System Architecture
 
-**Last updated:** 2026-06-07 (v1.6.0)
+**Last updated:** 2026-06-07 (v1.7.0)
 
 ---
 

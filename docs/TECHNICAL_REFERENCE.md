@@ -1,6 +1,6 @@
 # Axiometica AIR v2 — Complete Technical Reference
 
-> **Version:** v1.6.0 · **Last updated:** 2026-06-07  
+> **Version:** v1.7.0 · **Last updated:** 2026-06-07  
 > A single document covering every major subsystem: monitoring, event ingestion, the 8-agent incident pipeline, workflow state, the all-clear mechanism, Celery task execution, event sourcing, WebSocket updates, the database schema, and the frontend data path.
 
 ---

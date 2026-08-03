@@ -1,8 +1,8 @@
-# Axiometica AIR v1.6.0
+# Axiometica AIR v1.7.0
 
 > Fundamental Intelligence for Autonomous Operations — enterprise AI-driven IT ops platform with autonomous incident detection, triage, enrichment, remediation, and resolution with operator-controlled governance.
 
-[![Status](https://img.shields.io/badge/Status-v1.6.0-brightgreen)]()
+[![Status](https://img.shields.io/badge/Status-v1.7.0-brightgreen)]()
 [![License](https://img.shields.io/badge/License-Source%20Available-blue)](./LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)]()
@@ -13,7 +13,7 @@
 [![Community](https://img.shields.io/badge/Community-Testing-orange)]()
 [![GitHub](https://img.shields.io/badge/GitHub-axiometica--air-333)](https://github.com/axiometica/axiometica-air)
 
-**Release Date:** June 2026 | **Status:** Production Ready ✅
+**Release Date:** August 2026 | **Status:** Production Ready ✅
 
 ---
 
@@ -492,5 +492,5 @@ The full license text is in [LICENSE](./LICENSE). [NOTICE](./NOTICE) contains th
 
 - **GitHub:** https://github.com/axiometica/axiometica-air
 - **Branch:** main
-- **Version:** v1.6.0 — June 2026
+- **Version:** v1.7.0 — August 2026
 - **Status:** ✅ Production Ready

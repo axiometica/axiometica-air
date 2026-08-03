@@ -1,7 +1,7 @@
 # Axiometica AIR — Feature Catalog
 
-**Last updated:** 2026-07-15
-**Platform status:** v1.6.0 — Production Ready
+**Last updated:** 2026-08-02
+**Platform status:** v1.7.0 — Production Ready
 
 ---
 
@@ -537,7 +537,7 @@ A real-time monitoring dashboard shows CPU, memory, and disk across all monitore
 
 The all-clear mechanism is **per-resource and per-condition-type**. When CPU normalizes on `container-A`, only `container-A`'s CPU incidents are closed. A concurrent disk-full incident on the same container remains open until the disk condition independently clears. This granularity prevents premature closure of still-active incidents.
 
-### Synthetic Transaction Monitoring *(v1.6.0)*
+### Synthetic Transaction Monitoring *(v1.7.0)*
 
 Beyond passive resource metrics and single-endpoint health probes, the watcher can replay a scripted, multi-page user journey — login, navigate, submit — against a real target and assert on both HTTP status and page content. This catches the class of failure a plain uptime check misses entirely: a page that returns 200 but renders broken or empty.
 
@@ -779,9 +779,9 @@ A three-stage spinner is shown during generation, listing the three pipeline cal
 | Watcher metrics dashboard (CPU/memory/disk rolling graphs) | Implemented (v1.1.2) |
 | Accurate disk reporting via df -B1 (fixes zero-disk bug) | Implemented (v1.1.2) |
 | Live threshold controls — hot-reload without restart | Implemented (v1.1.2) |
-| Synthetic Transaction Monitoring — HAR-based scripted journey replay | Implemented (v1.6.0) |
-| Per-page content assertions with persisted page/request structure | Implemented (v1.6.0) |
-| Deterministic script generation + on-demand AI script repair | Implemented (v1.6.0) |
+| Synthetic Transaction Monitoring — HAR-based scripted journey replay | Implemented (v1.7.0) |
+| Per-page content assertions with persisted page/request structure | Implemented (v1.7.0) |
+| Deterministic script generation + on-demand AI script repair | Implemented (v1.7.0) |
 | **Connector Hub** | |
 | Open webhook event ingest (any monitoring tool) | Implemented |
 | ServiceNow certified connector (bidirectional) | Implemented |
@@ -859,18 +859,35 @@ A three-stage spinner is shown during generation, listing the three pipeline cal
 | **Deployment** | |
 | Docker Compose deployment (all services containerized) | Implemented |
 | Change management workflow | Implemented |
-| **AI Tool Builder** *(v1.6.0)* | |
-| 3-call LLM pipeline — research command + sample, draft structure, generate patterns | Implemented (v1.6.0) |
-| Location-strategy pattern generation — column, after_literal, end_split, count (no LLM regex) | Implemented (v1.6.0) |
-| Column header matching — semantic header-to-column resolution for ss/netstat/docker ps | Implemented (v1.6.0) |
-| Header-row filtering — digit-presence heuristic excludes header lines from pattern validation | Implemented (v1.6.0) |
-| `kind: count` extraction mode — counts matching lines at runtime via re.findall | Implemented (v1.6.0) |
-| Tabular output handling — parameterise+filter, aggregate (wc -l / grep -c), or both | Implemented (v1.6.0) |
-| Multi-environment command generation — docker, kubernetes, ssh, aws_ssm, azure, any | Implemented (v1.6.0) |
-| Portal modal UI — spinner, step pills, read-only JSON preview, collapsible Refine accordion | Implemented (v1.6.0) |
-| Research sample pre-fill — Refine textarea pre-populated from Call 0 output | Implemented (v1.6.0) |
-| Merge logic — Refine keeps existing patterns, fills blanks, appends new fields | Implemented (v1.6.0) |
-| Tools registered as disabled by default with inline test-before-enable notice | Implemented (v1.6.0) |
+| **AI Tool Builder** *(v1.7.0)* | |
+| 3-call LLM pipeline — research command + sample, draft structure, generate patterns | Implemented (v1.7.0) |
+| Location-strategy pattern generation — column, after_literal, end_split, count (no LLM regex) | Implemented (v1.7.0) |
+| Column header matching — semantic header-to-column resolution for ss/netstat/docker ps | Implemented (v1.7.0) |
+| Header-row filtering — digit-presence heuristic excludes header lines from pattern validation | Implemented (v1.7.0) |
+| `kind: count` extraction mode — counts matching lines at runtime via re.findall | Implemented (v1.7.0) |
+| Tabular output handling — parameterise+filter, aggregate (wc -l / grep -c), or both | Implemented (v1.7.0) |
+| Multi-environment command generation — docker, kubernetes, ssh, aws_ssm, azure, any | Implemented (v1.7.0) |
+| Portal modal UI — spinner, step pills, read-only JSON preview, collapsible Refine accordion | Implemented (v1.7.0) |
+| Research sample pre-fill — Refine textarea pre-populated from Call 0 output | Implemented (v1.7.0) |
+| Merge logic — Refine keeps existing patterns, fills blanks, appends new fields | Implemented (v1.7.0) |
+| Tools registered as disabled by default with inline test-before-enable notice | Implemented (v1.7.0) |
+| **Remote Watcher Execution** *(v1.7.0)* | |
+| Pull-based execution dispatch — watchers behind NAT poll for queued tasks instead of requiring inbound connectivity | Implemented (v1.7.0) |
+| Per-watcher `dispatch_mode` (push / pull / auto) with automatic adapter-based defaults | Implemented (v1.7.0) |
+| `watcher_exec_tasks` table with atomic claim (`FOR UPDATE SKIP LOCKED`), TTL expiry, full result capture | Implemented (v1.7.0) |
+| **SSH Credential Store** *(v1.7.0)* | |
+| Encrypted-at-rest SSH credential vault (Fernet / AES-128-CBC) with full CRUD UI | Implemented (v1.7.0) |
+| Runtime credential resolution via platform API — no keys stored on watcher host | Implemented (v1.7.0) |
+| SSH adapter auto-resolves credentials by name from the platform store | Implemented (v1.7.0) |
+| **Per-Watcher Monitoring** *(v1.7.0)* | |
+| Per-watcher thresholds (CPU %, memory %, disk %, poll interval, cooldown) — hot-reloaded, no restart | Implemented (v1.7.0) |
+| Scoped synthetic monitors — each watcher runs only its assigned monitors | Implemented (v1.7.0) |
+| SSH adapter container discovery via Docker API with CMDB CI registration | Implemented (v1.7.0) |
+| **Operational Safety** *(v1.7.0)* | |
+| Global automation kill switch — instantly halts all automated remediation pipeline-wide | Implemented (v1.7.0) |
+| Runbook false-branch verification — all decision paths go through verification before resolving | Implemented (v1.7.0) |
+| Adapter-mode decision nodes — runbooks branch on Docker/SSH adapter for correct tool selection | Implemented (v1.7.0) |
+| SSH host-key enforcement defaults to `RejectPolicy` (strict) with opt-out | Implemented (v1.7.0) |
 | **Planned** | |
 | Kubernetes / Helm deployment | Planned |
 | Distributed tracing (OpenTelemetry + Jaeger) | Planned |
