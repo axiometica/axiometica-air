@@ -1921,14 +1921,10 @@ export default function MonitoringSetup() {
           backgroundColor: DS.surface, border: `1px solid ${DS.border}`,
           borderRadius: 10, marginBottom: '1.75rem',
         }}>
-          <IconRadar size={38} color={DS.txtS} />
-          <p style={{ fontSize: '0.9rem', color: DS.txtM, marginTop: '1rem', marginBottom: 4 }}>No Watchers Registered</p>
-          <p style={{ fontSize: '0.78rem', color: DS.txtS, marginBottom: '1rem' }}>
-            Click <strong style={{ color: DS.txtP }}>Register Watcher</strong> to deploy one — it auto-appears here as pending.
+          <p style={{ fontSize: '0.9rem', color: DS.txtM, marginBottom: 4 }}>No Watchers Registered</p>
+          <p style={{ fontSize: '0.78rem', color: DS.txtS }}>
+            Click <strong style={{ color: DS.txtP }}>Register Watcher</strong> above to deploy one — it auto-appears here as pending.
           </p>
-          <button onClick={() => setShowRegister(true)} style={{ ...primaryBtn, padding: '7px 18px', gap: 6 }}>
-            <IconPlus size={14} /> Register Watcher
-          </button>
         </div>
       ) : (
         <WatcherTable
