@@ -1613,3 +1613,75 @@ export const testSSHCredential = (id: string, hostname: string, port?: number) =
     { hostname, port },
   )
 
+// ── Watcher Targets ─────────────────────────────────────────────────────────
+
+export interface WatcherTarget {
+  id: string
+  watcher_id: string
+  name: string
+  host: string
+  port: number
+  credential_name: string | null
+  status: string
+  source: string
+  cidr_group: string | null
+  auto_approve: boolean
+  last_probe_at: string | null
+  last_connected_at: string | null
+  probe_error: string | null
+  matched_credential: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface WatcherTargetCreate {
+  host: string
+  port?: number
+  name?: string
+  credential_name?: string
+}
+
+export interface WatcherTargetCIDR {
+  cidr: string
+  port?: number
+  credential_name?: string
+}
+
+export interface WatcherTargetUpdate {
+  name?: string
+  port?: number
+  credential_name?: string
+}
+
+export const getWatcherTargets = (watcherId: string, status?: string) =>
+  axios.get<WatcherTarget[]>(
+    `${API_BASE_URL}/monitoring/watchers/${watcherId}/targets`,
+    { params: status ? { status } : undefined },
+  )
+
+export const createWatcherTarget = (watcherId: string, data: WatcherTargetCreate) =>
+  axios.post<WatcherTarget>(`${API_BASE_URL}/monitoring/watchers/${watcherId}/targets`, data)
+
+export const createWatcherTargetsCidr = (watcherId: string, data: WatcherTargetCIDR) =>
+  axios.post<{ cidr: string; total_hosts: number; inserted: number; skipped: number }>(
+    `${API_BASE_URL}/monitoring/watchers/${watcherId}/targets/cidr`,
+    data,
+  )
+
+export const updateWatcherTarget = (watcherId: string, targetId: string, data: WatcherTargetUpdate) =>
+  axios.put<WatcherTarget>(`${API_BASE_URL}/monitoring/watchers/${watcherId}/targets/${targetId}`, data)
+
+export const deleteWatcherTarget = (watcherId: string, targetId: string) =>
+  axios.delete<{ deleted: boolean }>(`${API_BASE_URL}/monitoring/watchers/${watcherId}/targets/${targetId}`)
+
+export const deleteWatcherTargetsCidr = (watcherId: string, cidrGroup: string) =>
+  axios.delete<{ deleted: number }>(
+    `${API_BASE_URL}/monitoring/watchers/${watcherId}/targets/cidr/${encodeURIComponent(cidrGroup)}`,
+  )
+
+export const approveWatcherTarget = (watcherId: string, targetId: string) =>
+  axios.post<WatcherTarget>(`${API_BASE_URL}/monitoring/watchers/${watcherId}/targets/${targetId}/approve`)
+
+export const approveAllWatcherTargets = (watcherId: string) =>
+  axios.post<{ approved: number }>(`${API_BASE_URL}/monitoring/watchers/${watcherId}/targets/approve-all`)
+

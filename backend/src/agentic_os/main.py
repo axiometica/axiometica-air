@@ -101,6 +101,7 @@ from agentic_os.api.routes import slack_webhook
 from agentic_os.api.routes import synthetics as synthetics_routes
 from agentic_os.api.routes import demo as demo_routes
 from agentic_os.api.routes import ssh_credentials as ssh_credentials_routes
+from agentic_os.api.routes import watcher_targets
 from agentic_os.api.ws import websocket_endpoint, global_events_endpoint
 from agentic_os.services.neo4j_init import seed_neo4j_database
 
@@ -354,6 +355,7 @@ app.include_router(slack_webhook.router,                 prefix="/api", tags=["S
 app.include_router(platform_settings.public_router,      prefix="/api", tags=["Platform Settings"])
 # Watcher registration endpoint — public for self-registration bootstrap
 app.include_router(monitoring_checks.public_router,      prefix="/api", tags=["Monitoring - Public"])
+app.include_router(watcher_targets.public_router,        prefix="/api", tags=["Watcher Targets - Public"])
 
 # Any authenticated principal (viewer / operator / itom_admin / admin / automation)
 app.include_router(workflows.router,          prefix="/api", tags=["Workflows"],          dependencies=_any)
@@ -361,6 +363,7 @@ app.include_router(approvals.router,          prefix="/api", tags=["Approvals"],
 app.include_router(metrics.router,            prefix="/api", tags=["Metrics"],            dependencies=_any)
 app.include_router(monitoring_events.router,  prefix="/api", tags=["Monitoring Events"],  dependencies=_any)
 app.include_router(monitoring_checks.router,  prefix="/api", tags=["Monitoring Checks"],  dependencies=_any)
+app.include_router(watcher_targets.router,    prefix="/api", tags=["Watcher Targets"],    dependencies=_any)
 app.include_router(log_monitors.router,       prefix="/api", tags=["Log Monitors"],       dependencies=_any)
 app.include_router(synthetics_routes.router,  prefix="/api", tags=["Synthetics"],          dependencies=_any)
 app.include_router(demo_routes.router,        prefix="/api", tags=["Demo"],                dependencies=_any)

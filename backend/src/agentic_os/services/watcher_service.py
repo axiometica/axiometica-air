@@ -461,6 +461,20 @@ class WatcherService:
                 except Exception as exc_severity:
                     logger.debug(f"[API CONFIG] Could not load event-type severities: {exc_severity}")
 
+                # ── Refresh SSH target list from platform DB ─────────────────
+                if self._watcher_id and self.adapter.adapter_name == "ssh":
+                    try:
+                        targets_resp = await client.get(
+                            f"{self.api_base_url}/api/monitoring/watchers"
+                            f"/{self._watcher_id}/targets/active"
+                        )
+                        if targets_resp.status_code == 200:
+                            api_targets = targets_resp.json()
+                            if api_targets:
+                                self.adapter.refresh_targets(api_targets)
+                    except Exception as exc_targets:
+                        logger.debug(f"[API CONFIG] Could not refresh SSH targets: {exc_targets}")
+
                 return bool(changed)
 
         except Exception as exc:
@@ -2406,6 +2420,108 @@ class WatcherService:
 
         return anomalies, metrics_by_target
 
+    async def _run_target_probe(self) -> None:
+        """Two-phase target discovery for SSH adapter.
+
+        Phase 1: Fast TCP port probe (socket.connect_ex) in parallel.
+        Phase 2: SSH connect + credential rotation for port_open hosts.
+        Reports results back to the platform API.
+        """
+        if not self._watcher_id or self.adapter.adapter_name != "ssh":
+            return
+
+        import concurrent.futures
+        import socket as _socket
+
+        base = self.api_base_url
+        url = f"{base}/api/monitoring/watchers/{self._watcher_id}/targets"
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0, headers=self._api_headers) as client:
+                resp = await client.get(url, params={"status": "approved"})
+                if resp.status_code != 200:
+                    return
+                targets = resp.json()
+                if not targets:
+                    return
+        except Exception as exc:
+            logger.debug(f"[TARGET PROBE] Could not fetch probeable targets: {exc}")
+            return
+
+        loop = asyncio.get_event_loop()
+
+        # Phase 1: parallel TCP port probe
+        def _probe_port(host: str, port: int) -> bool:
+            try:
+                sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+                sock.settimeout(2)
+                result = sock.connect_ex((host, port))
+                sock.close()
+                return result == 0
+            except Exception:
+                return False
+
+        probe_results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as pool:
+            futures = {
+                pool.submit(_probe_port, t["host"], t["port"]): t
+                for t in targets
+            }
+            for future in concurrent.futures.as_completed(futures):
+                t = futures[future]
+                try:
+                    is_open = future.result()
+                except Exception:
+                    is_open = False
+                probe_results.append({
+                    "host": t["host"],
+                    "port": t["port"],
+                    "status": "port_open" if is_open else "port_closed",
+                })
+
+        open_hosts = [r for r in probe_results if r["status"] == "port_open"]
+        closed_count = len(probe_results) - len(open_hosts)
+        logger.info(
+            f"🔍 [TARGET PROBE] Phase 1 complete: {len(open_hosts)} open, "
+            f"{closed_count} closed out of {len(probe_results)} probed"
+        )
+
+        # Phase 2: SSH connect for port_open hosts
+        if open_hosts and hasattr(self.adapter, '_connect'):
+            for r in open_hosts:
+                host, port = r["host"], r["port"]
+                try:
+                    result = await loop.run_in_executor(
+                        None,
+                        lambda h=host, p=port: self.adapter.exec(h, "echo ok", timeout=10),
+                    )
+                    if result.success:
+                        r["status"] = "active"
+                        cred = self.adapter._credential_cache.get(host)
+                        if cred:
+                            r["matched_credential"] = cred[0].name if hasattr(cred[0], 'name') else None
+                    else:
+                        r["status"] = "auth_failed"
+                        r["error"] = result.stderr[:500] if result.stderr else "SSH authentication failed"
+                except Exception as exc:
+                    r["status"] = "unreachable"
+                    r["error"] = str(exc)[:500]
+
+        # Report all results back
+        try:
+            async with httpx.AsyncClient(timeout=10.0, headers=self._api_headers) as client:
+                await client.post(
+                    f"{base}/api/monitoring/watchers/{self._watcher_id}/targets/probe-results",
+                    json={"results": probe_results},
+                )
+            active_count = sum(1 for r in probe_results if r["status"] == "active")
+            logger.info(
+                f"🔍 [TARGET PROBE] Phase 2 complete: {active_count} active, "
+                f"results reported to platform"
+            )
+        except Exception as exc:
+            logger.warning(f"[TARGET PROBE] Could not report probe results: {exc}")
+
     async def run(self):
         """
         Main event loop: poll for syscall and container anomalies, create incidents.
@@ -2525,6 +2641,11 @@ class WatcherService:
                                 )
                             except Exception as disc_err:
                                 logger.warning(f"⚠️  [DISCOVERY] SSH: {disc_err}")
+
+                            try:
+                                await self._run_target_probe()
+                            except Exception as probe_err:
+                                logger.warning(f"⚠️  [TARGET PROBE] {probe_err}")
 
                         loop = asyncio.get_event_loop()
                         try:

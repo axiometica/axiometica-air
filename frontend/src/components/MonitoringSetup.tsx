@@ -29,6 +29,7 @@ import {
 } from '../services/api'
 import type { SyntheticMonitor } from '../types'
 import LogMonitorsSetup from './LogMonitorsSetup'
+import WatcherTargets from './WatcherTargets'
 import { MonitorModal } from './SyntheticsPage'
 import {
   IconPlus,
@@ -1962,6 +1963,10 @@ export default function MonitoringSetup() {
             )}
           </div>
           <WatcherMetricsDashboard watcher={selected} />
+
+          {selected.adapter_mode === 'ssh' && selected.watcher_id && (
+            <WatcherTargets watcherId={selected.watcher_id} />
+          )}
 
           <ContainerMonitoringSection watcherName={selected.watcher_name} />
           <ExternalChecksSection watcherName={selected.watcher_name} />

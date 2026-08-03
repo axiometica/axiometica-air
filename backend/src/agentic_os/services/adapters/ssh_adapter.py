@@ -289,6 +289,38 @@ class SSHAdapter(ExecutionAdapter):
     def list_targets(self) -> List[str]:
         return list(self._targets.keys())
 
+    def refresh_targets(self, api_targets: List[dict]):
+        """Replace target list with platform-managed targets from the API.
+
+        api_targets: list of {name, host, port, credential_name} dicts
+        from GET /api/monitoring/watchers/{id}/targets/active.
+        Env-var targets not present in the API response are preserved as
+        a bootstrap fallback.
+        """
+        env_targets = _targets_from_env()
+        env_hosts = {(t.host, t.port) for t in env_targets}
+
+        new_targets: Dict[str, SSHTarget] = {}
+        for t in api_targets:
+            name = t.get("name") or t["host"]
+            new_targets[name] = SSHTarget(
+                name=name,
+                host=t["host"],
+                port=t.get("port", 22),
+            )
+        for t in env_targets:
+            if (t.host, t.port) not in {(a["host"], a.get("port", 22)) for a in api_targets}:
+                new_targets[t.name] = t
+
+        added = set(new_targets) - set(self._targets)
+        removed = set(self._targets) - set(new_targets)
+        if added or removed:
+            logger.info(
+                f"[SSH] Target refresh: {len(new_targets)} total "
+                f"(+{len(added)} added, -{len(removed)} removed)"
+            )
+        self._targets = new_targets
+
     # ── Metrics (native — psutil-style via /proc) ──────────────────────────────
 
     def get_metrics(self, target: str) -> TargetMetrics:

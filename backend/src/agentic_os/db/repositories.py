@@ -15,7 +15,7 @@ from agentic_os.db.models import (
     RunbookModel, ApprovedActionModel, MonitoringEventModel, RiskWeightConfigModel,
     PolicyModel, GovernancePolicyModel, OptimizationRecommendationModel,
     EventConditionStateModel, RunbookStepOutcomeModel, PlatformIntelRunModel,
-    WatcherExecTaskModel,
+    WatcherExecTaskModel, WatcherTargetModel,
 )
 
 
@@ -1877,3 +1877,141 @@ class WatcherExecTaskRepository:
             task.status = "timed_out"
             task.completed_at = datetime.utcnow()
             self.db.commit()
+
+
+class WatcherTargetRepository:
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def list_targets(self, watcher_id: UUID, status_filter: Optional[str] = None) -> List[WatcherTargetModel]:
+        q = self.db.query(WatcherTargetModel).filter(
+            WatcherTargetModel.watcher_id == watcher_id,
+        )
+        if status_filter:
+            q = q.filter(WatcherTargetModel.status == status_filter)
+        return q.order_by(WatcherTargetModel.host, WatcherTargetModel.port).all()
+
+    def get_target(self, target_id: UUID) -> Optional[WatcherTargetModel]:
+        return self.db.query(WatcherTargetModel).filter(
+            WatcherTargetModel.id == target_id,
+        ).first()
+
+    def create_target(
+        self, watcher_id: UUID, host: str, port: int = 22,
+        name: str = "", credential_name: Optional[str] = None,
+        source: str = "manual", cidr_group: Optional[str] = None,
+        auto_approve: bool = False,
+    ) -> WatcherTargetModel:
+        target = WatcherTargetModel(
+            watcher_id=watcher_id,
+            host=host,
+            port=port,
+            name=name,
+            credential_name=credential_name,
+            source=source,
+            cidr_group=cidr_group,
+            auto_approve=auto_approve,
+            status="pending",
+        )
+        self.db.add(target)
+        self.db.commit()
+        self.db.refresh(target)
+        return target
+
+    def create_targets_bulk(self, watcher_id: UUID, targets: list) -> int:
+        from sqlalchemy.dialects.postgresql import insert
+        if not targets:
+            return 0
+        rows = []
+        for t in targets:
+            rows.append({
+                "watcher_id": watcher_id,
+                "host": t["host"],
+                "port": t.get("port", 22),
+                "name": t.get("name", ""),
+                "credential_name": t.get("credential_name"),
+                "source": t.get("source", "cidr_expansion"),
+                "cidr_group": t.get("cidr_group"),
+                "auto_approve": t.get("auto_approve", False),
+                "status": "pending",
+            })
+        stmt = insert(WatcherTargetModel).values(rows).on_conflict_do_nothing(
+            constraint="uq_watcher_target_host_port",
+        )
+        result = self.db.execute(stmt)
+        self.db.commit()
+        return result.rowcount
+
+    def update_target(self, target_id: UUID, **fields) -> Optional[WatcherTargetModel]:
+        target = self.get_target(target_id)
+        if not target:
+            return None
+        for k, v in fields.items():
+            if hasattr(target, k):
+                setattr(target, k, v)
+        target.updated_at = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(target)
+        return target
+
+    def update_probe_results(self, results: list):
+        now = datetime.utcnow()
+        for r in results:
+            self.db.query(WatcherTargetModel).filter(
+                WatcherTargetModel.id == r["target_id"],
+            ).update({
+                "status": r["status"],
+                "last_probe_at": now,
+                "probe_error": r.get("error"),
+                "matched_credential": r.get("matched_credential"),
+                "last_connected_at": now if r["status"] == "active" else WatcherTargetModel.last_connected_at,
+                "updated_at": now,
+            }, synchronize_session=False)
+        self.db.commit()
+
+    def delete_target(self, target_id: UUID) -> bool:
+        count = self.db.query(WatcherTargetModel).filter(
+            WatcherTargetModel.id == target_id,
+        ).delete()
+        self.db.commit()
+        return count > 0
+
+    def delete_cidr_group(self, watcher_id: UUID, cidr_group: str) -> int:
+        count = self.db.query(WatcherTargetModel).filter(
+            WatcherTargetModel.watcher_id == watcher_id,
+            WatcherTargetModel.cidr_group == cidr_group,
+        ).delete()
+        self.db.commit()
+        return count
+
+    def get_probeable_targets(self, watcher_id: UUID) -> List[WatcherTargetModel]:
+        return self.db.query(WatcherTargetModel).filter(
+            WatcherTargetModel.watcher_id == watcher_id,
+            WatcherTargetModel.status.in_(["pending", "port_closed", "auth_failed"]),
+        ).all()
+
+    def get_active_targets(self, watcher_id: UUID) -> List[WatcherTargetModel]:
+        return self.db.query(WatcherTargetModel).filter(
+            WatcherTargetModel.watcher_id == watcher_id,
+            WatcherTargetModel.status == "active",
+        ).all()
+
+    def approve_target(self, target_id: UUID) -> Optional[WatcherTargetModel]:
+        target = self.get_target(target_id)
+        if not target or target.status != "pending":
+            return None
+        target.status = "approved"
+        target.updated_at = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(target)
+        return target
+
+    def approve_all_pending(self, watcher_id: UUID) -> int:
+        now = datetime.utcnow()
+        count = self.db.query(WatcherTargetModel).filter(
+            WatcherTargetModel.watcher_id == watcher_id,
+            WatcherTargetModel.status == "pending",
+        ).update({"status": "approved", "updated_at": now}, synchronize_session=False)
+        self.db.commit()
+        return count

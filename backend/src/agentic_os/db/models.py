@@ -911,6 +911,7 @@ class WatcherRegistrationModel(Base):
     targets          = Column(JSON,        nullable=True)   # JSON list of managed targets
     metrics_history  = Column(JSON,        nullable=True)   # rolling list of {ts,cpu,mem,disk,alerts}
     settings         = Column(JSON,        nullable=True)   # per-watcher threshold overrides (null = use platform defaults)
+    discovery_auto_approve = Column(Boolean, nullable=False, server_default="false")
 
     last_seen = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     registered_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -953,6 +954,45 @@ class WatcherExecTaskModel(Base):
     __table_args__ = (
         Index('idx_watcher_exec_tasks_watcher_status', 'watcher_id', 'status'),
         Index('idx_watcher_exec_tasks_workflow', 'workflow_id', 'step_index'),
+    )
+
+
+class WatcherTargetModel(Base):
+    """
+    Platform-managed SSH target for a watcher.
+
+    Targets are configuration intent — adding a row does NOT create a CMDB CI.
+    CIs are created only when the watcher successfully connects via SSH and
+    confirms the host is real (status transitions to 'active').
+
+    Status progression:
+      pending → port_closed (probe failed) / port_open (probe OK)
+      port_open → active (SSH connected, CI created) / auth_failed (no credential worked)
+    """
+    __tablename__ = "watcher_targets"
+
+    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    watcher_id       = Column(UUID(as_uuid=True), ForeignKey("watcher_registrations.watcher_id", ondelete="CASCADE"), nullable=False)
+    name             = Column(String(200), nullable=False, default="")
+    host             = Column(String(255), nullable=False)
+    port             = Column(Integer, nullable=False, default=22)
+    credential_name  = Column(String(100), nullable=True)
+    status           = Column(String(20), nullable=False, default="pending")
+    source           = Column(String(20), nullable=False, default="manual")
+    cidr_group       = Column(String(50), nullable=True)
+    auto_approve     = Column(Boolean, nullable=False, default=False)
+
+    last_probe_at      = Column(DateTime, nullable=True)
+    last_connected_at  = Column(DateTime, nullable=True)
+    probe_error        = Column(String(500), nullable=True)
+    matched_credential = Column(String(100), nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("watcher_id", "host", "port", name="uq_watcher_target_host_port"),
+        Index("idx_watcher_targets_watcher_status", "watcher_id", "status"),
     )
 
 
