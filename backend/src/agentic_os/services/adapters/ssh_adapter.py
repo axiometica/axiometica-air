@@ -39,6 +39,7 @@ class SSHTarget:
     user: str = "root"
     key_path: Optional[str] = None
     password: Optional[str] = None
+    credential_name: Optional[str] = None
 
 
 def _targets_from_env() -> List[SSHTarget]:
@@ -114,27 +115,35 @@ class SSHAdapter(ExecutionAdapter):
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
-    def _resolve_credential(self, hostname: str):
+    def _resolve_credential(self, hostname: str, credential_name: Optional[str] = None):
         """Look up an SSH credential with TTL cache to avoid per-exec API calls."""
-        cached = self._credential_cache.get(hostname)
+        cache_key = credential_name or hostname
+        cached = self._credential_cache.get(cache_key)
         if cached:
             cred, ts = cached
             if time.monotonic() - ts < self._CREDENTIAL_CACHE_TTL:
                 return cred
-        result = self._resolve_credential_uncached(hostname)
+        result = self._resolve_credential_uncached(hostname, credential_name)
         if result:
-            self._credential_cache[hostname] = (result, time.monotonic())
+            self._credential_cache[cache_key] = (result, time.monotonic())
         return result
 
-    def _resolve_credential_uncached(self, hostname: str):
+    def _resolve_credential_uncached(self, hostname: str, credential_name: Optional[str] = None):
         """Look up an SSH credential — tries direct DB first, then platform API."""
         # Path 1: direct DB query (works when co-located with the backend)
         try:
             from agentic_os.db.database import SessionLocal
             from agentic_os.api.routes.ssh_credentials import resolve_credential
+            from agentic_os.db.models import SSHCredentialModel
             db = SessionLocal()
             try:
-                cred = resolve_credential(hostname, db)
+                cred = None
+                if credential_name:
+                    cred = db.query(SSHCredentialModel).filter_by(
+                        name=credential_name, enabled=True,
+                    ).first()
+                if not cred:
+                    cred = resolve_credential(hostname, db)
                 if cred:
                     logger.info(f"[SSH] Resolved DB credential '{cred.name}' for host '{hostname}'")
                     return cred
@@ -150,10 +159,13 @@ class SSHAdapter(ExecutionAdapter):
             try:
                 import httpx
                 headers = {"X-API-Key": api_key} if api_key else {}
+                body: dict = {"hostname": hostname}
+                if credential_name:
+                    body["credential_name"] = credential_name
                 with httpx.Client(timeout=5.0) as client:
                     resp = client.post(
                         f"{api_url}/api/settings/ssh-credentials/resolve",
-                        json={"hostname": hostname},
+                        json=body,
                         headers=headers,
                     )
                     if resp.status_code == 200:
@@ -213,7 +225,7 @@ class SSHAdapter(ExecutionAdapter):
             kwargs["allow_agent"] = False
         else:
             # No credentials from env — try credential store (DB or API)
-            db_cred = self._resolve_credential(target.host)
+            db_cred = self._resolve_credential(target.host, target.credential_name)
             if db_cred:
                 kwargs["username"] = db_cred.username
                 kwargs["port"] = db_cred.port

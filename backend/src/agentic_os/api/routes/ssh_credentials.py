@@ -204,15 +204,22 @@ def test_ssh_credential(cred_id: str, body: SSHCredentialTestRequest, db: Sessio
 # ── Resolve endpoint (used by remote watchers via API) ────────────────────────
 
 class SSHCredentialResolveRequest(BaseModel):
-    hostname: str = Field(..., description="Target hostname to match against host_pattern")
+    hostname: str = Field("", description="Target hostname to match against host_pattern")
+    credential_name: Optional[str] = Field(None, description="Exact credential name (takes priority over hostname)")
 
 
 @automation_router.post("/settings/ssh-credentials/resolve")
 def resolve_ssh_credential_api(body: SSHCredentialResolveRequest, db: Session = Depends(get_session)):
-    """Resolve an SSH credential by hostname pattern match.
+    """Resolve an SSH credential by name or hostname pattern match.
     Returns the full credential including decrypted private key.
     Requires API key auth (used by remote watchers)."""
-    cred = resolve_credential(body.hostname, db)
+    cred = None
+    if body.credential_name:
+        cred = db.query(SSHCredentialModel).filter_by(
+            name=body.credential_name, enabled=True,
+        ).first()
+    if not cred and body.hostname:
+        cred = resolve_credential(body.hostname, db)
     if not cred:
         return {"found": False}
     return {

@@ -1988,7 +1988,7 @@ class WatcherTargetRepository:
     def get_probeable_targets(self, watcher_id: UUID) -> List[WatcherTargetModel]:
         return self.db.query(WatcherTargetModel).filter(
             WatcherTargetModel.watcher_id == watcher_id,
-            WatcherTargetModel.status.in_(["pending", "port_closed", "auth_failed"]),
+            WatcherTargetModel.status.in_(["pending", "approved", "port_closed", "auth_failed"]),
         ).all()
 
     def get_active_targets(self, watcher_id: UUID) -> List[WatcherTargetModel]:

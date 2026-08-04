@@ -2488,18 +2488,29 @@ class WatcherService:
 
         # Phase 2: SSH connect for port_open hosts
         if open_hosts and hasattr(self.adapter, '_connect'):
+            from agentic_os.services.adapters.ssh_adapter import SSHTarget
+
+            target_lookup = {t["host"]: t for t in targets}
             for r in open_hosts:
                 host, port = r["host"], r["port"]
+                t_info = target_lookup.get(host, {})
+                target_name = t_info.get("name") or host
+                cred_name = t_info.get("credential_name")
+                if target_name not in self.adapter._targets:
+                    self.adapter._targets[target_name] = SSHTarget(
+                        name=target_name, host=host, port=port,
+                        credential_name=cred_name,
+                    )
+                elif cred_name:
+                    self.adapter._targets[target_name].credential_name = cred_name
                 try:
                     result = await loop.run_in_executor(
                         None,
-                        lambda h=host, p=port: self.adapter.exec(h, "echo ok", timeout=10),
+                        lambda n=target_name: self.adapter.exec(n, "echo ok", timeout=10),
                     )
                     if result.success:
                         r["status"] = "active"
-                        cred = self.adapter._credential_cache.get(host)
-                        if cred:
-                            r["matched_credential"] = cred[0].name if hasattr(cred[0], 'name') else None
+                        r["matched_credential"] = t_info.get("credential_name")
                     else:
                         r["status"] = "auth_failed"
                         r["error"] = result.stderr[:500] if result.stderr else "SSH authentication failed"
