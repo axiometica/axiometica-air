@@ -6,6 +6,10 @@ import {
   getSSHCredentials,
   WatcherTarget, SSHCredential,
 } from '../services/api'
+import {
+  IconTrash, IconCheck, IconChevronDown, IconChevronRight,
+  IconRefresh, IconPlus, IconNetwork, IconRadar, IconX,
+} from './icons'
 
 const DS = {
   bg:      '#0d1117',
@@ -29,47 +33,14 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 }
 
-const btnPrimary: React.CSSProperties = {
-  padding: '7px 16px',
-  borderRadius: 6,
-  border: 'none',
-  backgroundColor: DS.accent,
-  color: '#fff',
-  fontSize: '0.8rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-}
-
-const btnSecondary: React.CSSProperties = {
-  padding: '6px 12px',
-  borderRadius: 6,
-  border: `1px solid ${DS.border}`,
-  backgroundColor: DS.raised,
-  color: DS.txtP,
-  fontSize: '0.78rem',
-  fontWeight: 500,
-  cursor: 'pointer',
-}
-
-const btnDanger: React.CSSProperties = {
-  padding: '5px 10px',
-  borderRadius: 5,
-  border: '1px solid rgba(239,68,68,0.3)',
-  backgroundColor: 'rgba(239,68,68,0.1)',
-  color: '#f87171',
-  fontSize: '0.75rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-}
-
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   pending:      { bg: 'rgba(107,114,128,0.15)', color: '#9ca3af' },
-  approved:     { bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa' },
-  port_closed:  { bg: 'rgba(75,85,99,0.2)',     color: '#6b7280' },
-  port_open:    { bg: 'rgba(234,179,8,0.12)',   color: '#facc15' },
-  active:       { bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
-  auth_failed:  { bg: 'rgba(239,68,68,0.12)',   color: '#f87171' },
-  unreachable:  { bg: 'rgba(249,115,22,0.12)',  color: '#fb923c' },
+  approved:     { bg: 'rgba(59,130,246,0.1)',   color: '#60a5fa' },
+  port_closed:  { bg: 'rgba(75,85,99,0.15)',    color: '#6b7280' },
+  port_open:    { bg: 'rgba(234,179,8,0.1)',    color: '#d4a017' },
+  active:       { bg: 'rgba(34,197,94,0.1)',    color: '#22c55e' },
+  auth_failed:  { bg: 'rgba(239,68,68,0.1)',    color: '#ef4444' },
+  unreachable:  { bg: 'rgba(249,115,22,0.1)',   color: '#f97316' },
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -77,7 +48,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span style={{
       display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-      fontSize: '0.72rem', fontWeight: 600,
+      fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.02em',
       backgroundColor: s.bg, color: s.color,
     }}>
       {status.replace('_', ' ')}
@@ -85,44 +56,59 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+const iconBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  width: 28, height: 28, borderRadius: 6,
+  border: 'none', backgroundColor: 'transparent',
+  cursor: 'pointer', color: DS.txtS, transition: 'color 0.15s, background 0.15s',
+}
+
 function TargetRow({ t, onApprove, onDelete }: {
   t: WatcherTarget
   onApprove: (id: string) => void
   onDelete: (id: string) => void
 }) {
+  const displayName = t.name || t.host
   return (
     <tr style={{ borderBottom: `1px solid ${DS.border}22` }}>
-      <td style={{ padding: '6px 8px' }}>
-        {t.name || <span style={{ color: DS.txtS }}>—</span>}
+      <td style={{ padding: '5px 8px', fontSize: '0.78rem', color: DS.txtP }}>
+        {displayName}
       </td>
-      <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: '0.76rem' }}>
+      <td style={{ padding: '5px 8px', fontFamily: 'monospace', fontSize: '0.76rem', color: DS.txtM }}>
         {t.host}
       </td>
-      <td style={{ padding: '6px 8px' }}>{t.port}</td>
-      <td style={{ padding: '6px 8px' }}><StatusBadge status={t.status} /></td>
-      <td style={{ padding: '6px 8px', fontSize: '0.74rem', color: DS.txtM }}>
-        {t.matched_credential || t.credential_name || <span style={{ color: DS.txtS }}>auto</span>}
+      <td style={{ padding: '5px 8px', fontSize: '0.78rem', color: DS.txtS }}>{t.port}</td>
+      <td style={{ padding: '5px 8px' }}><StatusBadge status={t.status} /></td>
+      <td style={{ padding: '5px 8px', fontSize: '0.74rem', color: DS.txtS }}>
+        {t.matched_credential || t.credential_name || '—'}
       </td>
-      <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: DS.txtS }}>
-        {t.source}
-      </td>
-      <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: DS.txtS }}>
+      <td style={{ padding: '5px 8px', fontSize: '0.72rem', color: DS.txtS }}>
         {t.last_probe_at ? new Date(t.last_probe_at).toLocaleString() : '—'}
       </td>
-      <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: '#f87171', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {t.probe_error ? (
-          <span title={t.probe_error}>{t.probe_error}</span>
-        ) : '—'}
+      <td style={{ padding: '5px 8px', fontSize: '0.72rem', color: '#ef4444', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {t.probe_error ? <span title={t.probe_error}>{t.probe_error}</span> : ''}
       </td>
-      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-        <div style={{ display: 'flex', gap: 4 }}>
+      <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }}>
+        <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           {t.status === 'pending' && (
-            <button style={btnSecondary} onClick={() => onApprove(t.id)}>
-              Approve
+            <button
+              style={iconBtn}
+              title="Approve"
+              onClick={() => onApprove(t.id)}
+              onMouseEnter={e => { e.currentTarget.style.color = '#22c55e'; e.currentTarget.style.backgroundColor = 'rgba(34,197,94,0.1)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = DS.txtS; e.currentTarget.style.backgroundColor = 'transparent' }}
+            >
+              <IconCheck size={15} />
             </button>
           )}
-          <button style={btnDanger} onClick={() => onDelete(t.id)}>
-            Del
+          <button
+            style={iconBtn}
+            title="Delete target"
+            onClick={() => onDelete(t.id)}
+            onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = DS.txtS; e.currentTarget.style.backgroundColor = 'transparent' }}
+          >
+            <IconTrash size={14} />
           </button>
         </div>
       </td>
@@ -130,7 +116,7 @@ function TargetRow({ t, onApprove, onDelete }: {
   )
 }
 
-const TABLE_HEADERS = ['Name', 'Host', 'Port', 'Status', 'Credential', 'Source', 'Last Probe', 'Error', '']
+const TABLE_HEADERS = ['Name', 'Host', 'Port', 'Status', 'Credential', 'Last Probe', 'Error', '']
 
 function TargetTableHeader() {
   return (
@@ -138,8 +124,9 @@ function TargetTableHeader() {
       <tr style={{ borderBottom: `1px solid ${DS.border}` }}>
         {TABLE_HEADERS.map(h => (
           <th key={h} style={{
-            textAlign: 'left', padding: '6px 8px',
-            fontSize: '0.7rem', color: DS.txtS, fontWeight: 600,
+            textAlign: 'left', padding: '5px 8px',
+            fontSize: '0.68rem', color: DS.txtS, fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.04em',
           }}>
             {h}
           </th>
@@ -154,7 +141,6 @@ interface CidrGroupData {
   rangeTarget: WatcherTarget | null
   children: WatcherTarget[]
   activeCount: number
-  totalCount: number
 }
 
 function CidrGroupSection({ group, onApproveRange, onDeleteGroup, onApproveTarget, onDeleteTarget }: {
@@ -170,23 +156,26 @@ function CidrGroupSection({ group, onApproveRange, onDeleteGroup, onApproveTarge
 
   return (
     <div style={{
-      marginBottom: '0.5rem', borderRadius: 8,
+      marginBottom: 6, borderRadius: 8,
       border: `1px solid ${DS.border}`,
-      backgroundColor: DS.bg,
+      backgroundColor: DS.surface,
+      overflow: 'hidden',
     }}>
-      {/* CIDR group header */}
       <div
         style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '8px 12px', cursor: 'pointer', userSelect: 'none',
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '7px 10px', cursor: 'pointer', userSelect: 'none',
         }}
         onClick={() => setExpanded(e => !e)}
       >
-        <span style={{ fontSize: '0.7rem', color: DS.txtS, width: 12 }}>
-          {expanded ? '▼' : '▶'}
+        <span style={{ color: DS.txtS, flexShrink: 0 }}>
+          {expanded
+            ? <IconChevronDown size={14} />
+            : <IconChevronRight size={14} />}
         </span>
+        <IconNetwork size={14} style={{ color: DS.txtS, flexShrink: 0 }} />
         <span style={{
-          fontFamily: 'monospace', fontSize: '0.82rem',
+          fontFamily: 'monospace', fontSize: '0.8rem',
           fontWeight: 600, color: DS.txtP,
         }}>
           {group.cidr}
@@ -194,43 +183,50 @@ function CidrGroupSection({ group, onApproveRange, onDeleteGroup, onApproveTarge
         <StatusBadge status={rangeStatus} />
         {group.activeCount > 0 && (
           <span style={{
-            fontSize: '0.72rem', padding: '2px 8px', borderRadius: 10,
-            backgroundColor: 'rgba(34,197,94,0.12)', color: '#4ade80',
-            fontWeight: 600,
+            fontSize: '0.7rem', fontWeight: 600,
+            color: '#22c55e',
           }}>
             {group.activeCount} active
           </span>
         )}
         {group.children.length > 0 && (
           <span style={{
-            fontSize: '0.72rem', padding: '2px 8px', borderRadius: 10,
-            backgroundColor: DS.raised, color: DS.txtS,
+            fontSize: '0.7rem', color: DS.txtS,
           }}>
             {group.children.length} discovered
           </span>
         )}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}
              onClick={e => e.stopPropagation()}>
           {isPending && (
             <button
-              style={{ ...btnPrimary, fontSize: '0.72rem', padding: '4px 12px' }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 10px', borderRadius: 5,
+                border: `1px solid rgba(59,130,246,0.3)`,
+                backgroundColor: 'rgba(59,130,246,0.08)',
+                color: '#60a5fa', fontSize: '0.72rem', fontWeight: 600,
+                cursor: 'pointer',
+              }}
               onClick={() => onApproveRange(group.cidr)}
             >
-              Scan Network
+              <IconRadar size={13} /> Scan
             </button>
           )}
           <button
-            style={{ ...btnDanger, fontSize: '0.7rem', padding: '3px 8px' }}
+            style={iconBtn}
+            title={`Remove ${group.cidr} and all discovered hosts`}
             onClick={() => onDeleteGroup(group.cidr)}
+            onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = DS.txtS; e.currentTarget.style.backgroundColor = 'transparent' }}
           >
-            Remove
+            <IconTrash size={14} />
           </button>
         </div>
       </div>
 
-      {/* Expanded: child targets */}
       {expanded && group.children.length > 0 && (
-        <div style={{ padding: '0 8px 8px', overflowX: 'auto' }}>
+        <div style={{ padding: '0 6px 6px', overflowX: 'auto' }}>
           <table style={{
             width: '100%', borderCollapse: 'collapse',
             fontSize: '0.78rem', color: DS.txtP,
@@ -250,12 +246,13 @@ function CidrGroupSection({ group, onApproveRange, onDeleteGroup, onApproveTarge
       )}
       {expanded && group.children.length === 0 && (
         <div style={{
-          padding: '12px', textAlign: 'center',
-          fontSize: '0.78rem', color: DS.txtS,
+          padding: '10px 12px', textAlign: 'center',
+          fontSize: '0.76rem', color: DS.txtS,
+          borderTop: `1px solid ${DS.border}22`,
         }}>
           {isPending
-            ? 'Approve this range to start scanning for active hosts.'
-            : 'No hosts discovered yet. Waiting for next probe cycle.'}
+            ? 'Approve this range to start scanning.'
+            : 'No hosts discovered yet — waiting for next probe cycle.'}
         </div>
       )}
     </div>
@@ -273,20 +270,18 @@ export default function WatcherTargets({ watcherId }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('')
 
-  // Add host form
   const [addHost, setAddHost] = useState('')
   const [addPort, setAddPort] = useState('22')
   const [addName, setAddName] = useState('')
   const [addCred, setAddCred] = useState('')
   const [adding, setAdding] = useState(false)
 
-  // CIDR form
   const [cidr, setCidr] = useState('')
   const [cidrPort, setCidrPort] = useState('22')
   const [cidrCred, setCidrCred] = useState('')
   const [cidrAdding, setCidrAdding] = useState(false)
 
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
 
   const load = useCallback(async () => {
     try {
@@ -392,92 +387,101 @@ export default function WatcherTargets({ watcherId }: Props) {
     }
   }
 
-  // Separate standalone targets from CIDR-grouped targets
   const standaloneTargets = targets.filter(t => !t.cidr_group)
 
-  // Build CIDR group data
   const cidrGroupMap = new Map<string, CidrGroupData>()
   for (const t of targets) {
     if (!t.cidr_group) continue
     let group = cidrGroupMap.get(t.cidr_group)
     if (!group) {
-      group = { cidr: t.cidr_group, rangeTarget: null, children: [], activeCount: 0, totalCount: 0 }
+      group = { cidr: t.cidr_group, rangeTarget: null, children: [], activeCount: 0 }
       cidrGroupMap.set(t.cidr_group, group)
     }
     if (t.source === 'cidr_range') {
       group.rangeTarget = t
     } else {
       group.children.push(t)
-      group.totalCount++
       if (t.status === 'active') group.activeCount++
     }
   }
   const cidrGroups = [...cidrGroupMap.values()]
 
   const pendingCount = targets.filter(t => t.status === 'pending').length
+  const activeCount = targets.filter(t => t.status === 'active').length
 
   return (
     <div style={{
-      marginTop: '1.5rem', padding: '1rem', borderRadius: 10,
+      marginTop: '1.25rem', borderRadius: 10,
       border: `1px solid ${DS.border}`, backgroundColor: DS.surface,
+      overflow: 'hidden',
     }}>
       {/* Header */}
       <div
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px',
           cursor: 'pointer', userSelect: 'none',
         }}
         onClick={() => setCollapsed(c => !c)}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: '0.72rem', color: DS.txtS }}>{collapsed ? '▶' : '▼'}</span>
-          <span style={{ fontSize: '0.88rem', fontWeight: 600, color: DS.txtP }}>
+          <span style={{ color: DS.txtS }}>
+            {collapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
+          </span>
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: DS.txtP }}>
             SSH Targets
           </span>
           <span style={{
-            fontSize: '0.72rem', color: DS.txtS, padding: '1px 8px',
+            fontSize: '0.7rem', color: DS.txtS, padding: '1px 7px',
             borderRadius: 10, backgroundColor: DS.raised,
           }}>
             {targets.length}
           </span>
         </div>
-        {pendingCount > 0 && (
-          <span style={{
-            fontSize: '0.72rem', padding: '2px 10px', borderRadius: 10,
-            backgroundColor: 'rgba(234,179,8,0.12)', color: '#facc15', fontWeight: 600,
-          }}>
-            {pendingCount} pending
-          </span>
-        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {activeCount > 0 && (
+            <span style={{ fontSize: '0.7rem', color: '#22c55e', fontWeight: 600 }}>
+              {activeCount} active
+            </span>
+          )}
+          {pendingCount > 0 && (
+            <span style={{
+              fontSize: '0.7rem', padding: '2px 8px', borderRadius: 10,
+              backgroundColor: 'rgba(234,179,8,0.1)', color: '#d4a017', fontWeight: 600,
+            }}>
+              {pendingCount} pending
+            </span>
+          )}
+        </div>
       </div>
 
-      {collapsed && <div />}
       {!collapsed && (
-        <div style={{ marginTop: '1rem' }}>
+        <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {error && (
             <div style={{
-              padding: '8px 12px', borderRadius: 6, marginBottom: '0.75rem',
-              backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-              color: '#f87171', fontSize: '0.8rem',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '7px 10px', borderRadius: 6,
+              backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+              color: '#ef4444', fontSize: '0.78rem',
             }}>
-              {error}
-              <span
-                style={{ marginLeft: 8, cursor: 'pointer', fontWeight: 700 }}
+              <span>{error}</span>
+              <button
+                style={{ ...iconBtn, width: 22, height: 22 }}
                 onClick={() => setError(null)}
               >
-                x
-              </span>
+                <IconX size={13} />
+              </button>
             </div>
           )}
 
           {/* Add single host */}
           <div style={{
             display: 'flex', gap: 6, alignItems: 'flex-end', flexWrap: 'wrap',
-            marginBottom: '0.75rem', padding: '0.75rem',
-            borderRadius: 8, backgroundColor: DS.raised,
+            padding: '10px 12px',
+            borderRadius: 8, border: `1px solid ${DS.border}`,
           }}>
             <div style={{ flex: '1 1 140px' }}>
-              <label style={{ fontSize: '0.7rem', color: DS.txtS, display: 'block', marginBottom: 3 }}>Host / IP</label>
+              <label style={{ fontSize: '0.68rem', color: DS.txtS, display: 'block', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Host / IP</label>
               <input
                 style={{ ...inputStyle, width: '100%' }}
                 placeholder="10.0.1.5"
@@ -485,8 +489,8 @@ export default function WatcherTargets({ watcherId }: Props) {
                 onChange={e => setAddHost(e.target.value)}
               />
             </div>
-            <div style={{ flex: '0 0 70px' }}>
-              <label style={{ fontSize: '0.7rem', color: DS.txtS, display: 'block', marginBottom: 3 }}>Port</label>
+            <div style={{ flex: '0 0 65px' }}>
+              <label style={{ fontSize: '0.68rem', color: DS.txtS, display: 'block', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Port</label>
               <input
                 style={{ ...inputStyle, width: '100%' }}
                 value={addPort}
@@ -494,7 +498,7 @@ export default function WatcherTargets({ watcherId }: Props) {
               />
             </div>
             <div style={{ flex: '1 1 120px' }}>
-              <label style={{ fontSize: '0.7rem', color: DS.txtS, display: 'block', marginBottom: 3 }}>Name (opt.)</label>
+              <label style={{ fontSize: '0.68rem', color: DS.txtS, display: 'block', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Name</label>
               <input
                 style={{ ...inputStyle, width: '100%' }}
                 placeholder="web-01"
@@ -503,23 +507,31 @@ export default function WatcherTargets({ watcherId }: Props) {
               />
             </div>
             <div style={{ flex: '1 1 120px' }}>
-              <label style={{ fontSize: '0.7rem', color: DS.txtS, display: 'block', marginBottom: 3 }}>Credential</label>
+              <label style={{ fontSize: '0.68rem', color: DS.txtS, display: 'block', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Credential</label>
               <select
                 style={{ ...inputStyle, width: '100%' }}
                 value={addCred}
                 onChange={e => setAddCred(e.target.value)}
               >
-                <option value="">Auto (try all)</option>
+                <option value="">Auto</option>
                 {credentials.map(c => (
                   <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
             </div>
             <button
-              style={{ ...btnPrimary, opacity: adding ? 0.6 : 1 }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '7px 14px', borderRadius: 6,
+                border: `1px solid ${DS.accent}`,
+                backgroundColor: DS.accent,
+                color: '#fff', fontSize: '0.78rem', fontWeight: 600,
+                cursor: 'pointer', opacity: adding ? 0.6 : 1,
+              }}
               onClick={handleAddHost}
               disabled={adding || !addHost.trim()}
             >
+              <IconPlus size={14} />
               {adding ? 'Adding...' : 'Add Host'}
             </button>
           </div>
@@ -527,11 +539,11 @@ export default function WatcherTargets({ watcherId }: Props) {
           {/* CIDR range */}
           <div style={{
             display: 'flex', gap: 6, alignItems: 'flex-end', flexWrap: 'wrap',
-            marginBottom: '0.75rem', padding: '0.75rem',
-            borderRadius: 8, backgroundColor: DS.raised,
+            padding: '10px 12px',
+            borderRadius: 8, border: `1px solid ${DS.border}`,
           }}>
             <div style={{ flex: '1 1 150px' }}>
-              <label style={{ fontSize: '0.7rem', color: DS.txtS, display: 'block', marginBottom: 3 }}>CIDR Range</label>
+              <label style={{ fontSize: '0.68rem', color: DS.txtS, display: 'block', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.03em' }}>CIDR Range</label>
               <input
                 style={{ ...inputStyle, width: '100%' }}
                 placeholder="10.0.1.0/24"
@@ -539,8 +551,8 @@ export default function WatcherTargets({ watcherId }: Props) {
                 onChange={e => setCidr(e.target.value)}
               />
             </div>
-            <div style={{ flex: '0 0 70px' }}>
-              <label style={{ fontSize: '0.7rem', color: DS.txtS, display: 'block', marginBottom: 3 }}>Port</label>
+            <div style={{ flex: '0 0 65px' }}>
+              <label style={{ fontSize: '0.68rem', color: DS.txtS, display: 'block', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Port</label>
               <input
                 style={{ ...inputStyle, width: '100%' }}
                 value={cidrPort}
@@ -548,34 +560,42 @@ export default function WatcherTargets({ watcherId }: Props) {
               />
             </div>
             <div style={{ flex: '1 1 120px' }}>
-              <label style={{ fontSize: '0.7rem', color: DS.txtS, display: 'block', marginBottom: 3 }}>Credential</label>
+              <label style={{ fontSize: '0.68rem', color: DS.txtS, display: 'block', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Credential</label>
               <select
                 style={{ ...inputStyle, width: '100%' }}
                 value={cidrCred}
                 onChange={e => setCidrCred(e.target.value)}
               >
-                <option value="">Auto (try all)</option>
+                <option value="">Auto</option>
                 {credentials.map(c => (
                   <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
             </div>
             <button
-              style={{ ...btnPrimary, opacity: cidrAdding ? 0.6 : 1 }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '7px 14px', borderRadius: 6,
+                border: `1px solid ${DS.accent}`,
+                backgroundColor: DS.accent,
+                color: '#fff', fontSize: '0.78rem', fontWeight: 600,
+                cursor: 'pointer', opacity: cidrAdding ? 0.6 : 1,
+              }}
               onClick={handleAddCidr}
               disabled={cidrAdding || !cidr.trim()}
             >
+              <IconNetwork size={14} />
               {cidrAdding ? 'Adding...' : 'Add Range'}
             </button>
           </div>
 
           {/* Filters + bulk actions */}
           <div style={{
-            display: 'flex', gap: 8, alignItems: 'center', marginBottom: '0.75rem',
+            display: 'flex', gap: 8, alignItems: 'center',
             flexWrap: 'wrap',
           }}>
             <select
-              style={{ ...inputStyle, width: 'auto', fontSize: '0.78rem' }}
+              style={{ ...inputStyle, width: 'auto', fontSize: '0.76rem' }}
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
             >
@@ -589,22 +609,40 @@ export default function WatcherTargets({ watcherId }: Props) {
               <option value="unreachable">Unreachable</option>
             </select>
             {pendingCount > 0 && (
-              <button style={btnSecondary} onClick={handleApproveAll}>
-                Approve All Pending ({pendingCount})
+              <button
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '5px 10px', borderRadius: 5,
+                  border: `1px solid ${DS.border}`,
+                  backgroundColor: 'transparent',
+                  color: DS.txtM, fontSize: '0.74rem', fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+                onClick={handleApproveAll}
+              >
+                <IconCheck size={13} />
+                Approve All ({pendingCount})
               </button>
             )}
             <button
-              style={{ ...btnSecondary, marginLeft: 'auto' }}
+              style={{
+                ...iconBtn, marginLeft: 'auto',
+                width: 'auto', padding: '4px 8px', gap: 4,
+                display: 'inline-flex',
+              }}
               onClick={load}
               disabled={loading}
+              title="Refresh"
+              onMouseEnter={e => { e.currentTarget.style.color = DS.accent; e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.1)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = DS.txtS; e.currentTarget.style.backgroundColor = 'transparent' }}
             >
-              Refresh
+              <IconRefresh size={14} />
             </button>
           </div>
 
           {/* CIDR group sections */}
           {cidrGroups.length > 0 && (
-            <div style={{ marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {cidrGroups.map(g => (
                 <CidrGroupSection
                   key={g.cidr}
@@ -620,11 +658,11 @@ export default function WatcherTargets({ watcherId }: Props) {
 
           {/* Standalone target table */}
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '2rem', color: DS.txtS, fontSize: '0.82rem' }}>
+            <div style={{ textAlign: 'center', padding: '1.5rem', color: DS.txtS, fontSize: '0.8rem' }}>
               Loading targets...
             </div>
           ) : standaloneTargets.length === 0 && cidrGroups.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem', color: DS.txtS, fontSize: '0.82rem' }}>
+            <div style={{ textAlign: 'center', padding: '1.5rem', color: DS.txtS, fontSize: '0.8rem' }}>
               No SSH targets configured. Add a host or CIDR range above.
             </div>
           ) : standaloneTargets.length > 0 ? (
