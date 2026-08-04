@@ -64,9 +64,12 @@ const STATUS_FILTERS = ['all', 'new', 'qualified', 'dismissed']
 
 // darkMode accepted but unused — component is always dark per design system
 export default function EventsFeed({ darkMode: _darkMode, onViewWorkflow }: { darkMode?: boolean; onViewWorkflow?: (id: string) => void } = {}) {
+  const PAGE_SIZE = 50
   const [events, setEvents] = useState<MonitoringEvent[]>([])
   const [counts, setCounts] = useState<{ total: number; qualified: number; dismissed: number; new: number }>({ total: 0, qualified: 0, dismissed: 0, new: 0 })
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -82,10 +85,11 @@ export default function EventsFeed({ darkMode: _darkMode, onViewWorkflow }: { da
   const loadEvents = useCallback(async () => {
     try {
       setLoading(true)
-      const params: Record<string, string | number> = { limit: 200 }
+      const params: Record<string, string | number> = { limit: PAGE_SIZE }
       if (statusFilter !== 'all') params.status = statusFilter
       const { data } = await axios.get<MonitoringEvent[]>('/api/monitoring-events', { params })
       setEvents(data || [])
+      setHasMore((data || []).length >= PAGE_SIZE)
       setError(null)
     } catch {
       setError('Failed to load monitoring events')
@@ -93,6 +97,21 @@ export default function EventsFeed({ darkMode: _darkMode, onViewWorkflow }: { da
       setLoading(false)
     }
   }, [statusFilter])
+
+  const loadMore = async () => {
+    try {
+      setLoadingMore(true)
+      const params: Record<string, string | number> = { limit: PAGE_SIZE, offset: events.length }
+      if (statusFilter !== 'all') params.status = statusFilter
+      const { data } = await axios.get<MonitoringEvent[]>('/api/monitoring-events', { params })
+      setEvents(prev => [...prev, ...(data || [])])
+      setHasMore((data || []).length >= PAGE_SIZE)
+    } catch {
+      setError('Failed to load more events')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   // Initial load + re-fetch when filter changes
   useEffect(() => { loadEvents(); loadCounts() }, [loadEvents, loadCounts])
@@ -337,6 +356,15 @@ export default function EventsFeed({ darkMode: _darkMode, onViewWorkflow }: { da
               </div>
             )
           })}
+          {hasMore && (
+            <button
+              className="ef-load-more"
+              onClick={loadMore}
+              disabled={loadingMore}
+            >
+              {loadingMore ? 'Loading…' : `Load more events (showing ${filtered.length} of ${counts.total})`}
+            </button>
+          )}
         </div>
       )}
 

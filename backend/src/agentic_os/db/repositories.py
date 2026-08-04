@@ -864,6 +864,7 @@ class MonitoringEventRepository:
     def list_recent(
         self,
         limit: int = 100,
+        offset: int = 0,
         status: Optional[str] = None,
         incident_workflow_id: Optional[UUID] = None,
     ) -> list:
@@ -873,7 +874,7 @@ class MonitoringEventRepository:
             query = query.filter(MonitoringEventModel.status == status)
         if incident_workflow_id is not None:
             query = query.filter(MonitoringEventModel.incident_workflow_id == incident_workflow_id)
-        return query.order_by(desc(MonitoringEventModel.created_at)).limit(limit).all()
+        return query.order_by(desc(MonitoringEventModel.created_at)).offset(offset).limit(limit).all()
 
     def count_by_status(self) -> dict:
         """Return total, qualified, and dismissed counts."""

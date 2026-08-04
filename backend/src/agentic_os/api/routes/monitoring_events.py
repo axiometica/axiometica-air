@@ -1044,7 +1044,7 @@ async def list_monitoring_events(
         repo = MonitoringEventRepository(db)
         # Push workflow_id filter to DB so LIMIT applies after filtering
         wf_uuid = UUID(workflow_id) if workflow_id else None
-        events = repo.list_recent(limit=limit, status=status, incident_workflow_id=wf_uuid)
+        events = repo.list_recent(limit=limit, offset=offset, status=status, incident_workflow_id=wf_uuid)
 
         # Filter by event_type if provided (in-memory; rare use-case)
         if event_type:

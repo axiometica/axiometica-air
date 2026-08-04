@@ -409,6 +409,24 @@
   white-space: normal;
 }
 
+/* ── Load More ── */
+.ef-load-more {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin-top: 2px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--txtM);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 150ms, color 150ms;
+}
+.ef-load-more:hover { border-color: var(--accent); color: var(--txtP); }
+.ef-load-more:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .ef-stats { grid-template-columns: 1fr; }
