@@ -65,16 +65,25 @@ const STATUS_FILTERS = ['all', 'new', 'qualified', 'dismissed']
 // darkMode accepted but unused — component is always dark per design system
 export default function EventsFeed({ darkMode: _darkMode, onViewWorkflow }: { darkMode?: boolean; onViewWorkflow?: (id: string) => void } = {}) {
   const [events, setEvents] = useState<MonitoringEvent[]>([])
+  const [counts, setCounts] = useState<{ total: number; qualified: number; dismissed: number; new: number }>({ total: 0, qualified: 0, dismissed: 0, new: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [refreshing, setRefreshing] = useState(false)
 
+  const loadCounts = useCallback(async () => {
+    try {
+      const { data } = await axios.get<{ total: number; qualified: number; dismissed: number; new: number }>('/api/monitoring-events/counts')
+      setCounts(data)
+    } catch { /* counts are non-critical */ }
+  }, [])
+
   const loadEvents = useCallback(async () => {
     try {
       setLoading(true)
-      const params = statusFilter !== 'all' ? { status: statusFilter } : {}
+      const params: Record<string, string | number> = { limit: 200 }
+      if (statusFilter !== 'all') params.status = statusFilter
       const { data } = await axios.get<MonitoringEvent[]>('/api/monitoring-events', { params })
       setEvents(data || [])
       setError(null)
@@ -86,24 +95,25 @@ export default function EventsFeed({ darkMode: _darkMode, onViewWorkflow }: { da
   }, [statusFilter])
 
   // Initial load + re-fetch when filter changes
-  useEffect(() => { loadEvents() }, [loadEvents])
+  useEffect(() => { loadEvents(); loadCounts() }, [loadEvents, loadCounts])
 
   // 30-second poll fallback (covers cases where WS misses events)
   useEffect(() => {
-    const iv = setInterval(loadEvents, 30_000)
+    const iv = setInterval(() => { loadEvents(); loadCounts() }, 30_000)
     return () => clearInterval(iv)
-  }, [loadEvents])
+  }, [loadEvents, loadCounts])
 
   // Real-time refresh via WebSocket global events
   useGlobalEvents(useCallback((ev) => {
     if (ev.type === 'incident_created' || ev.type === 'incident_updated') {
       loadEvents()
+      loadCounts()
     }
-  }, [loadEvents]))
+  }, [loadEvents, loadCounts]))
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await loadEvents()
+    await Promise.all([loadEvents(), loadCounts()])
     setRefreshing(false)
   }
 
@@ -125,16 +135,10 @@ export default function EventsFeed({ darkMode: _darkMode, onViewWorkflow }: { da
     )
   })
 
-  const stats = {
-    total:     events.length,
-    qualified: events.filter(e => e.status === 'qualified').length,
-    dismissed: events.filter(e => e.status === 'dismissed').length,
-  }
-
   const statCards = [
-    { label: 'Total Events', value: stats.total,     accentCls: 'accent-white'  },
-    { label: 'Qualified',    value: stats.qualified, accentCls: 'accent-green'  },
-    { label: 'Dismissed',    value: stats.dismissed, accentCls: 'accent-muted'  },
+    { label: 'Total Events', value: counts.total,     accentCls: 'accent-white'  },
+    { label: 'Qualified',    value: counts.qualified, accentCls: 'accent-green'  },
+    { label: 'Dismissed',    value: counts.dismissed, accentCls: 'accent-muted'  },
   ]
 
   return (
@@ -145,7 +149,7 @@ export default function EventsFeed({ darkMode: _darkMode, onViewWorkflow }: { da
         <div className="ef-header-left">
           <h1 className="ef-title">Monitoring Events</h1>
           <p className="ef-subtitle">
-            Raw signals from Sentinel eBPF monitoring. Events are scored and qualified as incidents when they exceed the threshold.
+            Events are scored and qualified as incidents when they exceed the threshold.
           </p>
         </div>
         <button

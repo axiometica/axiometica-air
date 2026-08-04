@@ -1014,6 +1014,13 @@ async def get_monitoring_event(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/monitoring-events/counts")
+async def monitoring_event_counts(db: Session = Depends(get_session)):
+    """Return total, qualified, dismissed, and new counts across all events."""
+    repo = MonitoringEventRepository(db)
+    return repo.count_by_status()
+
+
 @router.get("/monitoring-events", response_model=list[MonitoringEventResponse])
 async def list_monitoring_events(
     status: Optional[str] = None,

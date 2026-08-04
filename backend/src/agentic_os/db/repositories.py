@@ -875,6 +875,23 @@ class MonitoringEventRepository:
             query = query.filter(MonitoringEventModel.incident_workflow_id == incident_workflow_id)
         return query.order_by(desc(MonitoringEventModel.created_at)).limit(limit).all()
 
+    def count_by_status(self) -> dict:
+        """Return total, qualified, and dismissed counts."""
+        from sqlalchemy import func
+        rows = (
+            self.db.query(MonitoringEventModel.status, func.count())
+            .group_by(MonitoringEventModel.status)
+            .all()
+        )
+        counts = {status: cnt for status, cnt in rows}
+        total = sum(counts.values())
+        return {
+            "total": total,
+            "qualified": counts.get("qualified", 0),
+            "dismissed": counts.get("dismissed", 0),
+            "new": counts.get("new", 0),
+        }
+
     def list_by_resource(self, resource_name: str, limit: int = 50) -> list:
         """List events for a specific resource"""
         return self.db.query(MonitoringEventModel).filter(
