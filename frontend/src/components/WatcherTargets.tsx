@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   getWatcherTargets, createWatcherTarget, createWatcherTargetsCidr,
   deleteWatcherTarget, deleteWatcherTargetsCidr,
-  approveWatcherTarget, approveAllWatcherTargets,
+  approveWatcherTarget, approveAllWatcherTargets, approveCidrGroup,
   getSSHCredentials,
   WatcherTarget, SSHCredential,
 } from '../services/api'
@@ -85,6 +85,183 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+function TargetRow({ t, onApprove, onDelete }: {
+  t: WatcherTarget
+  onApprove: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  return (
+    <tr style={{ borderBottom: `1px solid ${DS.border}22` }}>
+      <td style={{ padding: '6px 8px' }}>
+        {t.name || <span style={{ color: DS.txtS }}>—</span>}
+      </td>
+      <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: '0.76rem' }}>
+        {t.host}
+      </td>
+      <td style={{ padding: '6px 8px' }}>{t.port}</td>
+      <td style={{ padding: '6px 8px' }}><StatusBadge status={t.status} /></td>
+      <td style={{ padding: '6px 8px', fontSize: '0.74rem', color: DS.txtM }}>
+        {t.matched_credential || t.credential_name || <span style={{ color: DS.txtS }}>auto</span>}
+      </td>
+      <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: DS.txtS }}>
+        {t.source}
+      </td>
+      <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: DS.txtS }}>
+        {t.last_probe_at ? new Date(t.last_probe_at).toLocaleString() : '—'}
+      </td>
+      <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: '#f87171', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {t.probe_error ? (
+          <span title={t.probe_error}>{t.probe_error}</span>
+        ) : '—'}
+      </td>
+      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {t.status === 'pending' && (
+            <button style={btnSecondary} onClick={() => onApprove(t.id)}>
+              Approve
+            </button>
+          )}
+          <button style={btnDanger} onClick={() => onDelete(t.id)}>
+            Del
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+const TABLE_HEADERS = ['Name', 'Host', 'Port', 'Status', 'Credential', 'Source', 'Last Probe', 'Error', '']
+
+function TargetTableHeader() {
+  return (
+    <thead>
+      <tr style={{ borderBottom: `1px solid ${DS.border}` }}>
+        {TABLE_HEADERS.map(h => (
+          <th key={h} style={{
+            textAlign: 'left', padding: '6px 8px',
+            fontSize: '0.7rem', color: DS.txtS, fontWeight: 600,
+          }}>
+            {h}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  )
+}
+
+interface CidrGroupData {
+  cidr: string
+  rangeTarget: WatcherTarget | null
+  children: WatcherTarget[]
+  activeCount: number
+  totalCount: number
+}
+
+function CidrGroupSection({ group, onApproveRange, onDeleteGroup, onApproveTarget, onDeleteTarget }: {
+  group: CidrGroupData
+  onApproveRange: (cidr: string) => void
+  onDeleteGroup: (cidr: string) => void
+  onApproveTarget: (id: string) => void
+  onDeleteTarget: (id: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const rangeStatus = group.rangeTarget?.status || 'pending'
+  const isPending = rangeStatus === 'pending'
+
+  return (
+    <div style={{
+      marginBottom: '0.5rem', borderRadius: 8,
+      border: `1px solid ${DS.border}`,
+      backgroundColor: DS.bg,
+    }}>
+      {/* CIDR group header */}
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 12px', cursor: 'pointer', userSelect: 'none',
+        }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span style={{ fontSize: '0.7rem', color: DS.txtS, width: 12 }}>
+          {expanded ? '▼' : '▶'}
+        </span>
+        <span style={{
+          fontFamily: 'monospace', fontSize: '0.82rem',
+          fontWeight: 600, color: DS.txtP,
+        }}>
+          {group.cidr}
+        </span>
+        <StatusBadge status={rangeStatus} />
+        {group.activeCount > 0 && (
+          <span style={{
+            fontSize: '0.72rem', padding: '2px 8px', borderRadius: 10,
+            backgroundColor: 'rgba(34,197,94,0.12)', color: '#4ade80',
+            fontWeight: 600,
+          }}>
+            {group.activeCount} active
+          </span>
+        )}
+        {group.children.length > 0 && (
+          <span style={{
+            fontSize: '0.72rem', padding: '2px 8px', borderRadius: 10,
+            backgroundColor: DS.raised, color: DS.txtS,
+          }}>
+            {group.children.length} discovered
+          </span>
+        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}
+             onClick={e => e.stopPropagation()}>
+          {isPending && (
+            <button
+              style={{ ...btnPrimary, fontSize: '0.72rem', padding: '4px 12px' }}
+              onClick={() => onApproveRange(group.cidr)}
+            >
+              Scan Network
+            </button>
+          )}
+          <button
+            style={{ ...btnDanger, fontSize: '0.7rem', padding: '3px 8px' }}
+            onClick={() => onDeleteGroup(group.cidr)}
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded: child targets */}
+      {expanded && group.children.length > 0 && (
+        <div style={{ padding: '0 8px 8px', overflowX: 'auto' }}>
+          <table style={{
+            width: '100%', borderCollapse: 'collapse',
+            fontSize: '0.78rem', color: DS.txtP,
+          }}>
+            <TargetTableHeader />
+            <tbody>
+              {group.children.map(t => (
+                <TargetRow
+                  key={t.id} t={t}
+                  onApprove={onApproveTarget}
+                  onDelete={onDeleteTarget}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {expanded && group.children.length === 0 && (
+        <div style={{
+          padding: '12px', textAlign: 'center',
+          fontSize: '0.78rem', color: DS.txtS,
+        }}>
+          {isPending
+            ? 'Approve this range to start scanning for active hosts.'
+            : 'No hosts discovered yet. Waiting for next probe cycle.'}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface Props {
   watcherId: string
 }
@@ -107,8 +284,7 @@ export default function WatcherTargets({ watcherId }: Props) {
   const [cidr, setCidr] = useState('')
   const [cidrPort, setCidrPort] = useState('22')
   const [cidrCred, setCidrCred] = useState('')
-  const [cidrExpanding, setCidrExpanding] = useState(false)
-  const [cidrResult, setCidrResult] = useState<string | null>(null)
+  const [cidrAdding, setCidrAdding] = useState(false)
 
   const [collapsed, setCollapsed] = useState(false)
 
@@ -153,23 +329,21 @@ export default function WatcherTargets({ watcherId }: Props) {
     }
   }
 
-  const handleCidrExpand = async () => {
+  const handleAddCidr = async () => {
     if (!cidr.trim()) return
-    setCidrExpanding(true)
-    setCidrResult(null)
+    setCidrAdding(true)
     try {
-      const resp = await createWatcherTargetsCidr(watcherId, {
+      await createWatcherTargetsCidr(watcherId, {
         cidr: cidr.trim(),
         port: parseInt(cidrPort) || 22,
         credential_name: cidrCred || undefined,
       })
-      setCidrResult(`${resp.data.inserted} targets added (${resp.data.skipped} skipped) from ${resp.data.cidr}`)
       setCidr('')
       await load()
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Failed to expand CIDR')
+      setError(e?.response?.data?.detail || 'Failed to add CIDR range')
     } finally {
-      setCidrExpanding(false)
+      setCidrAdding(false)
     }
   }
 
@@ -200,6 +374,15 @@ export default function WatcherTargets({ watcherId }: Props) {
     }
   }
 
+  const handleApproveCidr = async (cidrGroup: string) => {
+    try {
+      await approveCidrGroup(watcherId, cidrGroup)
+      await load()
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || 'Failed to approve CIDR range')
+    }
+  }
+
   const handleDeleteCidrGroup = async (group: string) => {
     try {
       await deleteWatcherTargetsCidr(watcherId, group)
@@ -209,8 +392,29 @@ export default function WatcherTargets({ watcherId }: Props) {
     }
   }
 
+  // Separate standalone targets from CIDR-grouped targets
+  const standaloneTargets = targets.filter(t => !t.cidr_group)
+
+  // Build CIDR group data
+  const cidrGroupMap = new Map<string, CidrGroupData>()
+  for (const t of targets) {
+    if (!t.cidr_group) continue
+    let group = cidrGroupMap.get(t.cidr_group)
+    if (!group) {
+      group = { cidr: t.cidr_group, rangeTarget: null, children: [], activeCount: 0, totalCount: 0 }
+      cidrGroupMap.set(t.cidr_group, group)
+    }
+    if (t.source === 'cidr_range') {
+      group.rangeTarget = t
+    } else {
+      group.children.push(t)
+      group.totalCount++
+      if (t.status === 'active') group.activeCount++
+    }
+  }
+  const cidrGroups = [...cidrGroupMap.values()]
+
   const pendingCount = targets.filter(t => t.status === 'pending').length
-  const cidrGroups = [...new Set(targets.filter(t => t.cidr_group).map(t => t.cidr_group!))]
 
   return (
     <div style={{
@@ -357,22 +561,13 @@ export default function WatcherTargets({ watcherId }: Props) {
               </select>
             </div>
             <button
-              style={{ ...btnPrimary, opacity: cidrExpanding ? 0.6 : 1 }}
-              onClick={handleCidrExpand}
-              disabled={cidrExpanding || !cidr.trim()}
+              style={{ ...btnPrimary, opacity: cidrAdding ? 0.6 : 1 }}
+              onClick={handleAddCidr}
+              disabled={cidrAdding || !cidr.trim()}
             >
-              {cidrExpanding ? 'Expanding...' : 'Expand CIDR'}
+              {cidrAdding ? 'Adding...' : 'Add Range'}
             </button>
           </div>
-          {cidrResult && (
-            <div style={{
-              padding: '6px 10px', borderRadius: 6, marginBottom: '0.75rem',
-              backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)',
-              color: '#4ade80', fontSize: '0.78rem',
-            }}>
-              {cidrResult}
-            </div>
-          )}
 
           {/* Filters + bulk actions */}
           <div style={{
@@ -407,104 +602,50 @@ export default function WatcherTargets({ watcherId }: Props) {
             </button>
           </div>
 
-          {/* CIDR group chips */}
+          {/* CIDR group sections */}
           {cidrGroups.length > 0 && (
-            <div style={{
-              display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: '0.75rem',
-            }}>
-              {cidrGroups.map(g => {
-                const count = targets.filter(t => t.cidr_group === g).length
-                return (
-                  <span key={g} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '3px 10px', borderRadius: 5,
-                    backgroundColor: DS.raised, border: `1px solid ${DS.border}`,
-                    fontSize: '0.72rem', color: DS.txtM,
-                  }}>
-                    {g} ({count})
-                    <span
-                      style={{ cursor: 'pointer', color: '#f87171', fontWeight: 700, fontSize: '0.75rem' }}
-                      title={`Delete all ${count} targets from ${g}`}
-                      onClick={() => handleDeleteCidrGroup(g)}
-                    >
-                      x
-                    </span>
-                  </span>
-                )
-              })}
+            <div style={{ marginBottom: '0.75rem' }}>
+              {cidrGroups.map(g => (
+                <CidrGroupSection
+                  key={g.cidr}
+                  group={g}
+                  onApproveRange={handleApproveCidr}
+                  onDeleteGroup={handleDeleteCidrGroup}
+                  onApproveTarget={handleApprove}
+                  onDeleteTarget={handleDelete}
+                />
+              ))}
             </div>
           )}
 
-          {/* Target table */}
+          {/* Standalone target table */}
           {loading ? (
             <div style={{ textAlign: 'center', padding: '2rem', color: DS.txtS, fontSize: '0.82rem' }}>
               Loading targets...
             </div>
-          ) : targets.length === 0 ? (
+          ) : standaloneTargets.length === 0 && cidrGroups.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '2rem', color: DS.txtS, fontSize: '0.82rem' }}>
-              No SSH targets configured. Add a host or expand a CIDR range above.
+              No SSH targets configured. Add a host or CIDR range above.
             </div>
-          ) : (
+          ) : standaloneTargets.length > 0 ? (
             <div style={{ overflowX: 'auto' }}>
               <table style={{
                 width: '100%', borderCollapse: 'collapse',
                 fontSize: '0.78rem', color: DS.txtP,
               }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${DS.border}` }}>
-                    {['Name', 'Host', 'Port', 'Status', 'Credential', 'Source', 'Last Probe', 'Error', ''].map(h => (
-                      <th key={h} style={{
-                        textAlign: 'left', padding: '6px 8px',
-                        fontSize: '0.7rem', color: DS.txtS, fontWeight: 600,
-                      }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
+                <TargetTableHeader />
                 <tbody>
-                  {targets.map(t => (
-                    <tr key={t.id} style={{ borderBottom: `1px solid ${DS.border}22` }}>
-                      <td style={{ padding: '6px 8px' }}>
-                        {t.name || <span style={{ color: DS.txtS }}>—</span>}
-                      </td>
-                      <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: '0.76rem' }}>
-                        {t.host}
-                      </td>
-                      <td style={{ padding: '6px 8px' }}>{t.port}</td>
-                      <td style={{ padding: '6px 8px' }}><StatusBadge status={t.status} /></td>
-                      <td style={{ padding: '6px 8px', fontSize: '0.74rem', color: DS.txtM }}>
-                        {t.matched_credential || t.credential_name || <span style={{ color: DS.txtS }}>auto</span>}
-                      </td>
-                      <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: DS.txtS }}>
-                        {t.source}
-                      </td>
-                      <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: DS.txtS }}>
-                        {t.last_probe_at ? new Date(t.last_probe_at).toLocaleString() : '—'}
-                      </td>
-                      <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: '#f87171', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {t.probe_error ? (
-                          <span title={t.probe_error}>{t.probe_error}</span>
-                        ) : '—'}
-                      </td>
-                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {t.status === 'pending' && (
-                            <button style={btnSecondary} onClick={() => handleApprove(t.id)}>
-                              Approve
-                            </button>
-                          )}
-                          <button style={btnDanger} onClick={() => handleDelete(t.id)}>
-                            Del
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                  {standaloneTargets.map(t => (
+                    <TargetRow
+                      key={t.id} t={t}
+                      onApprove={handleApprove}
+                      onDelete={handleDelete}
+                    />
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
+          ) : null}
         </div>
       )}
     </div>

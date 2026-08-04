@@ -1663,7 +1663,7 @@ export const createWatcherTarget = (watcherId: string, data: WatcherTargetCreate
   axios.post<WatcherTarget>(`${API_BASE_URL}/monitoring/watchers/${watcherId}/targets`, data)
 
 export const createWatcherTargetsCidr = (watcherId: string, data: WatcherTargetCIDR) =>
-  axios.post<{ cidr: string; total_hosts: number; inserted: number; skipped: number }>(
+  axios.post<{ cidr: string; total_hosts: number; target: WatcherTarget }>(
     `${API_BASE_URL}/monitoring/watchers/${watcherId}/targets/cidr`,
     data,
   )
@@ -1684,4 +1684,9 @@ export const approveWatcherTarget = (watcherId: string, targetId: string) =>
 
 export const approveAllWatcherTargets = (watcherId: string) =>
   axios.post<{ approved: number }>(`${API_BASE_URL}/monitoring/watchers/${watcherId}/targets/approve-all`)
+
+export const approveCidrGroup = (watcherId: string, cidrGroup: string) =>
+  axios.post<WatcherTarget>(
+    `${API_BASE_URL}/monitoring/watchers/${watcherId}/targets/cidr/${encodeURIComponent(cidrGroup)}/approve`,
+  )
 

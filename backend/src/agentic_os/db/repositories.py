@@ -2007,6 +2007,21 @@ class WatcherTargetRepository:
         self.db.refresh(target)
         return target
 
+    def approve_cidr_range(self, watcher_id: UUID, cidr_group: str) -> Optional[WatcherTargetModel]:
+        target = self.db.query(WatcherTargetModel).filter(
+            WatcherTargetModel.watcher_id == watcher_id,
+            WatcherTargetModel.source == "cidr_range",
+            WatcherTargetModel.cidr_group == cidr_group,
+            WatcherTargetModel.status == "pending",
+        ).first()
+        if not target:
+            return None
+        target.status = "approved"
+        target.updated_at = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(target)
+        return target
+
     def approve_all_pending(self, watcher_id: UUID) -> int:
         now = datetime.utcnow()
         count = self.db.query(WatcherTargetModel).filter(

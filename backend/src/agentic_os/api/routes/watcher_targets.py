@@ -70,6 +70,8 @@ class ProbeResult(BaseModel):
     status: str = Field(..., description="port_open, port_closed, active, auth_failed, unreachable")
     matched_credential: Optional[str] = None
     error: Optional[str] = None
+    cidr_group: Optional[str] = Field(None, description="Set for hosts discovered from a CIDR range scan")
+    credential_name: Optional[str] = Field(None, description="Credential used for this target")
 
 
 class ProbeResultsBatch(BaseModel):
@@ -165,6 +167,7 @@ def create_target(watcher_id: UUID, body: TargetCreate, db: Session = Depends(ge
 
 @router.post("/monitoring/watchers/{watcher_id}/targets/cidr", status_code=201)
 def create_targets_cidr(watcher_id: UUID, body: TargetCIDR, db: Session = Depends(get_session)):
+    """Create a single CIDR range row. Approval triggers network scanning."""
     _verify_watcher(db, watcher_id)
     try:
         network = ipaddress.ip_network(body.cidr, strict=False)
@@ -174,24 +177,27 @@ def create_targets_cidr(watcher_id: UUID, body: TargetCIDR, db: Session = Depend
     if network.prefixlen < MAX_CIDR_PREFIX:
         raise HTTPException(400, f"CIDR range too large (max /{MAX_CIDR_PREFIX}). Got /{network.prefixlen}")
 
-    hosts = [str(ip) for ip in network.hosts()]
-    if not hosts:
+    host_count = sum(1 for _ in network.hosts())
+    if host_count == 0:
         raise HTTPException(400, "CIDR range contains no usable host addresses")
 
-    targets = [
-        {
-            "host": ip,
-            "port": body.port,
-            "credential_name": body.credential_name,
-            "source": "cidr_expansion",
-            "cidr_group": str(network),
-        }
-        for ip in hosts
-    ]
-
+    cidr_str = str(network)
     repo = WatcherTargetRepository(db)
-    inserted = repo.create_targets_bulk(watcher_id, targets)
-    return {"cidr": str(network), "total_hosts": len(hosts), "inserted": inserted, "skipped": len(hosts) - inserted}
+    try:
+        target = repo.create_target(
+            watcher_id=watcher_id,
+            host=cidr_str,
+            port=body.port,
+            name=cidr_str,
+            credential_name=body.credential_name,
+            source="cidr_range",
+            cidr_group=cidr_str,
+        )
+    except Exception as e:
+        if "uq_watcher_target_host_port" in str(e):
+            raise HTTPException(409, f"CIDR range {cidr_str} already exists for this watcher")
+        raise
+    return {"cidr": cidr_str, "total_hosts": host_count, "target": _serialize(target)}
 
 
 @router.put("/monitoring/watchers/{watcher_id}/targets/{target_id}")
@@ -242,6 +248,16 @@ def approve_all_targets(watcher_id: UUID, db: Session = Depends(get_session)):
     return {"approved": count}
 
 
+@router.post("/monitoring/watchers/{watcher_id}/targets/cidr/{cidr_group:path}/approve")
+def approve_cidr_group(watcher_id: UUID, cidr_group: str, db: Session = Depends(get_session)):
+    _verify_watcher(db, watcher_id)
+    repo = WatcherTargetRepository(db)
+    target = repo.approve_cidr_range(watcher_id, cidr_group)
+    if not target:
+        raise HTTPException(404, "CIDR range not found or not in pending status")
+    return _serialize(target)
+
+
 # ── Watcher-facing endpoints (public, no auth) ──────────────────────────────
 
 @public_router.get("/monitoring/watchers/{watcher_id}/targets/active")
@@ -261,9 +277,25 @@ def report_probe_results(watcher_id: UUID, body: ProbeResultsBatch, db: Session 
     host_port_map = {(t.host, t.port): t for t in all_targets}
 
     updates = []
+    created = 0
     not_found = []
     for r in body.results:
         target = host_port_map.get((r.host, r.port))
+        if not target and r.cidr_group:
+            try:
+                target = repo.create_target(
+                    watcher_id=watcher_id,
+                    host=r.host,
+                    port=r.port,
+                    name="",
+                    credential_name=r.credential_name,
+                    source="cidr_discovery",
+                    cidr_group=r.cidr_group,
+                    auto_approve=True,
+                )
+                created += 1
+            except Exception:
+                pass
         if not target:
             not_found.append(f"{r.host}:{r.port}")
             continue
@@ -277,4 +309,4 @@ def report_probe_results(watcher_id: UUID, body: ProbeResultsBatch, db: Session 
     if updates:
         repo.update_probe_results(updates)
 
-    return {"updated": len(updates), "not_found": not_found}
+    return {"updated": len(updates), "created": created, "not_found": not_found}

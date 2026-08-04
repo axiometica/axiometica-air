@@ -2424,6 +2424,7 @@ class WatcherService:
         """Two-phase target discovery for SSH adapter.
 
         Phase 1: Fast TCP port probe (socket.connect_ex) in parallel.
+                 For CIDR range targets, expands to individual IPs first.
         Phase 2: SSH connect + credential rotation for port_open hosts.
         Reports results back to the platform API.
         """
@@ -2431,6 +2432,7 @@ class WatcherService:
             return
 
         import concurrent.futures
+        import ipaddress
         import socket as _socket
 
         base = self.api_base_url
@@ -2450,6 +2452,36 @@ class WatcherService:
 
         loop = asyncio.get_event_loop()
 
+        # Separate CIDR ranges from individual hosts
+        individual_targets = []
+        cidr_probe_hosts = []
+        for t in targets:
+            if t.get("source") == "cidr_range" and "/" in t.get("host", ""):
+                try:
+                    network = ipaddress.ip_network(t["host"], strict=False)
+                    port = t.get("port", 22)
+                    cred_name = t.get("credential_name")
+                    cidr_group = t.get("cidr_group") or t["host"]
+                    for ip in network.hosts():
+                        cidr_probe_hosts.append({
+                            "host": str(ip),
+                            "port": port,
+                            "cidr_group": cidr_group,
+                            "credential_name": cred_name,
+                        })
+                    logger.info(
+                        f"🔍 [TARGET PROBE] Expanded CIDR {t['host']} → "
+                        f"{sum(1 for _ in network.hosts())} hosts to scan"
+                    )
+                except ValueError as exc:
+                    logger.warning(f"[TARGET PROBE] Invalid CIDR {t['host']}: {exc}")
+            else:
+                individual_targets.append(t)
+
+        all_probe_hosts = individual_targets + cidr_probe_hosts
+        if not all_probe_hosts:
+            return
+
         # Phase 1: parallel TCP port probe
         def _probe_port(host: str, port: int) -> bool:
             try:
@@ -2465,7 +2497,7 @@ class WatcherService:
         with concurrent.futures.ThreadPoolExecutor(max_workers=50) as pool:
             futures = {
                 pool.submit(_probe_port, t["host"], t["port"]): t
-                for t in targets
+                for t in all_probe_hosts
             }
             for future in concurrent.futures.as_completed(futures):
                 t = futures[future]
@@ -2473,17 +2505,22 @@ class WatcherService:
                     is_open = future.result()
                 except Exception:
                     is_open = False
-                probe_results.append({
-                    "host": t["host"],
-                    "port": t["port"],
-                    "status": "port_open" if is_open else "port_closed",
-                })
+                if is_open or not t.get("cidr_group"):
+                    probe_results.append({
+                        "host": t["host"],
+                        "port": t["port"],
+                        "status": "port_open" if is_open else "port_closed",
+                        "cidr_group": t.get("cidr_group"),
+                        "credential_name": t.get("credential_name"),
+                    })
 
         open_hosts = [r for r in probe_results if r["status"] == "port_open"]
         closed_count = len(probe_results) - len(open_hosts)
+        cidr_open = sum(1 for r in open_hosts if r.get("cidr_group"))
         logger.info(
-            f"🔍 [TARGET PROBE] Phase 1 complete: {len(open_hosts)} open, "
-            f"{closed_count} closed out of {len(probe_results)} probed"
+            f"🔍 [TARGET PROBE] Phase 1 complete: {len(open_hosts)} open "
+            f"({cidr_open} from CIDR), {closed_count} closed out of "
+            f"{len(all_probe_hosts)} probed"
         )
 
         # Phase 2: SSH connect for port_open hosts
@@ -2494,8 +2531,8 @@ class WatcherService:
             for r in open_hosts:
                 host, port = r["host"], r["port"]
                 t_info = target_lookup.get(host, {})
+                cred_name = r.get("credential_name") or t_info.get("credential_name")
                 target_name = t_info.get("name") or host
-                cred_name = t_info.get("credential_name")
                 if target_name not in self.adapter._targets:
                     self.adapter._targets[target_name] = SSHTarget(
                         name=target_name, host=host, port=port,
@@ -2510,7 +2547,7 @@ class WatcherService:
                     )
                     if result.success:
                         r["status"] = "active"
-                        r["matched_credential"] = t_info.get("credential_name")
+                        r["matched_credential"] = cred_name
                     else:
                         r["status"] = "auth_failed"
                         r["error"] = result.stderr[:500] if result.stderr else "SSH authentication failed"
