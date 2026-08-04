@@ -2543,11 +2543,16 @@ class WatcherService:
                 try:
                     result = await loop.run_in_executor(
                         None,
-                        lambda n=target_name: self.adapter.exec(n, "echo ok", timeout=10),
+                        lambda n=target_name: self.adapter.exec(
+                            n, "hostname -f 2>/dev/null || hostname", timeout=10,
+                        ),
                     )
                     if result.success:
                         r["status"] = "active"
                         r["matched_credential"] = cred_name
+                        discovered_name = (result.stdout or "").strip()
+                        if discovered_name:
+                            r["name"] = discovered_name
                     else:
                         r["status"] = "auth_failed"
                         r["error"] = result.stderr[:500] if result.stderr else "SSH authentication failed"

@@ -72,6 +72,7 @@ class ProbeResult(BaseModel):
     error: Optional[str] = None
     cidr_group: Optional[str] = Field(None, description="Set for hosts discovered from a CIDR range scan")
     credential_name: Optional[str] = Field(None, description="Credential used for this target")
+    name: Optional[str] = Field(None, description="Discovered hostname from SSH")
 
 
 class ProbeResultsBatch(BaseModel):
@@ -287,7 +288,7 @@ def report_probe_results(watcher_id: UUID, body: ProbeResultsBatch, db: Session 
                     watcher_id=watcher_id,
                     host=r.host,
                     port=r.port,
-                    name="",
+                    name=r.name or "",
                     credential_name=r.credential_name,
                     source="cidr_discovery",
                     cidr_group=r.cidr_group,
@@ -299,12 +300,15 @@ def report_probe_results(watcher_id: UUID, body: ProbeResultsBatch, db: Session 
         if not target:
             not_found.append(f"{r.host}:{r.port}")
             continue
-        updates.append({
+        update_entry: dict = {
             "target_id": target.id,
             "status": r.status,
             "error": r.error,
             "matched_credential": r.matched_credential,
-        })
+        }
+        if r.name and (not target.name or target.name == target.host):
+            update_entry["name"] = r.name
+        updates.append(update_entry)
 
     if updates:
         repo.update_probe_results(updates)

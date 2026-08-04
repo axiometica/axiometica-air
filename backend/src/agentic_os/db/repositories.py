@@ -1958,16 +1958,19 @@ class WatcherTargetRepository:
     def update_probe_results(self, results: list):
         now = datetime.utcnow()
         for r in results:
-            self.db.query(WatcherTargetModel).filter(
-                WatcherTargetModel.id == r["target_id"],
-            ).update({
+            fields = {
                 "status": r["status"],
                 "last_probe_at": now,
                 "probe_error": r.get("error"),
                 "matched_credential": r.get("matched_credential"),
                 "last_connected_at": now if r["status"] == "active" else WatcherTargetModel.last_connected_at,
                 "updated_at": now,
-            }, synchronize_session=False)
+            }
+            if r.get("name"):
+                fields["name"] = r["name"]
+            self.db.query(WatcherTargetModel).filter(
+                WatcherTargetModel.id == r["target_id"],
+            ).update(fields, synchronize_session=False)
         self.db.commit()
 
     def delete_target(self, target_id: UUID) -> bool:

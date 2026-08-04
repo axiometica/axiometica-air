@@ -319,6 +319,7 @@ class SSHAdapter(ExecutionAdapter):
                 name=name,
                 host=t["host"],
                 port=t.get("port", 22),
+                credential_name=t.get("credential_name"),
             )
         for t in env_targets:
             if (t.host, t.port) not in {(a["host"], a.get("port", 22)) for a in api_targets}:

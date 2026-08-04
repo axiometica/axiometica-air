@@ -411,7 +411,7 @@ export default function WatcherTargets({ watcherId }: Props) {
 
   return (
     <div style={{
-      marginTop: '1.25rem', borderRadius: 10,
+      marginTop: '1.25rem', marginBottom: '1.25rem', borderRadius: 10,
       border: `1px solid ${DS.border}`, backgroundColor: DS.surface,
       overflow: 'hidden',
     }}>
@@ -595,7 +595,7 @@ export default function WatcherTargets({ watcherId }: Props) {
             flexWrap: 'wrap',
           }}>
             <select
-              style={{ ...inputStyle, width: 'auto', fontSize: '0.76rem' }}
+              style={{ ...inputStyle, width: 'auto', fontSize: '0.76rem', backgroundColor: DS.surface }}
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
             >
